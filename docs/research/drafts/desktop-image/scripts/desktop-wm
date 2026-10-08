@@ -1,0 +1,7 @@
+#!/bin/bash
+set -euo pipefail
+wait-for-x 30
+# never blank the virtual screen (Xvfb may lack DPMS; ignore errors)
+xset s off || true; xset s noblank || true; xset -dpms 2>/dev/null || true
+xsetroot -solid "${DESKTOP_BG:-#2b3240}" || true
+exec openbox --config-file "$HOME/.config/openbox/rc.xml"

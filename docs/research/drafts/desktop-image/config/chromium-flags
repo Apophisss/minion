@@ -1,0 +1,6 @@
+# Sourced by Debian's /usr/bin/chromium wrapper (/etc/chromium.d/*).
+# --no-sandbox: Docker's default seccomp profile blocks the user-namespace sandbox and
+# Debian ships no setuid sandbox, so Chromium cannot start sandboxed as a non-root user.
+export CHROMIUM_FLAGS="$CHROMIUM_FLAGS --no-sandbox --test-type --disable-dev-shm-usage \
+ --no-first-run --no-default-browser-check --password-store=basic --hide-crash-restore-bubble \
+ --disable-features=Translate,MediaRouter --start-maximized ${CHROMIUM_EXTRA_FLAGS:-}"
