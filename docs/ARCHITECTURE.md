@@ -299,6 +299,11 @@ DesktopManager(services)
   active_runs() -> list[dict]
   list_sessions(limit=50) / get_session(session_id) / delete_session(session_id)
   ```
+  **Parallelism**: `parallel_tasks` (native tool) fans a job out to many sub-agents at once - each item
+  becomes a child run (`parent_run_id`, `depth+1`, own session) of the brain or a delegation to a harness
+  (`target`) - and returns all results together. A global semaphore (`MINION_MAX_PARALLEL_AGENTS`,
+  default 16) bounds concurrent runs; sub-agent depth is capped by `MINION_MAX_SUBAGENT_DEPTH`. Regular
+  tool calls inside one turn already run concurrently.
   `target` (or a message starting with `@<agent>`) routes straight to that agent harness and
   stores both sides in the session. Transcripts are append-only (preserved thinking). One run per
   session at a time (a new message while a run is active is queued).
