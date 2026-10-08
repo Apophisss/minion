@@ -1,0 +1,72 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "minion-ai"
+dynamic = ["version"]
+description = "Self-hosted, self-improving AI agent platform: one chat for OpenClaw, Hermes, opencode, Goose and any MCP server, with a built-in Docker desktop."
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.11"
+authors = [{ name = "Minion contributors" }]
+keywords = ["ai", "agents", "mcp", "claude", "anthropic", "openclaw", "hermes", "self-hosted", "computer-use", "automation"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: POSIX :: Linux",
+    "Framework :: FastAPI",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = [
+    "anthropic>=1.12.1,<2",
+    "mcp>=2.3.0,<3",
+    "docker>=7.1,<8",
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "pydantic>=2.9,<3",
+    "pydantic-settings>=2.6,<3",
+    "aiosqlite>=0.20",
+    "httpx>=0.27",
+    "pyyaml>=6.0",
+    "croniter>=3.0",
+    "websockets>=13",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "pytest-asyncio>=0.24", "ruff>=0.6"]
+
+[project.scripts]
+minion = "minion.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/apophisss/minion"
+Issues = "https://github.com/apophisss/minion/issues"
+
+[tool.setuptools.dynamic]
+version = { attr = "minion.__version__" }
+
+[tool.setuptools.packages.find]
+include = ["minion*"]
+
+[tool.setuptools.package-data]
+minion = ["web/*", "web/**/*"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]
+markers = [
+    "docker: needs a reachable Docker daemon",
+    "network: needs internet access",
+    "slow: slow tests",
+]
+filterwarnings = ["ignore::DeprecationWarning"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "ASYNC"]
+ignore = ["E501", "B008", "UP007"]
