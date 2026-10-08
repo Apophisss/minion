@@ -1,0 +1,16 @@
+#!/bin/bash
+set -euo pipefail
+wait-for-x 30
+args=(-display "$DISPLAY" -rfbport "${VNC_PORT}" -forever -shared -noxrecord -ncache 0 -xkb -repeat -quiet)
+# Raw VNC only on loopback by default: humans/agents reach it through noVNC (6080).
+[ "${VNC_LISTEN:-localhost}" = "localhost" ] && args+=(-localhost)
+[ "${VNC_VIEW_ONLY:-0}" = "1" ] && args+=(-viewonly)
+if [ -n "${VNC_PASSWORD:-}" ]; then
+  mkdir -p "$HOME/.vnc"
+  x11vnc -storepasswd "$VNC_PASSWORD" "$HOME/.vnc/passwd" >/dev/null 2>&1
+  chmod 600 "$HOME/.vnc/passwd"
+  args+=(-rfbauth "$HOME/.vnc/passwd")
+else
+  args+=(-nopw)
+fi
+exec x11vnc "${args[@]}"

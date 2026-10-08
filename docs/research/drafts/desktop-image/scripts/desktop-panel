@@ -1,0 +1,5 @@
+#!/bin/bash
+set -euo pipefail
+wait-for-x 30
+sleep 0.5   # let openbox claim the WM selection first
+exec tint2 -c "$HOME/.config/tint2/tint2rc"

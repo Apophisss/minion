@@ -45,6 +45,8 @@ class Settings(BaseSettings):
     effort: Literal["low", "medium", "high", "xhigh", "max"] = "high"
     max_tokens: int = 64000
     max_turn_iterations: int = 80
+    max_parallel_agents: int = 16  # concurrent brain runs / sub-agents / harness delegations
+    max_subagent_depth: int = 3
     tool_result_max_chars: int = 60000
     refusal_fallback: bool = True
     thinking_display: Literal["updates", "summarized", "omitted"] = "updates"

@@ -1,0 +1,7 @@
+#!/bin/bash
+set -euo pipefail
+n="${DISPLAY#:}"; n="${n%%.*}"
+rm -f "/tmp/.X${n}-lock" "/tmp/.X11-unix/X${n}"   # stale after a container restart
+exec Xvfb "$DISPLAY" \
+  -screen 0 "${SCREEN_WIDTH}x${SCREEN_HEIGHT}x${SCREEN_DEPTH}" \
+  -dpi "${SCREEN_DPI:-96}" -ac -nolisten tcp -s 0 +extension RANDR

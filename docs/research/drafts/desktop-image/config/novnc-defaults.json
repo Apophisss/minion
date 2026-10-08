@@ -1,0 +1,8 @@
+{
+  "autoconnect": true,
+  "resize": "scale",
+  "reconnect": true,
+  "reconnect_delay": 1000,
+  "shared": true,
+  "show_dot": true
+}

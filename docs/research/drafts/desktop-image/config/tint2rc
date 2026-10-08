@@ -1,0 +1,58 @@
+# Minion desktop panel (tint2). launcher_item_app lines are appended at build time
+# for the .desktop files that are actually installed.
+# Background 1: panel
+rounded = 0
+border_width = 0
+background_color = #1b1f27 100
+border_color = #000000 0
+# Background 2: active task
+rounded = 3
+border_width = 0
+background_color = #3d4657 100
+border_color = #000000 0
+
+panel_items = LTC
+panel_size = 100% 32
+panel_margin = 0 0
+panel_padding = 4 2 4
+panel_background_id = 1
+panel_position = bottom center horizontal
+panel_layer = top
+panel_monitor = all
+wm_menu = 1
+panel_dock = 0
+strut_policy = follow_size
+autohide = 0
+
+taskbar_mode = single_desktop
+taskbar_padding = 2 2 4
+taskbar_background_id = 0
+taskbar_active_background_id = 0
+taskbar_name = 0
+
+task_text = 1
+task_icon = 1
+task_centered = 0
+task_maximum_size = 220 28
+task_padding = 6 2 6
+task_font = DejaVu Sans 9
+task_font_color = #dfe3ea 100
+task_background_id = 0
+task_active_background_id = 2
+task_urgent_background_id = 2
+task_iconified_background_id = 0
+mouse_left = toggle_iconify
+mouse_middle = close
+
+launcher_padding = 4 2 6
+launcher_background_id = 0
+launcher_icon_size = 22
+launcher_tooltip = 1
+
+time1_format = %H:%M
+time2_format = %a %d %b
+time1_font = DejaVu Sans Bold 9
+time2_font = DejaVu Sans 7
+clock_font_color = #dfe3ea 100
+clock_padding = 6 0
+clock_background_id = 0

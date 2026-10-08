@@ -1,0 +1,4 @@
+#!/bin/bash
+set -euo pipefail
+mkdir -p "$HOME/.vnc" /tmp/desktop-api
+exec supervisord -n -c /etc/supervisor/minion-desktop.conf
