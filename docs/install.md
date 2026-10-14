@@ -35,7 +35,7 @@ Minion runs each desktop in a container on your computer, and your agent app rea
 - [uv](https://docs.astral.sh/uv/getting-started/installation/) brings its own Python, and the one-line installers
   install uv for you. Installing with pip or pipx needs Python 3.11 or newer. The Claude Desktop extension needs
   neither: Claude Desktop runs it.
-- Each profile's image is 188–710 MB (they share layers) and downloads the first time you use the profile. An idle
+- Each profile's image is 187–707 MB (they share layers) and downloads the first time you use the profile. An idle
   desktop uses about 55–105 MB of memory.
 - Apple Silicon runs the desktops natively. The `windows` profile (Wine) needs an x86-64 computer.
 - Linux without containers: `MINION_BACKEND=local` runs desktops as Xvfb sessions of your own user (see the
@@ -292,7 +292,7 @@ absolute paths, or replace `"uvx"` with the output of `which uvx`. Is uv install
 `sudo systemctl start docker`, and add yourself to the `docker` group
 ([how](https://docs.docker.com/engine/install/linux-postinstall/)).
 
-**The first desktop takes minutes.** It is downloading its image (188–710 MB). Download images ahead of time with
+**The first desktop takes minutes.** It is downloading its image (187–707 MB). Download images ahead of time with
 `minion pull office research`, or `minion setup --profiles office,research`.
 
 **Tool calls time out.** Some apps stop waiting after a minute. Raise the app's MCP timeout to 900 seconds (Codex:

@@ -204,12 +204,12 @@ Claude's `computer_toolset_20260801` (all 17 actions) and the earlier `computer_
 | Profile | What's inside | Download | Idle RAM |
 |---|---|---|---|
 | 🌐 `browser` | Firefox with uBlock Origin (ads, trackers, cookie banners, newsletter pop-ups), downloads straight to `~/Downloads`, a terminal `see` can read | 352 MB | ~55–100 MB |
-| 📄 `office` | LibreOffice Writer, Calc, Impress + text editor + file manager + Firefox + PDF tools. Saves Microsoft formats by default, and types exactly what the agent sends (no AutoCorrect) | 515 MB | ~85 MB |
+| 📄 `office` | LibreOffice Writer, Calc, Impress + text editor + file manager + Firefox + PDF tools. Saves Microsoft formats by default, and types exactly what the agent sends (no AutoCorrect) | 511 MB | ~85 MB |
 | 🛠️ `dev` | git, Python, Node.js, build tools, Geany IDE, a real terminal (readable by `see`), Firefox + Chromium | 703 MB | ~55 MB |
 | 🔎 `research` | Firefox + `pdftotext`, `pandoc`, a notes editor, Python with requests and BeautifulSoup | 410 MB | ~55 MB |
-| 📊 `data` | `office` + pandas, NumPy, SciPy, matplotlib, seaborn, openpyxl, SQLite | 662 MB | ~105 MB |
+| 📊 `data` | `office` + pandas, NumPy, SciPy, matplotlib, seaborn, openpyxl, SQLite | 663 MB | ~105 MB |
 | 🪟 `windows` | Wine 10 for 64- and 32-bit Windows `.exe`/`.msi` programs, plus Firefox to download them. x86-64 hosts ([docs](docs/windows-apps.md)) | 707 MB | ~56 MB (~270 MB with a program open) |
-| 🧩 `base` | X server, window manager, terminal and the agent. The foundation to build on | 188 MB | ~65 MB |
+| 🧩 `base` | X server, window manager, terminal and the agent. The foundation to build on | 187 MB | ~65 MB |
 
 **Your own profile** is a 5-line TOML file in `~/.config/minion/profiles/`. It is built automatically the first time you use it:
 

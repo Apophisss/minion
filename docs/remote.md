@@ -256,7 +256,7 @@ without `MINION_ALLOWED_HOSTS` any `Host` name is accepted, so the token is the 
 
 ## Timeouts and limits
 
-- **First desktops download an image** (188–710 MB). Chat apps stop waiting for a tool long before that
+- **First desktops download an image** (187–707 MB). Chat apps stop waiting for a tool long before that
   ends: Claude allows [240 seconds per tool call](https://claude.com/docs/connectors/building), and
   developers report that ChatGPT gives up after about a minute. Run `minion pull browser office` (and
   any other profile you want) before you share. In a share, `desktop create` replies "still preparing"
