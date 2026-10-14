@@ -660,7 +660,8 @@ class Server:
         note = handoff_wait(d.name, message, timeout)
         if note is None:
             return [self.text(f"The human did not finish within {timeout:.0f}s. Link: {url}")]
-        return [self.text(f"The human is done{': ' + note if note else '.'} Call see() to check the screen.")]
+        said = f' They said: "{note}".' if note else ""
+        return [self.text(f"The human is done.{said} Call see() to check the screen.")]
 
 
 def main(preload: str | None = None, idle_freeze: float = 600) -> None:

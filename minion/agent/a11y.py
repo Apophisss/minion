@@ -478,6 +478,8 @@ def snapshot(
             boxed = w > 0 and h > 0
             if boxed and depth > 0 and (x >= sw or y >= sh or x + w <= 0 or y + h <= 0):
                 return  # entirely off-screen
+            if depth > 0 and role in ("menu bar", "tool bar") and (w > 0) != (h > 0):
+                return  # a collapsed bar (e.g. LibreOffice's hidden twin menu bar): its items are phantoms
         else:
             x = y = w = h = 0
         name = _clip(_name(node), text_limit)
@@ -567,6 +569,8 @@ def snapshot(
             cells = _visible_cells(node, x, y, w, h, deadline) if "Table" in ifaces and boxed else None
             if cells is not None:
                 (r0, c0, r1, c1), found = cells
+                if elements and elements[-1].node is node:  # replace the table's own line
+                    child_shown_depth = elements.pop().depth
                 elements.append(
                     Element(
                         id=len(elements) + 1,
@@ -694,7 +698,10 @@ def compact(elements: list[Element]) -> list[Element]:
     out: list[Element] = []
     n = len(elements)
     seen: list[tuple[str, str, int, int]] = []
+    skip: set[int] = set()
     for i, el in enumerate(elements):
+        if i in skip:
+            continue
         # Twins: some apps expose the same control twice (e.g. two menu bars) a few pixels apart.
         cx, cy = el.center
         label = el.label()
@@ -722,6 +729,14 @@ def compact(elements: list[Element]) -> list[Element]:
                 nxt.role = f"heading {nxt.role}"
             nxt.depth = el.depth
             continue
+        if (
+            only_child
+            and nxt.role in ("static", "text", "label")
+            and not nxt.interactive
+            and el.label()
+            and _same(el.label(), nxt.label())
+        ):
+            skip.add(i + 1)  # "paragraph X" > "static X": the child adds nothing
         out.append(el)
     _redepth(elements, out)
     for k, el in enumerate(out, 1):

@@ -17,9 +17,10 @@ desktop starts in about a second and stays small.
 
 **How is it different from browser automation (Playwright, browser-use)?**
 Those drive a browser through the DOM. Minion drives a whole computer: browsers, office apps, terminals, IDEs,
-file dialogs, downloads, and anything you `apt-get install`. You can still use the browser inside a desktop
-with Playwright. Publish Chromium's debugging port with `minion up dev -p 9222` and start Chromium with
-`--remote-debugging-port=9222 --remote-debugging-address=0.0.0.0`.
+file dialogs, downloads, and anything you `apt-get install`. The two combine well. In a `dev` desktop, start Chromium with
+`--remote-debugging-port=9222 --user-data-dir=/tmp/cdp` and run your Playwright script *inside* the desktop
+(`minion run "python3 -m venv ~/pw && ~/pw/bin/pip install playwright && ~/pw/bin/python script.py"`, connecting to `http://localhost:9222`). A human can
+watch the same browser in the live view while it runs.
 
 **Which models work best?**
 Any model with tool use can use `see` + `act` (text-only models too). Vision models also use `screenshot`.

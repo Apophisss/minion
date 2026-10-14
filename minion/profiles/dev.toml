@@ -33,7 +33,8 @@ apps = [
   { name = "Chromium", id = "chromium", command = "chromium" },
 ]
 tips = """
-Work in ~/work. Prefer `run` for shell commands (git, pip, npm, tests): it is faster and returns exact output.
+Work in ~/work. Prefer `run` for shell commands (git, npm, tests): it is faster and returns exact output.
+For Python packages use a virtualenv (`python3 -m venv .venv && .venv/bin/pip install ...`); system pip is managed by Debian.
 Use the GUI for what needs eyes: run your app (`run` with background=true), then `open http://localhost:PORT` and look.
 The Terminal exposes its text to `see`. Chromium runs with accessibility on, so web pages are readable in both browsers.
 """
