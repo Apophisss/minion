@@ -1,13 +1,13 @@
 """The Python SDK: `Desktop` gives an agent (or you) a whole Linux computer.
 
-    from minion import Desktop
+from minion import Desktop
 
-    desk = Desktop.create("browser")          # pulls/builds the image on first use
-    desk.open("news.ycombinator.com")
-    print(desk.see())                          # the page as compact text with @ids
-    desk.click("@12")                          # click by reference, text or [x, y]
-    desk.screenshot().save("page.png")
-    desk.remove()
+desk = Desktop.create("browser")          # pulls/builds the image on first use
+desk.open("news.ycombinator.com")
+print(desk.see())                          # the page as compact text with @ids
+desk.click("@12")                          # click by reference, text or [x, y]
+desk.screenshot().save("page.png")
+desk.remove()
 """
 
 from __future__ import annotations
@@ -92,8 +92,7 @@ class Observation:
 
     def find(self, query: str) -> list[dict]:
         q = query.casefold()
-        return [e for e in self.elements + self.ocr
-                if q in (e.get("name") or e.get("text") or "").casefold()]
+        return [e for e in self.elements + self.ocr if q in (e.get("name") or e.get("text") or "").casefold()]
 
 
 @dataclass
@@ -141,13 +140,25 @@ class RunResult:
 
 
 def _screenshot(d: dict) -> Screenshot:
-    return Screenshot(base64.b64decode(d["data"]), d["width"], d["height"], d.get("format", "png"),
-                      d.get("scale", 1.0), tuple(d.get("region") or (0, 0, d["width"], d["height"])))
+    return Screenshot(
+        base64.b64decode(d["data"]),
+        d["width"],
+        d["height"],
+        d.get("format", "png"),
+        d.get("scale", 1.0),
+        tuple(d.get("region") or (0, 0, d["width"], d["height"])),
+    )
 
 
 def _observation(d: dict) -> Observation:
-    return Observation(d.get("text", ""), d.get("elements", []), d.get("windows", []), d.get("focused"),
-                       d.get("ocr", []), tuple(d.get("screen") or (0, 0)))
+    return Observation(
+        d.get("text", ""),
+        d.get("elements", []),
+        d.get("windows", []),
+        d.get("focused"),
+        d.get("ocr", []),
+        tuple(d.get("screen") or (0, 0)),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -164,18 +175,33 @@ class Desktop:
 
     # -- construction --------------------------------------------------
     @classmethod
-    def create(cls, profile: str = config.DEFAULT_PROFILE, name: str | None = None,
-               size: str | tuple | None = None, *, backend: Backend | str | None = None,
-               memory: str = "", cpus: str = "", network: bool = True, mounts: list[str] | None = None,
-               env: dict | None = None, ports: list | None = None, progress=None,
-               keep: bool = True) -> Desktop:
+    def create(
+        cls,
+        profile: str = config.DEFAULT_PROFILE,
+        name: str | None = None,
+        size: str | tuple | None = None,
+        *,
+        backend: Backend | str | None = None,
+        memory: str = "",
+        cpus: str = "",
+        network: bool = True,
+        mounts: list[str] | None = None,
+        env: dict | None = None,
+        ports: list | None = None,
+        progress=None,
+        keep: bool = True,
+    ) -> Desktop:
         """Create and start a desktop. `keep=False` removes it when used as a context manager."""
         be = backend if isinstance(backend, Backend) else get_backend(backend)
         prof = profiles.get(profile)
         name = name or cls._free_name(be, prof.name)
         opts = CreateOptions(
-            size=normalize_size(size or prof.merged("size") or None), memory=memory, cpus=cpus,
-            network=network, mounts=list(mounts or []), env=dict(env or {}),
+            size=normalize_size(size or prof.merged("size") or None),
+            memory=memory,
+            cpus=cpus,
+            network=network,
+            mounts=list(mounts or []),
+            env=dict(env or {}),
             ports=[str(p) for p in (ports or [])],
         )
         info = be.create(name, prof, opts, progress=progress)
@@ -256,6 +282,7 @@ class Desktop:
         return False
 
     def _call_once(self, method: str, params: dict | None, timeout: float):
+        self.backend.ensure_awake(self.name)
         with self._lock:
             if self._channel is None:
                 self._channel = self.backend.channel(self.name)
@@ -270,8 +297,11 @@ class Desktop:
             return self._call_once(method, params, timeout)
         except AgentError as e:
             if e.code == -32601:
-                raise AgentError(f"{e} — this desktop runs an older Minion agent; restart it to update: "
-                                 f"minion stop {self.name} && minion start {self.name}", e.code) from e
+                raise AgentError(
+                    f"{e} — this desktop runs an older Minion agent; restart it to update: "
+                    f"minion stop {self.name} && minion start {self.name}",
+                    e.code,
+                ) from e
             raise
         except ConnectionLost:
             self.close()
@@ -291,13 +321,33 @@ class Desktop:
         w, h = self.hello()["screen"]
         return int(w), int(h)
 
-    def screenshot(self, path: str | os.PathLike | None = None, *, region=None, max_width: int | None = None,
-                   max_height: int | None = None, scale: float | None = None, width: int | None = None,
-                   format: str = "png", quality: int = 80, cursor: bool = True, marks: bool = False,
-                   grid: bool = False) -> Screenshot:
-        params = {"region": list(region) if region else None, "max_width": max_width,
-                  "max_height": max_height, "scale": scale, "width": width, "format": format,
-                  "quality": quality, "cursor": cursor, "marks": marks, "grid": grid}
+    def screenshot(
+        self,
+        path: str | os.PathLike | None = None,
+        *,
+        region=None,
+        max_width: int | None = None,
+        max_height: int | None = None,
+        scale: float | None = None,
+        width: int | None = None,
+        format: str = "png",
+        quality: int = 80,
+        cursor: bool = True,
+        marks: bool = False,
+        grid: bool = False,
+    ) -> Screenshot:
+        params = {
+            "region": list(region) if region else None,
+            "max_width": max_width,
+            "max_height": max_height,
+            "scale": scale,
+            "width": width,
+            "format": format,
+            "quality": quality,
+            "cursor": cursor,
+            "marks": marks,
+            "grid": grid,
+        }
         shot = _screenshot(self.call("screenshot", {k: v for k, v in params.items() if v is not None}))
         if path:
             shot.save(path)
@@ -307,9 +357,16 @@ class Desktop:
         """A region at higher magnification (region = [x, y, w, h])."""
         return self.screenshot(region=region, width=width, **kw)
 
-    def see(self, ocr: bool | str = "auto", window: str | None = None, max_elements: int = 250) -> Observation:
-        return _observation(self.call("see", {"ocr": ocr, "window": window, "max_elements": max_elements},
-                                      timeout=90))
+    def see(
+        self,
+        ocr: bool | str = "auto",
+        window: str | None = None,
+        max_elements: int | None = None,
+        full_text: bool = False,
+    ) -> Observation:
+        """The screen as text. `full_text=True` keeps paragraphs whole (for reading articles)."""
+        params = {"ocr": ocr, "window": window, "max_elements": max_elements, "full_text": full_text}
+        return _observation(self.call("see", params, timeout=90))
 
     def cursor(self) -> tuple[int, int]:
         pos = self.call("cursor", timeout=30)
@@ -319,21 +376,41 @@ class Desktop:
         return self.call("find", {"text": text, "ocr": ocr}, timeout=90)["matches"]
 
     # -- actions -------------------------------------------------------
-    def act(self, *actions, screenshot: bool = False, see: bool = False, settle: bool = True,
-            settle_timeout: float = 2.5, check: bool = True, **kw) -> ActResult:
+    def act(
+        self,
+        *actions,
+        screenshot: bool = False,
+        see: bool = False,
+        settle: bool = True,
+        settle_timeout: float = 2.5,
+        check: bool = True,
+        **kw,
+    ) -> ActResult:
         """Run one or more actions in order (stops at the first failure), then wait for the
         screen to settle. Actions: dicts ({"click": "@3"}, {"action": "type", "text": "hi"})
         or strings ("click @3", "type 'hello'", "key ctrl+s")."""
         flat: list = []
         for a in actions:
             flat.extend(a if isinstance(a, list) else [a])
-        params = {"actions": flat, "screenshot": screenshot, "see": see, "settle": settle,
-                  "settle_timeout": settle_timeout, **kw}
+        params = {
+            "actions": flat,
+            "screenshot": screenshot,
+            "see": see,
+            "settle": settle,
+            "settle_timeout": settle_timeout,
+            **kw,
+        }
         res = self.call("act", params, timeout=300)
         out = ActResult(
-            ok=res["ok"], summary=res["summary"], steps=res["steps"], change=res.get("change", {}),
-            focused=res.get("focused"), opened=res.get("opened", []), closed=res.get("closed", []),
-            error=res.get("error"), elapsed=res.get("elapsed", 0.0),
+            ok=res["ok"],
+            summary=res["summary"],
+            steps=res["steps"],
+            change=res.get("change", {}),
+            focused=res.get("focused"),
+            opened=res.get("opened", []),
+            closed=res.get("closed", []),
+            error=res.get("error"),
+            elapsed=res.get("elapsed", 0.0),
         )
         if res.get("screenshot"):
             out.screenshot = _screenshot(res["screenshot"])
@@ -343,10 +420,12 @@ class Desktop:
             raise AgentError(out.error or out.summary)
         return out
 
-    def click(self, target=None, *, button: str = "left", count: int = 1, modifiers: str | None = None,
-              **kw) -> ActResult:
-        return self.act({"action": "click", "target": target, "button": button, "count": count,
-                         "modifiers": modifiers}, **kw)
+    def click(
+        self, target=None, *, button: str = "left", count: int = 1, modifiers: str | None = None, **kw
+    ) -> ActResult:
+        return self.act(
+            {"action": "click", "target": target, "button": button, "count": count, "modifiers": modifiers}, **kw
+        )
 
     def double_click(self, target=None, **kw) -> ActResult:
         return self.click(target, count=2, **kw)
@@ -386,10 +465,20 @@ class Desktop:
         """Launch a profile app ("writer"), a URL, a file in the desktop, or a shell command."""
         return self.call("open", {"target": target, "wait": wait}, timeout=wait + 60)
 
-    def run(self, command: str | list, timeout: float = 60.0, *, background: bool = False,
-            cwd: str | None = None, input: str | None = None) -> RunResult:
-        res = self.call("run", {"command": command, "timeout": timeout, "background": background,
-                                "cwd": cwd, "input": input}, timeout=timeout + 30)
+    def run(
+        self,
+        command: str | list,
+        timeout: float = 60.0,
+        *,
+        background: bool = False,
+        cwd: str | None = None,
+        input: str | None = None,
+    ) -> RunResult:
+        res = self.call(
+            "run",
+            {"command": command, "timeout": timeout, "background": background, "cwd": cwd, "input": input},
+            timeout=timeout + 30,
+        )
         if background:
             return RunResult(code=None, pid=res.get("pid"))
         return RunResult(res["code"], res["stdout"], res["stderr"], res["timed_out"], res.get("elapsed", 0.0))

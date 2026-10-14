@@ -37,11 +37,13 @@ def agent_tar(arc_prefix: str = "minion_agent") -> bytes:
     """The agent package as a tar stream (no caches), owned by root and world-readable."""
     buf = io.BytesIO()
     with tarfile.open(fileobj=buf, mode="w") as tar:
+
         def add(info: tarfile.TarInfo):
             info.uid = info.gid = 0
             info.uname = info.gname = "root"
             info.mode = 0o755 if info.isdir() else 0o644
             return info
+
         top = tarfile.TarInfo(arc_prefix)
         top.type = tarfile.DIRTYPE
         tar.addfile(add(top))
@@ -65,10 +67,19 @@ def expand_home(path: str) -> str:
 
 def _parse_size_bytes(text: str) -> int | None:
     text = text.strip()
-    units = {"b": 1, "kib": 1024, "kb": 1000, "mib": 1024**2, "mb": 1000**2, "gib": 1024**3,
-             "gb": 1000**3, "tib": 1024**4, "tb": 1000**4}
+    units = {
+        "b": 1,
+        "kib": 1024,
+        "kb": 1000,
+        "mib": 1024**2,
+        "mb": 1000**2,
+        "gib": 1024**3,
+        "gb": 1000**3,
+        "tib": 1024**4,
+        "tb": 1000**4,
+    }
     num = "".join(c for c in text if c.isdigit() or c == ".")
-    unit = text[len(num):].strip().lower()
+    unit = text[len(num) :].strip().lower()
     try:
         return int(float(num) * units.get(unit, 1))
     except ValueError:
@@ -79,18 +90,23 @@ class DockerBackend(Backend):
     name = "docker"
 
     def __init__(self, binary: str | None = None):
-        self.bin = binary or os.environ.get("MINION_DOCKER") or (
-            "docker" if shutil.which("docker") else "podman" if shutil.which("podman") else "docker")
+        self.bin = (
+            binary
+            or os.environ.get("MINION_DOCKER")
+            or ("docker" if shutil.which("docker") else "podman" if shutil.which("podman") else "docker")
+        )
 
     # -- plumbing ------------------------------------------------------
-    def _run(self, *args: str, input: bytes | None = None, timeout: float = 300,
-             check: bool = True) -> subprocess.CompletedProcess:
+    def _run(
+        self, *args: str, input: bytes | None = None, timeout: float = 300, check: bool = True
+    ) -> subprocess.CompletedProcess:
         try:
             res = subprocess.run([self.bin, *args], input=input, capture_output=True, timeout=timeout)
         except FileNotFoundError as e:
             raise BackendError(
                 f"`{self.bin}` was not found. Install Docker (https://docs.docker.com/get-docker/) "
-                "or Podman, or on Linux use the local backend: MINION_BACKEND=local") from e
+                "or Podman, or on Linux use the local backend: MINION_BACKEND=local"
+            ) from e
         except subprocess.TimeoutExpired as e:
             raise BackendError(f"`{self.bin} {args[0]}` timed out after {timeout:.0f}s") from e
         if check and res.returncode != 0:
@@ -100,8 +116,15 @@ class DockerBackend(Backend):
 
     def _stream(self, args: list[str], progress=None, cwd: str | None = None) -> tuple[int, str]:
         try:
-            proc = subprocess.Popen([self.bin, *args], stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                                    stdin=subprocess.DEVNULL, cwd=cwd, text=True, errors="replace")
+            proc = subprocess.Popen(
+                [self.bin, *args],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                stdin=subprocess.DEVNULL,
+                cwd=cwd,
+                text=True,
+                errors="replace",
+            )
         except FileNotFoundError as e:
             raise BackendError(f"`{self.bin}` was not found") from e
         tail: list[str] = []
@@ -117,8 +140,10 @@ class DockerBackend(Backend):
     def _has_buildx(self) -> bool:
         if not hasattr(self, "_buildx"):
             try:
-                self._buildx = os.path.basename(self.bin).startswith("docker") and self._run(
-                    "buildx", "version", check=False, timeout=20).returncode == 0
+                self._buildx = (
+                    os.path.basename(self.bin).startswith("docker")
+                    and self._run("buildx", "version", check=False, timeout=20).returncode == 0
+                )
             except BackendError:
                 self._buildx = False
         return self._buildx
@@ -133,8 +158,7 @@ class DockerBackend(Backend):
             return False, str(e)
         if res.returncode != 0:
             err = res.stderr.decode("utf-8", "replace").strip().splitlines()
-            return False, (err[-1] if err else "the Docker daemon is not reachable") + \
-                " — is Docker running?"
+            return False, (err[-1] if err else "the Docker daemon is not reachable") + " — is Docker running?"
         return True, f"{self.bin} {res.stdout.decode().strip()}"
 
     # -- images --------------------------------------------------------
@@ -158,8 +182,9 @@ class DockerBackend(Backend):
         with tempfile.TemporaryDirectory(prefix="minion-build-") as ctx:
             ctxp = Path(ctx)
             if profile.name == "base":
-                shutil.copytree(AGENT_DIR, ctxp / "agent",
-                                ignore=shutil.ignore_patterns("__pycache__", "*.pyc", "*.pyo"))
+                shutil.copytree(
+                    AGENT_DIR, ctxp / "agent", ignore=shutil.ignore_patterns("__pycache__", "*.pyc", "*.pyo")
+                )
                 shutil.copy(BASE_DOCKERFILE, ctxp / "Dockerfile")
                 with open(ctxp / "Dockerfile", "a") as f:
                     f.write(f'LABEL dev.minion.fingerprint="{profile.fingerprint()}"\n')
@@ -215,8 +240,9 @@ class DockerBackend(Backend):
     def _to_info(self, c: dict) -> DesktopInfo:
         labels = c.get("Config", {}).get("Labels") or {}
         status = c.get("State", {}).get("Status", "unknown")
-        state = {"exited": "stopped", "dead": "stopped", "removing": "stopped",
-                 "restarting": "running"}.get(status, status)
+        state = {"exited": "stopped", "dead": "stopped", "removing": "stopped", "restarting": "running"}.get(
+            status, status
+        )
         try:
             options = json.loads(labels.get(f"{L}.options") or "{}")
         except json.JSONDecodeError:
@@ -246,8 +272,7 @@ class DockerBackend(Backend):
         if stats:
             running = [self.cname(d.name) for d in infos if d.state == "running"]
             if running:
-                out = self._run("stats", "--no-stream", "--format", "{{json .}}", *running,
-                                check=False, timeout=60)
+                out = self._run("stats", "--no-stream", "--format", "{{json .}}", *running, check=False, timeout=60)
                 by_name = {}
                 for line in out.stdout.decode().splitlines():
                     try:
@@ -285,18 +310,41 @@ class DockerBackend(Backend):
         image = self.prepare(profile, progress)
         return self._create_from(name, image, profile, options, progress)
 
-    def _create_from(self, name: str, image: str, profile: Profile, options: CreateOptions,
-                     progress=None, extra_labels: dict | None = None) -> DesktopInfo:
+    def _create_from(
+        self,
+        name: str,
+        image: str,
+        profile: Profile,
+        options: CreateOptions,
+        progress=None,
+        extra_labels: dict | None = None,
+    ) -> DesktopInfo:
         c = self.cname(name)
         apps = [a.to_dict() for a in profile.merged("apps")]
         env = {**profile.merged("env"), **options.env}
         opts = options.to_dict()
         args = [
-            "create", "--name", c, "--hostname", name,
-            "--label", f"{L}=1", "--label", f"{L}.name={name}", "--label", f"{L}.profile={profile.name}",
-            "--label", f"{L}.size={options.size}", "--label", f"{L}.created={int(time.time())}",
-            "--label", f"{L}.version={VERSION}", "--label", f"{L}.options={json.dumps(opts)}",
-            "--shm-size", options.shm or profile.merged("shm") or "256m",
+            "create",
+            "--name",
+            c,
+            "--hostname",
+            name,
+            "--label",
+            f"{L}=1",
+            "--label",
+            f"{L}.name={name}",
+            "--label",
+            f"{L}.profile={profile.name}",
+            "--label",
+            f"{L}.size={options.size}",
+            "--label",
+            f"{L}.created={int(time.time())}",
+            "--label",
+            f"{L}.version={VERSION}",
+            "--label",
+            f"{L}.options={json.dumps(opts)}",
+            "--shm-size",
+            options.shm or profile.merged("shm") or "256m",
         ]
         for k, v in (extra_labels or {}).items():
             args += ["--label", f"{k}={v}"]
@@ -313,8 +361,11 @@ class DockerBackend(Backend):
         for p in options.ports:
             args += ["-p", f"127.0.0.1::{p}"]
         envs = {
-            "MINION_SCREEN": options.size, "MINION_NAME": name, "MINION_PROFILE": profile.name,
-            "MINION_APPS": json.dumps(apps), "MINION_AUTOSTART": json.dumps(profile.merged("autostart")),
+            "MINION_SCREEN": options.size,
+            "MINION_NAME": name,
+            "MINION_PROFILE": profile.name,
+            "MINION_APPS": json.dumps(apps),
+            "MINION_AUTOSTART": json.dumps(profile.merged("autostart")),
             **env,
         }
         for k, v in envs.items():
@@ -327,11 +378,11 @@ class DockerBackend(Backend):
             self._sync_agent(c)
             self._run("start", c, timeout=120)
             self._wait_ready(name)
-        except Exception:
+        except Exception as e:
             logs = self.logs(name, 30)
             self._run("rm", "-f", c, check=False, timeout=60)
             if logs:
-                raise BackendError(f"desktop {name!r} failed to start:\n{logs}")
+                raise BackendError(f"desktop {name!r} failed to start:\n{logs}") from e
             raise
         return self.get(name)
 
@@ -437,8 +488,7 @@ class DockerBackend(Backend):
             desk, snap = tag.split("--", 1)
             if name and desk != name:
                 continue
-            out.append(Snapshot(desk, snap, f"{SNAPSHOT_REPO}:{tag}", img.get("CreatedSince", ""),
-                                img.get("Size", "")))
+            out.append(Snapshot(desk, snap, f"{SNAPSHOT_REPO}:{tag}", img.get("CreatedSince", ""), img.get("Size", "")))
         return out
 
     def delete_snapshot(self, name: str, tag: str) -> None:
@@ -468,8 +518,9 @@ class DockerBackend(Backend):
             progress(f"Snapshotting {name!r} ...")
         snap = self._commit(name, new_name, f"forked-from-{name}")
         options = CreateOptions.from_dict(info.options)
-        return self._create_from(new_name, snap.ref, self._profile_for(info), options, progress,
-                                 extra_labels={f"{L}.forked_from": name})
+        return self._create_from(
+            new_name, snap.ref, self._profile_for(info), options, progress, extra_labels={f"{L}.forked_from": name}
+        )
 
     def logs(self, name: str, tail: int = 200) -> str:
         res = self._run("logs", "--tail", str(tail), self.cname(name), check=False, timeout=30)

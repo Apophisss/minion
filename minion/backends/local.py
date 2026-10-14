@@ -25,10 +25,14 @@ from ..profiles import Profile
 from .base import Backend, CreateOptions, DesktopInfo, Snapshot, check_name
 
 AGENT_DIR = Path(__file__).resolve().parent.parent / "agent"
-REQUIRED = {"Xvfb": "xvfb", "xdotool": "xdotool", "wmctrl": "wmctrl", "xwininfo": "x11-utils",
-            "xprop": "x11-utils"}
-OPTIONAL = {"jwm": "jwm", "dbus-daemon": "dbus-daemon", "tesseract": "tesseract-ocr", "xclip": "xclip",
-            "xauth": "xauth"}
+REQUIRED = {"Xvfb": "xvfb", "xdotool": "xdotool", "wmctrl": "wmctrl", "xwininfo": "x11-utils", "xprop": "x11-utils"}
+OPTIONAL = {
+    "jwm": "jwm",
+    "dbus-daemon": "dbus-daemon",
+    "tesseract": "tesseract-ocr",
+    "xclip": "xclip",
+    "xauth": "xauth",
+}
 
 
 def _python() -> str | None:
@@ -89,6 +93,23 @@ class LocalBackend(Backend):
         except (OSError, json.JSONDecodeError) as e:
             raise NotFound(f"no desktop named {name!r} (see `minion ls`)") from e
 
+    @staticmethod
+    def _host_app(app: dict) -> dict:
+        """Local desktops use this machine's programs: map the terminal to one that exists."""
+        exe = (app.get("command") or "").split()[0] if app.get("command") else ""
+        if exe and not shutil.which(exe) and app.get("id") == "terminal":
+            for term in ("xterm", "lxterminal", "xfce4-terminal", "gnome-terminal", "konsole", "x-terminal-emulator"):
+                if shutil.which(term):
+                    return {**app, "command": term}
+        return app
+
+    def _runtime(self, name: str) -> Path:
+        """Sockets live under a short /tmp path (UNIX socket paths are limited to ~108 bytes)."""
+        meta = self._meta(name)
+        base = Path(f"/tmp/minion-{os.getuid()}")
+        base.mkdir(mode=0o700, exist_ok=True)
+        return base / meta["id"][:12]
+
     def _save_meta(self, name: str, meta: dict) -> None:
         (self._dir(name) / "meta.json").write_text(json.dumps(meta, indent=2))
 
@@ -136,9 +157,17 @@ class LocalBackend(Backend):
             state = "paused" if _proc_state(pid) == "T" else "running"
         else:
             state = "stopped"
-        return DesktopInfo(name=meta["name"], profile=meta.get("profile", ""), state=state, backend=self.name,
-                           size=meta.get("size", ""), created=float(meta.get("created", 0)),
-                           image="(host)", id=meta.get("id", "")[:12], options=meta.get("options", {}))
+        return DesktopInfo(
+            name=meta["name"],
+            profile=meta.get("profile", ""),
+            state=state,
+            backend=self.name,
+            size=meta.get("size", ""),
+            created=float(meta.get("created", 0)),
+            image="(host)",
+            id=meta.get("id", "")[:12],
+            options=meta.get("options", {}),
+        )
 
     # -- lifecycle -----------------------------------------------------
     def list(self, stats: bool = False) -> list[DesktopInfo]:
@@ -186,10 +215,15 @@ class LocalBackend(Backend):
         if not link.exists():
             link.symlink_to(AGENT_DIR, target_is_directory=True)
         meta = {
-            "name": name, "profile": profile.name, "size": options.size, "created": time.time(),
-            "id": uuid.uuid4().hex, "options": options.to_dict(),
-            "apps": [a.to_dict() for a in profile.merged("apps")],
-            "autostart": profile.merged("autostart"), "env": {**profile.merged("env"), **options.env},
+            "name": name,
+            "profile": profile.name,
+            "size": options.size,
+            "created": time.time(),
+            "id": uuid.uuid4().hex,
+            "options": options.to_dict(),
+            "apps": [self._host_app(a.to_dict()) for a in profile.merged("apps")],
+            "autostart": profile.merged("autostart"),
+            "env": {**profile.merged("env"), **options.env},
         }
         self._save_meta(name, meta)
         self._spawn(name, progress)
@@ -202,25 +236,43 @@ class LocalBackend(Backend):
         if py is None:
             raise BackendError("no python3 with Pillow found (sudo apt-get install -y python3-pil)")
         display = self._free_display()
-        runtime = d / "runtime"
+        runtime = self._runtime(name)
         if runtime.exists():
             shutil.rmtree(runtime, ignore_errors=True)
         runtime.mkdir()
-        env = {k: v for k, v in os.environ.items() if not k.startswith(("MINION_", "DISPLAY", "WAYLAND",
-                                                                         "DBUS_SESSION", "XAUTHORITY"))}
+        env = {
+            k: v
+            for k, v in os.environ.items()
+            if not k.startswith(("MINION_", "DISPLAY", "WAYLAND", "DBUS_SESSION", "XAUTHORITY"))
+        }
         env.update(meta.get("env", {}))
-        env.update({
-            "HOME": str(d / "home"), "PYTHONPATH": str(d / "lib"), "MINION_DISPLAY": f":{display}",
-            "MINION_SCREEN": meta["size"], "MINION_RUNTIME_DIR": str(runtime), "MINION_NAME": name,
-            "MINION_PROFILE": meta.get("profile", ""), "MINION_APPS": json.dumps(meta.get("apps", [])),
-            "MINION_AUTOSTART": json.dumps(meta.get("autostart", [])), "MINION_DESKTOP_ID": meta["id"],
-            "PYTHONDONTWRITEBYTECODE": "1",
-        })
+        env.update(
+            {
+                "HOME": str(d / "home"),
+                "PYTHONPATH": str(d / "lib"),
+                "MINION_DISPLAY": f":{display}",
+                "MINION_SCREEN": meta["size"],
+                "MINION_RUNTIME_DIR": str(runtime),
+                "MINION_NAME": name,
+                "MINION_PROFILE": meta.get("profile", ""),
+                "MINION_APPS": json.dumps(meta.get("apps", [])),
+                "MINION_AUTOSTART": json.dumps(meta.get("autostart", [])),
+                "MINION_DESKTOP_ID": meta["id"],
+                "PYTHONDONTWRITEBYTECODE": "1",
+            }
+        )
         if progress:
             progress(f"Starting local desktop {name!r} on display :{display} ...")
         with open(runtime / "session.log", "ab") as log:
-            proc = subprocess.Popen([py, "-m", "minion_agent.session"], env=env, cwd=str(d / "home"),
-                                    stdin=subprocess.DEVNULL, stdout=log, stderr=log, start_new_session=True)
+            proc = subprocess.Popen(
+                [py, "-m", "minion_agent.session"],
+                env=env,
+                cwd=str(d / "home"),
+                stdin=subprocess.DEVNULL,
+                stdout=log,
+                stderr=log,
+                start_new_session=True,
+            )
         meta.update(pid=proc.pid, display=display)
         self._save_meta(name, meta)
         sock = runtime / "agent.sock"
@@ -241,8 +293,9 @@ class LocalBackend(Backend):
         raise BackendError(f"desktop {name!r} did not become ready (see {runtime / 'session.log'})")
 
     def remove(self, name: str) -> None:
-        self._meta(name)
+        runtime = self._runtime(name)
         self.stop(name)
+        shutil.rmtree(runtime, ignore_errors=True)
         shutil.rmtree(self._dir(name), ignore_errors=True)
 
     def start(self, name: str) -> None:
@@ -279,8 +332,16 @@ class LocalBackend(Backend):
     def thaw(self, name: str) -> None:
         self._signal_all(self._meta(name)["id"], signal.SIGCONT)
 
+    def ensure_awake(self, name: str) -> None:
+        meta = self._meta(name)
+        pid = int(meta.get("pid") or 0)
+        if not pid or not _alive(pid):
+            self._spawn(name)
+        elif _proc_state(pid) == "T":
+            self.thaw(name)
+
     def channel(self, name: str) -> Channel:
-        sock = str(self._dir(name) / "runtime" / "agent.sock")
+        sock = str(self._runtime(name) / "agent.sock")
         return Channel(lambda: SocketTransport(sock), label=f"desktop {name!r}")
 
     # -- files ---------------------------------------------------------
@@ -339,8 +400,15 @@ class LocalBackend(Backend):
             desk, _, tag = p.name[: -len(".tar.gz")].partition("--")
             if name and desk != name:
                 continue
-            out.append(Snapshot(desk, tag, str(p), time.strftime("%Y-%m-%d %H:%M", time.localtime(p.stat().st_mtime)),
-                                f"{p.stat().st_size / 1e6:.1f}MB"))
+            out.append(
+                Snapshot(
+                    desk,
+                    tag,
+                    str(p),
+                    time.strftime("%Y-%m-%d %H:%M", time.localtime(p.stat().st_mtime)),
+                    f"{p.stat().st_size / 1e6:.1f}MB",
+                )
+            )
         return out
 
     def delete_snapshot(self, name: str, tag: str) -> None:
@@ -357,7 +425,8 @@ class LocalBackend(Backend):
             for m in members:
                 if m.name.startswith("/") or ".." in Path(m.name).parts:
                     raise MinionError(f"unsafe path in snapshot: {m.name}")
-            tar.extractall(self._dir(name), members=members)
+            safe = {"filter": "data"} if hasattr(tarfile, "data_filter") else {}
+            tar.extractall(self._dir(name), members=members, **safe)
 
     def restore(self, name: str, tag: str, progress=None) -> DesktopInfo:
         archive = self._snapdir() / f"{name}--{tag}.tar.gz"
@@ -384,7 +453,7 @@ class LocalBackend(Backend):
 
     def logs(self, name: str, tail: int = 200) -> str:
         try:
-            lines = (self._dir(name) / "runtime" / "session.log").read_text(errors="replace").splitlines()
+            lines = (self._runtime(name) / "session.log").read_text(errors="replace").splitlines()
         except OSError:
             return ""
         return "\n".join(lines[-tail:])

@@ -39,9 +39,23 @@ LEGACY = ("computer_20251124", "computer_20250124")
 BETA_HEADERS = {"computer_20251124": "computer-use-2025-11-24", "computer_20250124": "computer-use-2025-01-24"}
 HALT = "Not executed: an earlier computer action in this turn failed."
 MEMBERS = (
-    "screenshot", "zoom", "left_click", "right_click", "middle_click", "double_click", "triple_click",
-    "left_click_drag", "mouse_move", "left_mouse_down", "left_mouse_up", "cursor_position", "scroll",
-    "type", "key", "hold_key", "wait",
+    "screenshot",
+    "zoom",
+    "left_click",
+    "right_click",
+    "middle_click",
+    "double_click",
+    "triple_click",
+    "left_click_drag",
+    "mouse_move",
+    "left_mouse_down",
+    "left_mouse_up",
+    "cursor_position",
+    "scroll",
+    "type",
+    "key",
+    "hold_key",
+    "wait",
 )
 # Image limits: every model that speaks the toolset accepts 2576 px / ~3.75 MP; older ones 1568 px / 1.15 MP.
 LIMITS = {"toolset": (2576, 3_750_000), "legacy": (1568, 1_150_000)}
@@ -66,8 +80,16 @@ def _get(block, key, default=None):
 class ComputerUse:
     """Executes Claude computer-use calls against a desktop, handling screenshot scaling."""
 
-    def __init__(self, desktop: Desktop, *, version: str = TOOLSET, zoom: bool = True,
-                 max_long_edge: int | None = None, max_pixels: int | None = None, report_changes: bool = True):
+    def __init__(
+        self,
+        desktop: Desktop,
+        *,
+        version: str = TOOLSET,
+        zoom: bool = True,
+        max_long_edge: int | None = None,
+        max_pixels: int | None = None,
+        report_changes: bool = True,
+    ):
         self.desktop = desktop
         self.version = version
         self.zoom = zoom
@@ -88,8 +110,12 @@ class ComputerUse:
                 entry["configs"] = {"zoom": {"enabled": False}}
             return entry
         if self.version in LEGACY:
-            entry = {"type": self.version, "name": "computer",
-                     "display_width_px": self.shot[0], "display_height_px": self.shot[1]}
+            entry = {
+                "type": self.version,
+                "name": "computer",
+                "display_width_px": self.shot[0],
+                "display_height_px": self.shot[1],
+            }
             if self.version == "computer_20251124" and self.zoom:
                 entry["enable_zoom"] = True
             return entry
@@ -143,21 +169,43 @@ class ComputerUse:
 
     def do(self, member: str, inp: dict) -> str | tuple | None:
         """Run one member. Returns a line of text, ('image', b64, mime), ('cursor', x, y) or None."""
-        mods = inp.get("text") if member in ("left_click", "right_click", "middle_click", "double_click",
-                                             "triple_click", "left_click_drag", "scroll") else None
+        mods = (
+            inp.get("text")
+            if member
+            in (
+                "left_click",
+                "right_click",
+                "middle_click",
+                "double_click",
+                "triple_click",
+                "left_click_drag",
+                "scroll",
+            )
+            else None
+        )
         if member == "screenshot":
             return ("image", *self.screenshot_b64())
         if member == "zoom":
             return ("image", *self.zoom_b64(inp.get("region")))
         if member in ("left_click", "right_click", "middle_click", "double_click", "triple_click"):
             coord = inp.get("coordinate")
-            step = {"action": "click", "target": self.to_screen(coord) if coord is not None else None,
-                    "button": {"right_click": "right", "middle_click": "middle"}.get(member, "left"),
-                    "count": {"double_click": 2, "triple_click": 3}.get(member, 1), "modifiers": mods}
+            step = {
+                "action": "click",
+                "target": self.to_screen(coord) if coord is not None else None,
+                "button": {"right_click": "right", "middle_click": "middle"}.get(member, "left"),
+                "count": {"double_click": 2, "triple_click": 3}.get(member, 1),
+                "modifiers": mods,
+            }
             return self._act(step)
         if member == "left_click_drag":
-            return self._act({"action": "drag", "from": self.to_screen(inp.get("start_coordinate"), "start_coordinate"),
-                              "to": self.to_screen(inp.get("coordinate")), "modifiers": mods})
+            return self._act(
+                {
+                    "action": "drag",
+                    "from": self.to_screen(inp.get("start_coordinate"), "start_coordinate"),
+                    "to": self.to_screen(inp.get("coordinate")),
+                    "modifiers": mods,
+                }
+            )
         if member == "mouse_move":
             return self._act({"action": "move", "target": self.to_screen(inp.get("coordinate"))})
         if member in ("left_mouse_down", "left_mouse_up"):
@@ -172,8 +220,15 @@ class ComputerUse:
             if not (1 <= amount <= 50):
                 raise ComputerError("scroll_amount must be between 1 and 50")
             coord = inp.get("coordinate")
-            return self._act({"action": "scroll", "direction": direction, "amount": amount,
-                              "target": self.to_screen(coord) if coord is not None else None, "modifiers": mods})
+            return self._act(
+                {
+                    "action": "scroll",
+                    "direction": direction,
+                    "amount": amount,
+                    "target": self.to_screen(coord) if coord is not None else None,
+                    "modifiers": mods,
+                }
+            )
         if member == "type":
             if not inp.get("text"):
                 raise ComputerError("type needs text")
@@ -265,9 +320,17 @@ if _SdkToolset is not None:
     class MinionComputer(_SdkToolset):
         """A ready-made computer toolset driver for the Anthropic SDK, backed by a Minion desktop."""
 
-        def __init__(self, desktop: Desktop, *, confirm=None, configs=None, tool_configs=None,
-                     max_long_edge: int | None = None, max_pixels: int | None = None,
-                     remove_on_close: bool = False):
+        def __init__(
+            self,
+            desktop: Desktop,
+            *,
+            confirm=None,
+            configs=None,
+            tool_configs=None,
+            max_long_edge: int | None = None,
+            max_pixels: int | None = None,
+            remove_on_close: bool = False,
+        ):
             super().__init__(configs=configs, confirm=confirm, tool_configs=tool_configs)
             self.cu = ComputerUse(desktop, max_long_edge=max_long_edge, max_pixels=max_pixels)
             self.desktop = desktop
@@ -275,7 +338,9 @@ if _SdkToolset is not None:
 
         def _do(self, member: str, inp):
             try:
-                return self.cu.do(member, inp.model_dump(exclude_none=True) if hasattr(inp, "model_dump") else dict(inp))
+                return self.cu.do(
+                    member, inp.model_dump(exclude_none=True) if hasattr(inp, "model_dump") else dict(inp)
+                )
             except (ComputerError, MinionError) as e:
                 raise _SdkToolError(str(e)) from e
 

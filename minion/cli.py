@@ -6,7 +6,6 @@ import argparse
 import json
 import os
 import re
-import shutil
 import sys
 import time
 import webbrowser
@@ -14,7 +13,7 @@ from pathlib import Path
 
 from . import __version__, config, profiles
 from .backends import get_backend
-from .desktop import ActResult, Desktop, normalize_size
+from .desktop import ActResult, Desktop
 from .errors import MinionError, NotFound
 
 # -- output helpers ----------------------------------------------------------
@@ -111,20 +110,25 @@ def cmd_up(args) -> int:
     profile = args.profile or config.DEFAULT_PROFILE
     t0 = time.time()
     d = Desktop.create(
-        profile, name=args.name, size=args.size, memory=args.memory or "", cpus=args.cpus or "",
-        network=not args.offline, mounts=args.mount or [], env=dict(kv.split("=", 1) for kv in args.env or []),
-        ports=args.port or [], progress=None if args.quiet else progress_printer,
+        profile,
+        name=args.name,
+        size=args.size,
+        memory=args.memory or "",
+        cpus=args.cpus or "",
+        network=not args.offline,
+        mounts=args.mount or [],
+        env=dict(kv.split("=", 1) for kv in args.env or []),
+        ports=args.port or [],
+        progress=None if args.quiet else progress_printer,
     )
     hello = d.hello()
     if args.json:
         emit_json({**d.to_dict(), "apps": hello.get("apps", []), "ready_in": round(time.time() - t0, 2)})
         return 0
-    ok(f"{c(d.name, '1')} is ready  ({profile} · {'x'.join(map(str, hello['screen']))} · "
-       f"{time.time() - t0:.1f}s)")
+    ok(f"{c(d.name, '1')} is ready  ({profile} · {'x'.join(map(str, hello['screen']))} · {time.time() - t0:.1f}s)")
     if hello.get("apps"):
         info(f"  Apps: {', '.join(hello['apps'])}")
-    info(f"  Next: minion see · minion open {(hello.get('apps') or ['<url>'])[-1].lower().split()[0]}"
-         " · minion view")
+    info(f"  Next: minion see · minion open {(hello.get('apps') or ['<url>'])[-1].lower().split()[0]} · minion view")
     if args.view:
         return cmd_view(argparse.Namespace(desktop=d.name, json=False, no_open=False))
     return 0
@@ -146,7 +150,7 @@ def cmd_ls(args) -> int:
         rows.append((mark + d.name, d.profile, d.state, d.size, human_bytes(d.memory), cpu, human_age(d.age)))
     widths = [max(len(r[i]) for r in rows) for i in range(len(rows[0]))]
     for i, r in enumerate(rows):
-        line = "  ".join(col.ljust(w) for col, w in zip(r, widths)).rstrip()
+        line = "  ".join(col.ljust(w) for col, w in zip(r, widths, strict=True)).rstrip()
         if i == 0:
             line = c(" " + line, "2")
         elif "paused" in r[2]:
@@ -185,6 +189,7 @@ def cmd_simple(method: str, verb: str):
         getattr(d, method)()
         ok(f"{verb} {d.name}")
         return 0
+
     return run
 
 
@@ -286,7 +291,7 @@ def cmd_pull(args) -> int:
 def cmd_see(args) -> int:
     d = desktop(args)
     ocr = True if args.ocr else ("auto" if not args.no_ocr else False)
-    obs = d.see(ocr=ocr, window=args.window)
+    obs = d.see(ocr=ocr, window=args.window, full_text=args.full)
     if args.json:
         emit_json(obs.__dict__)
     else:
@@ -297,10 +302,14 @@ def cmd_see(args) -> int:
 def cmd_shot(args) -> int:
     d = desktop(args)
     region = [int(v) for v in re.split(r"[,\s]+", args.region.strip())] if args.region else None
-    fmt = "jpeg" if (args.output or "").lower().endswith((".jpg", ".jpeg")) else (
-        "webp" if (args.output or "").lower().endswith(".webp") else "png")
-    shot = d.screenshot(region=region, max_width=args.max_width, format=fmt, marks=args.marks,
-                        grid=args.grid, cursor=not args.no_cursor)
+    fmt = (
+        "jpeg"
+        if (args.output or "").lower().endswith((".jpg", ".jpeg"))
+        else ("webp" if (args.output or "").lower().endswith(".webp") else "png")
+    )
+    shot = d.screenshot(
+        region=region, max_width=args.max_width, format=fmt, marks=args.marks, grid=args.grid, cursor=not args.no_cursor
+    )
     if args.output == "-":
         sys.stdout.buffer.write(shot.data)
         return 0
@@ -323,8 +332,10 @@ def _target(parts: list[str]):
 def cmd_click(args) -> int:
     count = 2 if args.double else 3 if args.triple else 1
     button = "right" if args.right else "middle" if args.middle else "left"
-    return act_and_print(args, {"action": "click", "target": _target(args.target), "button": button,
-                                "count": count, "modifiers": args.mod})
+    return act_and_print(
+        args,
+        {"action": "click", "target": _target(args.target), "button": button, "count": count, "modifiers": args.mod},
+    )
 
 
 def cmd_dclick(args) -> int:
@@ -353,8 +364,15 @@ def cmd_key(args) -> int:
 
 
 def cmd_scroll(args) -> int:
-    return act_and_print(args, {"action": "scroll", "direction": args.direction, "amount": args.amount,
-                                "target": _target(args.at.split()) if args.at else None})
+    return act_and_print(
+        args,
+        {
+            "action": "scroll",
+            "direction": args.direction,
+            "amount": args.amount,
+            "target": _target(args.at.split()) if args.at else None,
+        },
+    )
 
 
 def cmd_drag(args) -> int:
@@ -366,8 +384,11 @@ def cmd_fill(args) -> int:
 
 
 def cmd_wait_for(args) -> int:
-    return act_and_print(args, {"action": "wait_for", "text": " ".join(args.text), "timeout": args.timeout,
-                                "gone": args.gone}, settle=False)
+    return act_and_print(
+        args,
+        {"action": "wait_for", "text": " ".join(args.text), "timeout": args.timeout, "gone": args.gone},
+        settle=False,
+    )
 
 
 def cmd_act(args) -> int:
@@ -393,7 +414,7 @@ def cmd_open(args) -> int:
         return 0 if "error" not in res else 1
     w = res.get("window")
     if w:
-        ok(f"opened {res['command']} → \"{w['title']}\"")
+        ok(f'opened {res["command"]} → "{w["title"]}"')
     elif "error" in res:
         err(f"{res['command']}: {res['error']}")
         return 1
@@ -426,8 +447,10 @@ def cmd_run(args) -> int:
 def cmd_cp(args) -> int:
     src_r, dst_r = split_remote(args.src), split_remote(args.dst)
     if bool(src_r) == bool(dst_r):
-        raise MinionError("exactly one side must be in the desktop, written as NAME:path or :path "
-                          "(e.g. minion cp report.pdf :~/Documents/  or  minion cp office-1:~/out.png .)")
+        raise MinionError(
+            "exactly one side must be in the desktop, written as NAME:path or :path "
+            "(e.g. minion cp report.pdf :~/Documents/  or  minion cp office-1:~/out.png .)"
+        )
     if src_r:
         name, path = src_r
         d = Desktop.attach(name or getattr(args, "desktop", None))
@@ -468,7 +491,7 @@ def cmd_windows(args) -> int:
 def cmd_focus(args) -> int:
     d = desktop(args)
     res = d.window(args.action, " ".join(args.window) if args.window else None)
-    ok(f"{args.action} \"{res['window']['title']}\"")
+    ok(f'{args.action} "{res["window"]["title"]}"')
     return 0
 
 
@@ -503,8 +526,13 @@ def cmd_view(args) -> int:
 def cmd_serve(args) -> int:
     from .server import serve
 
-    serve(host=args.host, port=args.port, token=None if args.no_auth else (args.token or ""),
-          idle_freeze=args.idle_freeze, quiet=args.quiet)
+    serve(
+        host=args.host,
+        port=args.port,
+        token=None if args.no_auth else (args.token or ""),
+        idle_freeze=args.idle_freeze,
+        quiet=args.quiet,
+    )
     return 0
 
 
@@ -626,6 +654,7 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--ocr", action="store_true", help="always add OCR text")
     sp.add_argument("--no-ocr", action="store_true", help="never run OCR")
     sp.add_argument("--window", "-w", help="describe this window instead of the focused one")
+    sp.add_argument("--full", action="store_true", help="keep paragraphs whole (for reading)")
 
     sp = add("shot", cmd_shot, "take a screenshot", aliases=["screenshot"])
     sp.add_argument("-o", "--output", help="file (.png/.jpg/.webp) or - for stdout")
@@ -643,9 +672,11 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--triple", action="store_true")
     sp.add_argument("--mod", help="hold modifiers, e.g. ctrl or ctrl+shift")
     sp.add_argument("--shot", metavar="FILE", help="save a screenshot after the action")
-    for name, fn, help in (("dclick", cmd_dclick, "double-click a target"),
-                           ("rclick", cmd_rclick, "right-click a target"),
-                           ("move", cmd_move, "move the mouse to a target (hover)")):
+    for name, fn, help in (
+        ("dclick", cmd_dclick, "double-click a target"),
+        ("rclick", cmd_rclick, "right-click a target"),
+        ("move", cmd_move, "move the mouse to a target (hover)"),
+    ):
         sp = add(name, fn, help)
         sp.add_argument("target", nargs="+")
         sp.add_argument("--shot", metavar="FILE")
@@ -706,8 +737,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     sp = add("focus", cmd_focus, "focus (or close/maximize/minimize) a window by title, app or index")
     sp.add_argument("window", nargs="*")
-    sp.add_argument("--action", default="focus",
-                    choices=["focus", "close", "maximize", "restore", "minimize"])
+    sp.add_argument("--action", default="focus", choices=["focus", "close", "maximize", "restore", "minimize"])
 
     sp = add("view", cmd_view, "open the live view in your browser (watch and take over)")
     sp.add_argument("--no-open", action="store_true", help="just print the URL")
@@ -724,8 +754,12 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--port", type=int, default=int(os.environ.get("MINION_PORT", "4747")))
     sp.add_argument("--token", help="access token (default: random, printed at start)")
     sp.add_argument("--no-auth", action="store_true", help="no token (only on trusted networks)")
-    sp.add_argument("--idle-freeze", type=float, default=config.env_float("MINION_IDLE_FREEZE", 600),
-                    help="freeze desktops idle for this many seconds (0 = never)")
+    sp.add_argument(
+        "--idle-freeze",
+        type=float,
+        default=config.env_float("MINION_IDLE_FREEZE", 600),
+        help="freeze desktops idle for this many seconds (0 = never)",
+    )
     sp.add_argument("--quiet", "-q", action="store_true")
 
     sp = add("mcp", cmd_mcp, "run the MCP server on stdio (for Claude Code, Claude Desktop, Cursor, ...)")

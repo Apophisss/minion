@@ -46,7 +46,7 @@ def parse_size(spec: str) -> tuple[int, int]:
     try:
         w, h = int(parts[0]), int(parts[1])
     except (IndexError, ValueError):
-        raise SystemExit(f"invalid MINION_SCREEN {spec!r}; expected WIDTHxHEIGHT such as 1280x800")
+        raise SystemExit(f"invalid MINION_SCREEN {spec!r}; expected WIDTHxHEIGHT such as 1280x800") from None
     if not (320 <= w <= 7680 and 240 <= h <= 4320):
         raise SystemExit(f"screen size {w}x{h} is out of range")
     return w, h
@@ -166,14 +166,32 @@ class Session:
 
     def start_x(self) -> None:
         w, h = self.size
-        cmd = ["Xvfb", self.display, "-screen", "0", f"{w}x{h}x24", "-nolisten", "tcp",
-               "-dpi", "96", "-noreset", "-s", "0", "+extension", "RANDR"]
+        cmd = [
+            "Xvfb",
+            self.display,
+            "-screen",
+            "0",
+            f"{w}x{h}x24",
+            "-nolisten",
+            "tcp",
+            "-dpi",
+            "96",
+            "-noreset",
+            "-s",
+            "0",
+            "+extension",
+            "RANDR",
+        ]
         if shutil.which("xauth"):
             auth = self.runtime / "Xauthority"
             auth.touch(mode=0o600)
             cookie = secrets.token_hex(16)
-            subprocess.run(["xauth", "-q", "-f", str(auth), "add", self.display, ".", cookie],
-                           check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            subprocess.run(
+                ["xauth", "-q", "-f", str(auth), "add", self.display, ".", cookie],
+                check=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
             cmd += ["-auth", str(auth)]
             os.environ["XAUTHORITY"] = str(auth)
         else:
@@ -196,16 +214,19 @@ class Session:
 
         self.wait_for(ready, 15, "xvfb", proc)
         if shutil.which("xset"):
-            subprocess.run(["xset", "s", "off", "s", "noblank", "-dpms"], stdout=subprocess.DEVNULL,
-                           stderr=subprocess.DEVNULL, timeout=5)
+            subprocess.run(
+                ["xset", "s", "off", "s", "noblank", "-dpms"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=5,
+            )
 
     def start_dbus(self) -> None:
         if not shutil.which("dbus-daemon"):
             log("dbus-daemon not found: accessibility tree disabled")
             return
         bus = self.runtime / "bus"
-        proc = self.spawn("dbus", ["dbus-daemon", "--session", "--nofork", "--nopidfile",
-                                   f"--address=unix:path={bus}"])
+        proc = self.spawn("dbus", ["dbus-daemon", "--session", "--nofork", "--nopidfile", f"--address=unix:path={bus}"])
         self.wait_for(bus.exists, 10, "dbus", proc)
         os.environ["DBUS_SESSION_BUS_ADDRESS"] = f"unix:path={bus}"
 
@@ -221,10 +242,20 @@ class Session:
             return
         for _ in range(60):
             r = subprocess.run(
-                ["dbus-send", "--session", "--print-reply", "--dest=org.a11y.Bus", "/org/a11y/bus",
-                 "org.freedesktop.DBus.Properties.Set", "string:org.a11y.Status",
-                 "string:IsEnabled", "variant:boolean:true"],
-                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5,
+                [
+                    "dbus-send",
+                    "--session",
+                    "--print-reply",
+                    "--dest=org.a11y.Bus",
+                    "/org/a11y/bus",
+                    "org.freedesktop.DBus.Properties.Set",
+                    "string:org.a11y.Status",
+                    "string:IsEnabled",
+                    "variant:boolean:true",
+                ],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=5,
             )
             if r.returncode == 0:
                 return
@@ -256,8 +287,11 @@ class Session:
                     log(f"wallpaper failed: {e}")
         if wm == "jwm" and shutil.which("jwm"):
             rc = self.runtime / "jwmrc"
-            rc.write_text(jwm.config(self.apps, wp, terminal=self.terminal(),
-                                     maximize=os.environ.get("MINION_MAXIMIZE", "1") != "0"))
+            rc.write_text(
+                jwm.config(
+                    self.apps, wp, terminal=self.terminal(), maximize=os.environ.get("MINION_MAXIMIZE", "1") != "0"
+                )
+            )
             self.spawn("wm", ["jwm", "-f", str(rc)])
         elif shutil.which("openbox"):
             self.spawn("wm", ["openbox"])
@@ -273,8 +307,14 @@ class Session:
             if not cmd:
                 continue
             logf = open(self.runtime / "apps.log", "ab")
-            subprocess.Popen(["bash", "-lc", cmd], cwd=os.path.expanduser("~"), stdin=subprocess.DEVNULL,
-                             stdout=logf, stderr=logf, start_new_session=True)
+            subprocess.Popen(
+                ["bash", "-lc", cmd],
+                cwd=os.path.expanduser("~"),
+                stdin=subprocess.DEVNULL,
+                stdout=logf,
+                stderr=logf,
+                start_new_session=True,
+            )
             logf.close()
 
     # -- lifecycle -----------------------------------------------------
@@ -324,12 +364,22 @@ class Session:
         threading.Thread(target=server.serve, args=(agent, sock, ready), daemon=True).start()
         ready.wait(10)
         self.run_autostart()
-        (self.runtime / "session.json").write_text(json.dumps({
-            "pid": os.getpid(), "display": self.display, "screen": list(self.size),
-            "socket": sock, "version": VERSION, "started": time.time(),
-        }))
-        log(f"desktop {self.name!r} ready on {self.display} ({self.size[0]}x{self.size[1]}) "
-            f"in {time.monotonic() - t0:.2f}s")
+        (self.runtime / "session.json").write_text(
+            json.dumps(
+                {
+                    "pid": os.getpid(),
+                    "display": self.display,
+                    "screen": list(self.size),
+                    "socket": sock,
+                    "version": VERSION,
+                    "started": time.time(),
+                }
+            )
+        )
+        log(
+            f"desktop {self.name!r} ready on {self.display} ({self.size[0]}x{self.size[1]}) "
+            f"in {time.monotonic() - t0:.2f}s"
+        )
         self.supervise()
 
 

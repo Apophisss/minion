@@ -27,32 +27,111 @@ LOCK = threading.RLock()
 _initialized = False
 
 INTERACTIVE = {
-    "push button", "toggle button", "check box", "radio button", "menu item",
-    "check menu item", "radio menu item", "tearoff menu item", "menu", "combo box",
-    "entry", "password text", "spin button", "slider", "link", "page tab",
-    "list item", "tree item", "split button", "button", "toggle", "switch",
-    "date editor", "font chooser", "color chooser", "icon", "tool bar item",
+    "push button",
+    "toggle button",
+    "check box",
+    "radio button",
+    "menu item",
+    "check menu item",
+    "radio menu item",
+    "tearoff menu item",
+    "menu",
+    "combo box",
+    "entry",
+    "password text",
+    "spin button",
+    "slider",
+    "link",
+    "page tab",
+    "list item",
+    "tree item",
+    "split button",
+    "button",
+    "toggle",
+    "switch",
+    "date editor",
+    "font chooser",
+    "color chooser",
+    "icon",
+    "tool bar item",
 }
 TEXT_INPUT = {"entry", "password text", "text", "terminal", "spin button", "combo box"}
 TEXTUAL = {
-    "heading", "paragraph", "label", "static", "caption", "text", "terminal",
-    "block quote", "list item", "table cell", "cell", "description term",
-    "description value", "footer", "header", "comment", "math", "mark",
-    "notification", "alert", "status bar", "info bar", "tooltip", "title bar",
+    "heading",
+    "paragraph",
+    "label",
+    "static",
+    "caption",
+    "text",
+    "terminal",
+    "block quote",
+    "list item",
+    "table cell",
+    "cell",
+    "description term",
+    "description value",
+    "footer",
+    "header",
+    "comment",
+    "math",
+    "mark",
+    "notification",
+    "alert",
+    "status bar",
+    "info bar",
+    "tooltip",
+    "title bar",
 }
 CONTAINERS_WITH_TITLE = {
-    "dialog", "alert", "file chooser", "page tab list", "menu bar", "tool bar",
-    "table", "tree table", "tree", "list", "list box", "document frame",
-    "document web", "document text", "document spreadsheet", "document presentation",
-    "document email", "form", "landmark", "navigation", "group", "grouping",
-    "panel", "section", "article", "region", "scroll pane", "frame", "window",
+    "dialog",
+    "alert",
+    "file chooser",
+    "page tab list",
+    "menu bar",
+    "tool bar",
+    "table",
+    "tree table",
+    "tree",
+    "list",
+    "list box",
+    "document frame",
+    "document web",
+    "document text",
+    "document spreadsheet",
+    "document presentation",
+    "document email",
+    "form",
+    "landmark",
+    "navigation",
+    "group",
+    "grouping",
+    "panel",
+    "section",
+    "article",
+    "region",
+    "scroll pane",
+    "frame",
+    "window",
 }
 SKIP_ROLES = {"scroll bar", "separator"}  # never emitted, never descended
 TOP_LEVEL = {"frame", "window", "dialog", "alert", "file chooser"}
 LEAVES = {
-    "push button", "button", "toggle button", "split button", "check box", "radio button",
-    "menu item", "check menu item", "radio menu item", "link", "entry", "password text",
-    "terminal", "spin button", "slider", "switch",
+    "push button",
+    "button",
+    "toggle button",
+    "split button",
+    "check box",
+    "radio button",
+    "menu item",
+    "check menu item",
+    "radio menu item",
+    "link",
+    "entry",
+    "password text",
+    "terminal",
+    "spin button",
+    "slider",
+    "switch",
 }
 
 
@@ -70,6 +149,7 @@ class Element:
     value: str = ""
     states: list[str] = field(default_factory=list)
     node: object = None  # Atspi.Accessible (not serialized)
+    in_doc: bool = False  # inside a web page (vs. the browser's own UI)
 
     @property
     def center(self) -> tuple[int, int]:
@@ -84,8 +164,14 @@ class Element:
 
     def to_dict(self) -> dict:
         cx, cy = self.center
-        d = {"id": f"@{self.id}", "role": self.role, "name": self.name,
-             "x": cx, "y": cy, "box": [self.x, self.y, self.w, self.h]}
+        d = {
+            "id": f"@{self.id}",
+            "role": self.role,
+            "name": self.name,
+            "x": cx,
+            "y": cy,
+            "box": [self.x, self.y, self.w, self.h],
+        }
         if self.text:
             d["text"] = self.text
         if self.value:
@@ -104,6 +190,7 @@ class Snapshot:
     visited: int = 0
     elapsed: float = 0.0
     error: str = ""
+    header: list[str] = field(default_factory=list)
 
 
 def _init() -> bool:
@@ -168,19 +255,21 @@ def _text(node, limit: int, tail: bool = False) -> str:
             lines = [" ".join(ln.split()) for ln in raw.splitlines()]
             lines = [ln for ln in lines if ln][-12:]
             out = " ⏎ ".join(lines)
-            return out if len(out) <= limit else "…" + out[-(limit - 1):].lstrip()
-        return _lines(Atspi.Text.get_text(node, 0, min(n, limit * 4)), limit)
+            return out if len(out) <= limit else "…" + out[-(limit - 1) :].lstrip()
+        raw = Atspi.Text.get_text(node, 0, min(n, limit * 4))
+        if "\ufffc" in raw:  # embedded objects (links, images): use their names
+            raw = _expand_embedded(node, raw)
+        return _lines(raw, limit)
     except Exception:
         return ""
 
 
-def _expand_embedded(node, text: str, limit: int) -> str:
+def _expand_embedded(node, raw: str) -> str:
     """Replace U+FFFC placeholders (embedded links/images) with their names."""
     try:
-        raw = Atspi.Text.get_text(node, 0, min(Atspi.Text.get_character_count(node), limit * 4))
         n = node.get_child_count()
     except Exception:
-        return text
+        return raw
     out, child = [], 0
     for ch in raw:
         if ch == "\ufffc":
@@ -194,7 +283,7 @@ def _expand_embedded(node, text: str, limit: int) -> str:
             out.append(name)
         else:
             out.append(ch)
-    return _clip("".join(out), limit)
+    return "".join(out)
 
 
 def _value(node) -> str:
@@ -254,11 +343,17 @@ def top_windows() -> list[dict]:
                 if win is None:
                     continue
                 st = _states(win)
-                out.append({
-                    "app": appname, "pid": pid, "name": _name(win), "role": _role(win),
-                    "active": Atspi.StateType.ACTIVE in st,
-                    "showing": Atspi.StateType.SHOWING in st, "node": win,
-                })
+                out.append(
+                    {
+                        "app": appname,
+                        "pid": pid,
+                        "name": _name(win),
+                        "role": _role(win),
+                        "active": Atspi.StateType.ACTIVE in st,
+                        "showing": Atspi.StateType.SHOWING in st,
+                        "node": win,
+                    }
+                )
     return out
 
 
@@ -267,6 +362,7 @@ def find_window(title: str | None = None, pid: int | None = None) -> dict | None
     active = [w for w in wins if w["active"]]
     if title is None and pid is None:
         return active[-1] if active else None
+
     # Prefer exact title (+pid) matches, then active ones.
     def score(w):
         s = 0
@@ -279,15 +375,21 @@ def find_window(title: str | None = None, pid: int | None = None) -> dict | None
         if w["active"]:
             s += 1
         return s
+
     best = max(wins, key=score, default=None)
     if best is None or score(best) < 2:
         return active[-1] if active else None
     return best
 
 
-def snapshot(window: dict, max_elements: int = 250, budget: float = 3.0,
-             text_limit: int = 160, max_children: int = 400,
-             screen: tuple[int, int] | None = None) -> Snapshot:
+def snapshot(
+    window: dict,
+    max_elements: int = 250,
+    budget: float = 3.0,
+    text_limit: int = 160,
+    max_children: int = 400,
+    screen: tuple[int, int] | None = None,
+) -> Snapshot:
     """Walk a window's accessible tree and collect visible, meaningful elements."""
     snap = Snapshot(app=window.get("app", ""), window=window.get("name", ""))
     if not _init():
@@ -298,7 +400,7 @@ def snapshot(window: dict, max_elements: int = 250, budget: float = 3.0,
     sw, sh = screen or (100000, 100000)
     elements: list[Element] = []
 
-    def walk(node, depth: int, shown_depth: int) -> None:
+    def walk(node, depth: int, shown_depth: int, in_doc: bool = False) -> None:
         if snap.truncated:
             return
         if len(elements) >= max_elements or time.monotonic() > deadline or snap.visited > 6000:
@@ -332,8 +434,6 @@ def snapshot(window: dict, max_elements: int = 250, budget: float = 3.0,
                     text = _text(node, 300)
                 else:
                     text = _text(node, text_limit if role not in TEXT_INPUT else 80)
-                if "\ufffc" in text:
-                    text = _expand_embedded(node, text, text_limit)
             if text == name:
                 text = ""
         if "Value" in ifaces and role in ("slider", "spin button", "progress bar", "scroll bar", "level bar"):
@@ -341,11 +441,23 @@ def snapshot(window: dict, max_elements: int = 250, budget: float = 3.0,
         flags: list[str] = []
         if Atspi.StateType.FOCUSED in st:
             flags.append("focused")
-        if Atspi.StateType.CHECKABLE in st or role in ("check box", "radio button", "toggle button",
-                                                        "check menu item", "radio menu item", "switch"):
+        if Atspi.StateType.CHECKABLE in st or role in (
+            "check box",
+            "radio button",
+            "toggle button",
+            "check menu item",
+            "radio menu item",
+            "switch",
+        ):
             flags.append("checked" if Atspi.StateType.CHECKED in st else "unchecked")
-        if Atspi.StateType.SELECTED in st and role in ("page tab", "list item", "tree item",
-                                                        "table cell", "menu item", "radio button"):
+        if Atspi.StateType.SELECTED in st and role in (
+            "page tab",
+            "list item",
+            "tree item",
+            "table cell",
+            "menu item",
+            "radio button",
+        ):
             flags.append("selected")
         if Atspi.StateType.EXPANDABLE in st:
             flags.append("expanded" if Atspi.StateType.EXPANDED in st else "collapsed")
@@ -368,10 +480,23 @@ def snapshot(window: dict, max_elements: int = 250, budget: float = 3.0,
 
         child_shown_depth = shown_depth
         if emit:
-            elements.append(Element(
-                id=len(elements) + 1, role=role, name=name, depth=shown_depth,
-                x=x, y=y, w=w, h=h, text=text, value=value, states=flags, node=node,
-            ))
+            elements.append(
+                Element(
+                    id=len(elements) + 1,
+                    role=role,
+                    name=name,
+                    depth=shown_depth,
+                    x=x,
+                    y=y,
+                    w=w,
+                    h=h,
+                    text=text,
+                    value=value,
+                    states=flags,
+                    node=node,
+                    in_doc=in_doc,
+                )
+            )
             child_shown_depth = shown_depth + 1
             # Leaves: their children only repeat the name.
             if role in LEAVES and (name or text):
@@ -381,11 +506,20 @@ def snapshot(window: dict, max_elements: int = 250, budget: float = 3.0,
         except Exception:
             return
         if n > max_children * 10:
-            elements.append(Element(
-                id=len(elements) + 1, role=role or "container", name=name,
-                depth=child_shown_depth, x=x, y=y, w=w, h=h,
-                text=f"[{n} children — too many to list; use OCR or a screenshot]", node=node,
-            ))
+            elements.append(
+                Element(
+                    id=len(elements) + 1,
+                    role=role or "container",
+                    name=name,
+                    depth=child_shown_depth,
+                    x=x,
+                    y=y,
+                    w=w,
+                    h=h,
+                    text=f"[{n} children — too many to list; use OCR or a screenshot]",
+                    node=node,
+                )
+            )
             return
         for i in range(min(n, max_children)):
             if snap.truncated:
@@ -395,7 +529,7 @@ def snapshot(window: dict, max_elements: int = 250, budget: float = 3.0,
             except Exception:
                 continue
             if child is not None:
-                walk(child, depth + 1, child_shown_depth)
+                walk(child, depth + 1, child_shown_depth, in_doc or role in WEB_DOCS)
         if n > max_children:
             snap.truncated = True
 
@@ -404,12 +538,57 @@ def snapshot(window: dict, max_elements: int = 250, budget: float = 3.0,
             walk(window["node"], 0, 0)
         except Exception as e:  # never let a broken app break `see`
             snap.error = f"{type(e).__name__}: {e}"
-    snap.elements = compact(elements)
+    snap.elements, snap.header = browser_compact(compact(elements))
     snap.elapsed = time.monotonic() - start
     return snap
 
 
 WRAPPERS = {"list item", "paragraph", "label", "static", "table cell", "cell", "section", "heading"}
+CONTAINER_TEXT = {"list item", "table cell", "cell", "section"}
+WEB_DOCS = {"document web", "document frame"}
+ADDRESS_HINTS = ("address", "search or enter", "url", "location")
+
+
+def _is_address(el: Element) -> bool:
+    if el.role not in ("combo box", "entry", "text"):
+        return False
+    label = el.name.casefold()
+    content = (el.text or el.value).casefold()
+    return any(h in label for h in ADDRESS_HINTS) or "://" in content
+
+
+def browser_compact(elements: list[Element]) -> tuple[list[Element], list[str]]:
+    """In a web browser, keep the page and only the useful bits of the browser's own UI
+    (tabs when there are several, the address bar, dialogs): saves many tokens per `see`."""
+    if not any(e.in_doc for e in elements):
+        return elements, []
+    tabs = [e for e in elements if not e.in_doc and e.role == "page tab"]
+    page = next((e for e in elements if not e.in_doc and e.role in WEB_DOCS), None)
+    keep: list[Element] = []
+    for e in elements:
+        if e.in_doc:
+            keep.append(e)
+        elif e.role in WEB_DOCS:
+            continue
+        elif (
+            (e.role == "page tab" and len(tabs) > 1)
+            or _is_address(e)
+            or e.role in ("alert", "dialog", "notification", "info bar")
+        ):
+            e.depth = 0
+            if _is_address(e):
+                e.role = "address bar"
+            keep.append(e)
+    shift = min((e.depth for e in keep if e.in_doc), default=0)
+    for e in keep:
+        if e.in_doc:
+            e.depth = max(0, e.depth - shift)
+    for k, e in enumerate(keep, 1):
+        e.id = k
+    header = []
+    if page is not None and page.name:
+        header.append(f'Web page "{page.name}"' + (f" ({len(tabs)} tabs open)" if len(tabs) > 1 else ""))
+    return keep, header
 
 
 def _same(a: str, b: str) -> bool:
@@ -427,23 +606,78 @@ def compact(elements: list[Element]) -> list[Element]:
         cx, cy = el.center
         label = el.label()
         tol_x = 60 if el.role in ("menu", "menu item") else 12
-        if label and el.interactive and any(r == el.role and lab == label and abs(cx - x) <= tol_x and abs(cy - y) <= 12
-                                            for r, lab, x, y in seen):
+        if (
+            label
+            and el.interactive
+            and any(
+                r == el.role and lab == label and abs(cx - x) <= tol_x and abs(cy - y) <= 12 for r, lab, x, y in seen
+            )
+        ):
             continue
         seen.append((el.role, label, cx, cy))
         nxt = elements[i + 1] if i + 1 < n else None
-        only_child = (nxt is not None and nxt.depth == el.depth + 1
-                      and (i + 2 >= n or elements[i + 2].depth <= el.depth))
-        if (el.role in WRAPPERS and only_child and nxt.interactive
-                and (not el.label() or _same(el.label(), nxt.label()))):
+        if el.role in CONTAINER_TEXT and nxt is not None and nxt.depth > el.depth:
+            continue  # a list item/cell with children: the children carry the content
+        only_child = nxt is not None and nxt.depth == el.depth + 1 and (i + 2 >= n or elements[i + 2].depth <= el.depth)
+        if (
+            el.role in WRAPPERS
+            and only_child
+            and nxt.interactive
+            and (not el.label() or _same(el.label(), nxt.label()))
+        ):
             if el.role == "heading":
                 nxt.role = f"heading {nxt.role}"
             nxt.depth = el.depth
             continue
         out.append(el)
+    _redepth(elements, out)
     for k, el in enumerate(out, 1):
         el.id = k
     return out
+
+
+def _redepth(original: list[Element], kept: list[Element]) -> None:
+    """Recompute indentation after dropping elements: depth = number of kept ancestors."""
+    keep_ids = {id(e) for e in kept}
+    stack: list[tuple[int, bool]] = []  # (original depth, kept?)
+    new_depth: dict[int, int] = {}
+    for e in original:
+        while stack and stack[-1][0] >= e.depth:
+            stack.pop()
+        if id(e) in keep_ids:
+            new_depth[id(e)] = sum(1 for _, k in stack if k)
+        stack.append((e.depth, id(e) in keep_ids))
+    for e in kept:
+        e.depth = new_depth.get(id(e), e.depth)
+
+
+def labelled_target(el: Element) -> Element | None:
+    """For a label, the control it labels (AT-SPI LABEL_FOR relation), e.g. "Name:" -> its entry."""
+    if not _init() or el.node is None:
+        return None
+    with LOCK:
+        try:
+            for rel in el.node.get_relation_set():
+                if rel.get_relation_type() != Atspi.RelationType.LABEL_FOR or rel.get_n_targets() < 1:
+                    continue
+                target = rel.get_target(0)
+                ext = _extents(target)
+                if ext and ext[2] > 0 and ext[3] > 0:
+                    x, y, w, h = ext
+                    return Element(
+                        id=0,
+                        role=_role(target),
+                        name=_clip(_name(target), 160),
+                        depth=0,
+                        x=x,
+                        y=y,
+                        w=w,
+                        h=h,
+                        node=target,
+                    )
+        except Exception:
+            return None
+    return None
 
 
 def refresh(el: Element) -> tuple[int, int, int, int] | None:

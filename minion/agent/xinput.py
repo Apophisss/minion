@@ -16,49 +16,124 @@ BUTTONS = {"left": 1, "middle": 2, "right": 3}
 SCROLL_BUTTONS = {"up": 4, "down": 5, "left": 6, "right": 7}
 
 MODIFIERS = {
-    "ctrl": "ctrl", "control": "ctrl", "ctl": "ctrl",
+    "ctrl": "ctrl",
+    "control": "ctrl",
+    "ctl": "ctrl",
     "shift": "shift",
-    "alt": "alt", "option": "alt", "opt": "alt",
-    "super": "super", "cmd": "super", "command": "super", "win": "super",
-    "windows": "super", "meta": "super", "mod4": "super",
+    "alt": "alt",
+    "option": "alt",
+    "opt": "alt",
+    "super": "super",
+    "cmd": "super",
+    "command": "super",
+    "win": "super",
+    "windows": "super",
+    "meta": "super",
+    "mod4": "super",
 }
 
 NAMED_KEYS = {
-    "enter": "Return", "return": "Return", "ret": "Return",
-    "esc": "Escape", "escape": "Escape",
+    "enter": "Return",
+    "return": "Return",
+    "ret": "Return",
+    "esc": "Escape",
+    "escape": "Escape",
     "tab": "Tab",
-    "backspace": "BackSpace", "bs": "BackSpace",
-    "delete": "Delete", "del": "Delete",
-    "insert": "Insert", "ins": "Insert",
-    "home": "Home", "end": "End",
-    "pageup": "Page_Up", "page_up": "Page_Up", "pgup": "Page_Up", "prior": "Page_Up",
-    "pagedown": "Page_Down", "page_down": "Page_Down", "pgdn": "Page_Down", "next": "Page_Down",
-    "up": "Up", "down": "Down", "left": "Left", "right": "Right",
-    "arrowup": "Up", "arrowdown": "Down", "arrowleft": "Left", "arrowright": "Right",
-    "space": "space", "spacebar": "space",
-    "menu": "Menu", "apps": "Menu", "contextmenu": "Menu",
-    "print": "Print", "printscreen": "Print", "prtsc": "Print",
-    "pause": "Pause", "break": "Pause",
-    "capslock": "Caps_Lock", "caps_lock": "Caps_Lock",
-    "numlock": "Num_Lock", "num_lock": "Num_Lock",
-    "scrolllock": "Scroll_Lock", "scroll_lock": "Scroll_Lock",
-    "plus": "plus", "minus": "minus", "equal": "equal", "equals": "equal",
-    "comma": "comma", "period": "period", "dot": "period", "slash": "slash",
-    "backslash": "backslash", "semicolon": "semicolon", "colon": "colon",
-    "apostrophe": "apostrophe", "quote": "apostrophe", "grave": "grave", "backtick": "grave",
-    "bracketleft": "bracketleft", "bracketright": "bracketright",
-    "volumeup": "XF86AudioRaiseVolume", "volumedown": "XF86AudioLowerVolume",
+    "backspace": "BackSpace",
+    "bs": "BackSpace",
+    "delete": "Delete",
+    "del": "Delete",
+    "insert": "Insert",
+    "ins": "Insert",
+    "home": "Home",
+    "end": "End",
+    "pageup": "Page_Up",
+    "page_up": "Page_Up",
+    "pgup": "Page_Up",
+    "prior": "Page_Up",
+    "pagedown": "Page_Down",
+    "page_down": "Page_Down",
+    "pgdn": "Page_Down",
+    "next": "Page_Down",
+    "up": "Up",
+    "down": "Down",
+    "left": "Left",
+    "right": "Right",
+    "arrowup": "Up",
+    "arrowdown": "Down",
+    "arrowleft": "Left",
+    "arrowright": "Right",
+    "space": "space",
+    "spacebar": "space",
+    "menu": "Menu",
+    "apps": "Menu",
+    "contextmenu": "Menu",
+    "print": "Print",
+    "printscreen": "Print",
+    "prtsc": "Print",
+    "pause": "Pause",
+    "break": "Pause",
+    "capslock": "Caps_Lock",
+    "caps_lock": "Caps_Lock",
+    "numlock": "Num_Lock",
+    "num_lock": "Num_Lock",
+    "scrolllock": "Scroll_Lock",
+    "scroll_lock": "Scroll_Lock",
+    "plus": "plus",
+    "minus": "minus",
+    "equal": "equal",
+    "equals": "equal",
+    "comma": "comma",
+    "period": "period",
+    "dot": "period",
+    "slash": "slash",
+    "backslash": "backslash",
+    "semicolon": "semicolon",
+    "colon": "colon",
+    "apostrophe": "apostrophe",
+    "quote": "apostrophe",
+    "grave": "grave",
+    "backtick": "grave",
+    "bracketleft": "bracketleft",
+    "bracketright": "bracketright",
+    "volumeup": "XF86AudioRaiseVolume",
+    "volumedown": "XF86AudioLowerVolume",
     "mute": "XF86AudioMute",
 }
 
 CHAR_KEYS = {
-    "+": "plus", "-": "minus", "=": "equal", ",": "comma", ".": "period",
-    "/": "slash", "\\": "backslash", ";": "semicolon", ":": "colon",
-    "'": "apostrophe", '"': "quotedbl", "`": "grave", "[": "bracketleft",
-    "]": "bracketright", "{": "braceleft", "}": "braceright", "(": "parenleft",
-    ")": "parenright", "<": "less", ">": "greater", "?": "question", "!": "exclam",
-    "@": "at", "#": "numbersign", "$": "dollar", "%": "percent", "^": "asciicircum",
-    "&": "ampersand", "*": "asterisk", "_": "underscore", "|": "bar", "~": "asciitilde",
+    "+": "plus",
+    "-": "minus",
+    "=": "equal",
+    ",": "comma",
+    ".": "period",
+    "/": "slash",
+    "\\": "backslash",
+    ";": "semicolon",
+    ":": "colon",
+    "'": "apostrophe",
+    '"': "quotedbl",
+    "`": "grave",
+    "[": "bracketleft",
+    "]": "bracketright",
+    "{": "braceleft",
+    "}": "braceright",
+    "(": "parenleft",
+    ")": "parenright",
+    "<": "less",
+    ">": "greater",
+    "?": "question",
+    "!": "exclam",
+    "@": "at",
+    "#": "numbersign",
+    "$": "dollar",
+    "%": "percent",
+    "^": "asciicircum",
+    "&": "ampersand",
+    "*": "asterisk",
+    "_": "underscore",
+    "|": "bar",
+    "~": "asciitilde",
     " ": "space",
 }
 
@@ -142,9 +217,7 @@ class XInput:
 
     def _xdo(self, *args: str, timeout: float = 30.0) -> str:
         try:
-            out = subprocess.run(
-                ["xdotool", *args], env=self.env, capture_output=True, text=True, timeout=timeout
-            )
+            out = subprocess.run(["xdotool", *args], env=self.env, capture_output=True, text=True, timeout=timeout)
         except FileNotFoundError as e:  # pragma: no cover - environment problem
             raise InputError("xdotool is not installed in this desktop") from e
         except subprocess.TimeoutExpired as e:
@@ -163,8 +236,9 @@ class XInput:
     def move(self, x: int, y: int) -> None:
         self._xdo("mousemove", "--sync", str(int(x)), str(int(y)))
 
-    def click(self, x: int | None, y: int | None, button: str = "left", count: int = 1,
-              modifiers: list[str] | None = None) -> None:
+    def click(
+        self, x: int | None, y: int | None, button: str = "left", count: int = 1, modifiers: list[str] | None = None
+    ) -> None:
         b = BUTTONS.get(button)
         if b is None:
             raise InputError(f"unknown mouse button {button!r}")
@@ -184,8 +258,16 @@ class XInput:
             raise InputError(f"unknown mouse button {button!r}")
         self._xdo("mousedown" if down else "mouseup", str(b))
 
-    def drag(self, x1: int, y1: int, x2: int, y2: int, modifiers: list[str] | None = None,
-             steps: int = 12, button: str = "left") -> None:
+    def drag(
+        self,
+        x1: int,
+        y1: int,
+        x2: int,
+        y2: int,
+        modifiers: list[str] | None = None,
+        steps: int = 12,
+        button: str = "left",
+    ) -> None:
         b = str(BUTTONS.get(button, 1))
         for m in modifiers or []:
             self._xdo("keydown", m)
@@ -204,8 +286,14 @@ class XInput:
             for m in reversed(modifiers or []):
                 self._xdo("keyup", m)
 
-    def scroll(self, direction: str, amount: int = 3, x: int | None = None, y: int | None = None,
-               modifiers: list[str] | None = None) -> None:
+    def scroll(
+        self,
+        direction: str,
+        amount: int = 3,
+        x: int | None = None,
+        y: int | None = None,
+        modifiers: list[str] | None = None,
+    ) -> None:
         b = SCROLL_BUTTONS.get(direction)
         if b is None:
             raise InputError(f"scroll direction must be up, down, left or right (got {direction!r})")
@@ -223,8 +311,7 @@ class XInput:
     # -- keyboard ------------------------------------------------------
     def key(self, combo: str, repeat: int = 1) -> str:
         keys = normalize_combo(combo)
-        self._xdo("key", "--clearmodifiers", "--repeat", str(max(1, int(repeat))),
-                  "--delay", "40", "--", keys)
+        self._xdo("key", "--clearmodifiers", "--repeat", str(max(1, int(repeat))), "--delay", "40", "--", keys)
         return keys
 
     def key_down(self, combo: str) -> str:
@@ -251,7 +338,6 @@ class XInput:
                 self._xdo("key", "--clearmodifiers", "Tab")
             elif token:
                 for i in range(0, len(token), 200):
-                    part = token[i:i + 200]
+                    part = token[i : i + 200]
                     timeout = 30 + len(part) * (delay_ms + 30) / 1000
-                    self._xdo("type", "--clearmodifiers", "--delay", str(int(delay_ms)), "--", part,
-                              timeout=timeout)
+                    self._xdo("type", "--clearmodifiers", "--delay", str(int(delay_ms)), "--", part, timeout=timeout)

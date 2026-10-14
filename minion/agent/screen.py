@@ -30,8 +30,7 @@ class Screen:
         return self.grab().size
 
 
-def draw_cursor(img: Image.Image, x: int, y: int, offset: tuple[int, int] = (0, 0),
-                scale: float = 1.0) -> None:
+def draw_cursor(img: Image.Image, x: int, y: int, offset: tuple[int, int] = (0, 0), scale: float = 1.0) -> None:
     ox, oy = offset
     px, py = (x - ox) * scale, (y - oy) * scale
     if px < -20 or py < -20 or px > img.width or py > img.height:
@@ -62,8 +61,13 @@ def mime(fmt: str) -> str:
     return {"jpg": "image/jpeg", "jpeg": "image/jpeg", "webp": "image/webp"}.get(fmt, "image/png")
 
 
-def fit(img: Image.Image, max_width: int | None = None, max_height: int | None = None,
-        max_pixels: int | None = None, scale: float | None = None) -> tuple[Image.Image, float]:
+def fit(
+    img: Image.Image,
+    max_width: int | None = None,
+    max_height: int | None = None,
+    max_pixels: int | None = None,
+    scale: float | None = None,
+) -> tuple[Image.Image, float]:
     """Downscale (never upscale) to fit the limits. Returns (image, scale factor)."""
     w, h = img.size
     f = 1.0
@@ -114,8 +118,14 @@ def describe_change(frac: float, bbox: tuple | None, factor: int = 4) -> dict:
     }
 
 
-def settle(screen: Screen, timeout: float = 3.0, quiet: float = 0.3, interval: float = 0.07,
-           min_wait: float = 0.08, tolerance: float = 0.0004) -> tuple[bool, float, Image.Image]:
+def settle(
+    screen: Screen,
+    timeout: float = 3.0,
+    quiet: float = 0.3,
+    interval: float = 0.07,
+    min_wait: float = 0.08,
+    tolerance: float = 0.0004,
+) -> tuple[bool, float, Image.Image]:
     """Wait until the screen stops changing.
 
     Returns (settled, elapsed seconds, last full frame). Tiny changes below

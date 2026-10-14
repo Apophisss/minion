@@ -23,8 +23,7 @@ class Step:
 
 
 def _font(size: int):
-    for path in ("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-                 "/usr/share/fonts/TTF/DejaVuSans.ttf"):
+    for path in ("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", "/usr/share/fonts/TTF/DejaVuSans.ttf"):
         try:
             return ImageFont.truetype(path, size)
         except OSError:
@@ -104,7 +103,7 @@ main{{max-width:980px;margin:0 auto;padding:24px}}
 img{{display:block;width:100%;margin-top:10px;border-radius:8px;border:1px solid #1f2937}}
 </style></head><body><header><h1>{html.escape(title)}</h1>
 <div class="sub">{len(steps)} steps · {dur:.0f}s · recorded by Minion</div></header>
-<main>{''.join(cards) or '<p>No steps recorded yet.</p>'}</main></body></html>"""
+<main>{"".join(cards) or "<p>No steps recorded yet.</p>"}</main></body></html>"""
 
     def export_gif(self, width: int = 720, frame_ms: int = 900) -> bytes:
         with self.lock:
@@ -127,6 +126,5 @@ img{{display:block;width:100%;margin-top:10px;border-radius:8px;border:1px solid
             d.text((10, h + 7), caption, fill=(229, 231, 235), font=font)
             frames.append(canvas.quantize(colors=128, method=Image.Quantize.MEDIANCUT))
         buf = io.BytesIO()
-        frames[0].save(buf, "GIF", save_all=True, append_images=frames[1:],
-                       duration=frame_ms, loop=0, optimize=True)
+        frames[0].save(buf, "GIF", save_all=True, append_images=frames[1:], duration=frame_ms, loop=0, optimize=True)
         return buf.getvalue()

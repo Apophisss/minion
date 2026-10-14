@@ -21,7 +21,6 @@ import threading
 import time
 import urllib.error
 import urllib.request
-from http import HTTPStatus
 from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -144,8 +143,13 @@ class Handler(BaseHTTPRequestHandler):
             return self._static("/".join(parts[1:]), query)
         if not self._authorized(query):
             if method == "GET" and (not parts or parts[0] in ("view",)):
-                self._send(401, (WEB / "locked.html").read_bytes() if (WEB / "locked.html").exists()
-                           else b"Unauthorized: add ?token=...", "text/html; charset=utf-8")
+                self._send(
+                    401,
+                    (WEB / "locked.html").read_bytes()
+                    if (WEB / "locked.html").exists()
+                    else b"Unauthorized: add ?token=...",
+                    "text/html; charset=utf-8",
+                )
             else:
                 self._error(401, "unauthorized: pass ?token=..., a Bearer token or the cookie")
             return
@@ -185,8 +189,12 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json([d.to_dict() for d in be.list(stats=q("stats") == "1")])
             if method == "POST":
                 body = self._body()
-                d = Desktop.create(body.get("profile") or config.DEFAULT_PROFILE, name=body.get("name"),
-                                   size=body.get("size"), backend=be)
+                d = Desktop.create(
+                    body.get("profile") or config.DEFAULT_PROFILE,
+                    name=body.get("name"),
+                    size=body.get("size"),
+                    backend=be,
+                )
                 with _desk_lock:
                     _desktops[d.name] = d
                 return self._json({**d.to_dict(), "hello": d.hello()}, 201)
@@ -201,23 +209,37 @@ class Handler(BaseHTTPRequestHandler):
                 _forget(name)
                 return self._json({"ok": True})
         if method == "GET" and op == "frame":
-            res = d.call("frame", {"since": q("since"), "wait": int(q("wait", "0") or 0),
-                                   "max_width": int(q("max_width", "1600") or 1600),
-                                   "quality": int(q("quality", "72") or 72)}, timeout=30)
+            res = d.call(
+                "frame",
+                {
+                    "since": q("since"),
+                    "wait": int(q("wait", "0") or 0),
+                    "max_width": int(q("max_width", "1600") or 1600),
+                    "quality": int(q("quality", "72") or 72),
+                },
+                timeout=30,
+            )
             if res.get("unchanged"):
                 self.send_response(204)
                 self.send_header("X-Frame-Key", res.get("key", ""))
                 self.end_headers()
                 return
             screen = "x".join(str(v) for v in res.get("screen", []))
-            return self._send(200, base64.b64decode(res["data"]), res["mime"],
-                              {"X-Frame-Key": res["key"], "X-Screen": screen})
+            return self._send(
+                200, base64.b64decode(res["data"]), res["mime"], {"X-Frame-Key": res["key"], "X-Screen": screen}
+            )
         if method == "GET" and op == "screenshot":
-            shot = d.screenshot(max_width=int(q("max_width")) if q("max_width") else None,
-                                format=q("format", "png"), marks=q("marks") == "1", grid=q("grid") == "1")
+            shot = d.screenshot(
+                max_width=int(q("max_width")) if q("max_width") else None,
+                format=q("format", "png"),
+                marks=q("marks") == "1",
+                grid=q("grid") == "1",
+            )
             headers = {}
             if q("download") == "1":
-                headers["Content-Disposition"] = f'attachment; filename="{name}-{time.strftime("%H%M%S")}.{shot.format}"'
+                headers["Content-Disposition"] = (
+                    f'attachment; filename="{name}-{time.strftime("%H%M%S")}.{shot.format}"'
+                )
             return self._send(200, shot.data, shot.mime, headers)
         if method == "GET" and op == "see":
             obs = d.see(ocr=True if q("ocr") == "1" else "auto", window=q("window"))
@@ -238,8 +260,12 @@ class Handler(BaseHTTPRequestHandler):
             return self._error(405, "method not allowed")
         body = self._body()
         if op == "act":
-            res = d.act(body.get("actions") or [], screenshot=bool(body.get("screenshot")),
-                        see=bool(body.get("see")), check=False)
+            res = d.act(
+                body.get("actions") or [],
+                screenshot=bool(body.get("screenshot")),
+                see=bool(body.get("see")),
+                check=False,
+            )
             out = {k: v for k, v in res.__dict__.items() if k not in ("screenshot", "observation")}
             if res.screenshot:
                 out["screenshot"] = {"data": res.screenshot.base64(), "mime": res.screenshot.mime}
@@ -249,8 +275,11 @@ class Handler(BaseHTTPRequestHandler):
         if op == "input":
             return self._json(d.call("input", body, timeout=30))
         if op == "run":
-            r = d.run(body.get("command") or "", timeout=float(body.get("timeout") or 120),
-                      background=bool(body.get("background")))
+            r = d.run(
+                body.get("command") or "",
+                timeout=float(body.get("timeout") or 120),
+                background=bool(body.get("background")),
+            )
             return self._json(r.__dict__)
         if op == "open":
             return self._json(d.open(body.get("target") or "", wait=float(body.get("wait") or 12)))
@@ -279,8 +308,13 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(None if h is None else {k: v for k, v in h.items() if k != "event"})
             body = self._body()
             if method == "POST" and "message" in body:  # agent requests a hand-off
-                _handoffs[name] = {"message": body["message"], "created": time.time(), "done": False,
-                                   "note": None, "event": threading.Event()}
+                _handoffs[name] = {
+                    "message": body["message"],
+                    "created": time.time(),
+                    "done": False,
+                    "note": None,
+                    "event": threading.Event(),
+                }
                 return self._json({"ok": True})
             if method == "POST" and h is not None:  # human finished
                 h["done"] = True
@@ -306,8 +340,9 @@ def _free_port(host: str, preferred: int) -> int:
     raise MinionError("no free port for the live view server")
 
 
-def make_server(host: str = "127.0.0.1", port: int = 4747, token: str | None = "",
-                quiet: bool = False) -> tuple[ThreadingHTTPServer, str, str | None]:
+def make_server(
+    host: str = "127.0.0.1", port: int = 4747, token: str | None = "", quiet: bool = False
+) -> tuple[ThreadingHTTPServer, str, str | None]:
     if token == "":
         token = secrets.token_urlsafe(16)
     port = _free_port(host, port)
@@ -318,8 +353,14 @@ def make_server(host: str = "127.0.0.1", port: int = 4747, token: str | None = "
     return httpd, f"http://{shown}:{port}", token
 
 
-def serve(host: str = "127.0.0.1", port: int = 4747, token: str | None = "", idle_freeze: float = 600,
-          quiet: bool = False, record_state: bool = True) -> None:
+def serve(
+    host: str = "127.0.0.1",
+    port: int = 4747,
+    token: str | None = "",
+    idle_freeze: float = 600,
+    quiet: bool = False,
+    record_state: bool = True,
+) -> None:
     httpd, base, token = make_server(host, port, token, quiet)
     if record_state:
         config.update_state(server={"url": base, "token": token, "pid": os.getpid()})
@@ -331,8 +372,10 @@ def serve(host: str = "127.0.0.1", port: int = 4747, token: str | None = "", idl
     if not quiet:
         print(f"Minion {__version__} · dashboard and API at {url}", flush=True)
         if host not in ("127.0.0.1", "localhost", "::1") and not token:
-            print("WARNING: no token and not bound to localhost — anyone on the network can control "
-                  "your desktops.", file=sys.stderr)
+            print(
+                "WARNING: no token and not bound to localhost — anyone on the network can control your desktops.",
+                file=sys.stderr,
+            )
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:
@@ -379,10 +422,18 @@ def ensure_server(in_process: bool | None = None) -> tuple[str, str | None]:
     log = config.config_dir() / "server.log"
     log.parent.mkdir(parents=True, exist_ok=True)
     with open(log, "ab") as f:
-        kwargs = {"start_new_session": True} if os.name != "nt" else {
-            "creationflags": subprocess.CREATE_NEW_PROCESS_GROUP | 0x00000008}  # DETACHED_PROCESS
-        subprocess.Popen([sys.executable, "-m", "minion", "serve", "--port", str(port), "--token", token,
-                          "--quiet"], stdout=f, stderr=f, stdin=subprocess.DEVNULL, **kwargs)
+        kwargs = (
+            {"start_new_session": True}
+            if os.name != "nt"
+            else {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP | 0x00000008}
+        )  # DETACHED_PROCESS
+        subprocess.Popen(
+            [sys.executable, "-m", "minion", "serve", "--port", str(port), "--token", token, "--quiet"],
+            stdout=f,
+            stderr=f,
+            stdin=subprocess.DEVNULL,
+            **kwargs,
+        )
     base = f"http://127.0.0.1:{port}"
     for _ in range(100):
         if _healthy(base, token):
@@ -393,8 +444,12 @@ def ensure_server(in_process: bool | None = None) -> tuple[str, str | None]:
 
 def _api(base: str, token: str | None, method: str, path: str, body: dict | None = None):
     data = json.dumps(body).encode() if body is not None else None
-    req = urllib.request.Request(f"{base}{path}", data=data, method=method, headers={
-        "Authorization": f"Bearer {token}", "Content-Type": "application/json"})
+    req = urllib.request.Request(
+        f"{base}{path}",
+        data=data,
+        method=method,
+        headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+    )
     with urllib.request.urlopen(req, timeout=15) as r:
         raw = r.read()
     return json.loads(raw) if raw else None

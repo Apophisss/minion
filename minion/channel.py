@@ -28,8 +28,9 @@ class ProcessTransport(Transport):
 
     def __init__(self, cmd: list[str]):
         try:
-            self.proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                                         stderr=subprocess.PIPE, bufsize=0)
+            self.proc = subprocess.Popen(
+                cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, bufsize=0
+            )
         except FileNotFoundError as e:
             raise BackendError(f"{cmd[0]} is not installed or not on PATH") from e
         self._err = b""
@@ -165,8 +166,10 @@ class Channel:
             self._next += 1
             rid = self._next
             self._pending[rid] = pend
-        data = (json.dumps({"id": rid, "method": method, "params": params or {}},
-                           separators=(",", ":"), ensure_ascii=False) + "\n").encode()
+        data = (
+            json.dumps({"id": rid, "method": method, "params": params or {}}, separators=(",", ":"), ensure_ascii=False)
+            + "\n"
+        ).encode()
         try:
             t.write(data)
         except ConnectionLost:

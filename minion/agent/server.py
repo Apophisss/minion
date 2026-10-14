@@ -49,13 +49,12 @@ def _trim(s: str, limit: int = MAX_OUTPUT) -> str:
     if len(s) <= limit:
         return s
     head = s[: limit // 2]
-    tail = s[-limit // 2:]
+    tail = s[-limit // 2 :]
     return f"{head}\n… [{len(s) - limit} characters omitted] …\n{tail}"
 
 
 def _font(size: int):
-    for path in ("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-                 "/usr/share/fonts/TTF/DejaVuSans-Bold.ttf"):
+    for path in ("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", "/usr/share/fonts/TTF/DejaVuSans-Bold.ttf"):
         try:
             return ImageFont.truetype(path, size)
         except OSError:
@@ -65,29 +64,58 @@ def _font(size: int):
 
 # action name -> (canonical action, default params)
 ACTIONS = {
-    "click": ("click", {}), "left_click": ("click", {"button": "left"}),
-    "right_click": ("click", {"button": "right"}), "middle_click": ("click", {"button": "middle"}),
-    "double_click": ("click", {"count": 2}), "triple_click": ("click", {"count": 3}),
-    "move": ("move", {}), "mouse_move": ("move", {}), "hover": ("move", {}),
-    "drag": ("drag", {}), "left_click_drag": ("drag", {}),
-    "mouse_down": ("mouse_down", {}), "left_mouse_down": ("mouse_down", {}),
-    "mouse_up": ("mouse_up", {}), "left_mouse_up": ("mouse_up", {}),
+    "click": ("click", {}),
+    "left_click": ("click", {"button": "left"}),
+    "right_click": ("click", {"button": "right"}),
+    "middle_click": ("click", {"button": "middle"}),
+    "double_click": ("click", {"count": 2}),
+    "triple_click": ("click", {"count": 3}),
+    "move": ("move", {}),
+    "mouse_move": ("move", {}),
+    "hover": ("move", {}),
+    "drag": ("drag", {}),
+    "left_click_drag": ("drag", {}),
+    "mouse_down": ("mouse_down", {}),
+    "left_mouse_down": ("mouse_down", {}),
+    "mouse_up": ("mouse_up", {}),
+    "left_mouse_up": ("mouse_up", {}),
     "scroll": ("scroll", {}),
-    "type": ("type", {}), "paste": ("paste", {}), "fill": ("fill", {}),
-    "key": ("key", {}), "press": ("key", {}), "hotkey": ("key", {}),
+    "type": ("type", {}),
+    "paste": ("paste", {}),
+    "fill": ("fill", {}),
+    "key": ("key", {}),
+    "press": ("key", {}),
+    "hotkey": ("key", {}),
     "hold_key": ("hold_key", {}),
-    "wait": ("wait", {}), "sleep": ("wait", {}),
+    "wait": ("wait", {}),
+    "sleep": ("wait", {}),
     "wait_for": ("wait_for", {}),
     "focus": ("focus", {}),
     "open": ("open", {}),
 }
 # shorthand {"click": "@3"} -> which parameter receives the value
 MAIN_PARAM = {
-    "click": "target", "left_click": "target", "right_click": "target", "middle_click": "target",
-    "double_click": "target", "triple_click": "target", "move": "target", "mouse_move": "target",
-    "hover": "target", "type": "text", "paste": "text", "key": "keys", "press": "keys",
-    "hotkey": "keys", "scroll": "direction", "wait": "seconds", "sleep": "seconds",
-    "wait_for": "text", "focus": "window", "open": "target", "hold_key": "keys",
+    "click": "target",
+    "left_click": "target",
+    "right_click": "target",
+    "middle_click": "target",
+    "double_click": "target",
+    "triple_click": "target",
+    "move": "target",
+    "mouse_move": "target",
+    "hover": "target",
+    "type": "text",
+    "paste": "text",
+    "key": "keys",
+    "press": "keys",
+    "hotkey": "keys",
+    "scroll": "direction",
+    "wait": "seconds",
+    "sleep": "seconds",
+    "wait_for": "text",
+    "focus": "window",
+    "open": "target",
+    "hold_key": "keys",
 }
 
 
@@ -285,14 +313,18 @@ class Agent:
             scale = tw / img.width
             img = img.resize((tw, th), resample=3)
         else:
-            img, scale = fit(img, p.get("max_width"), p.get("max_height"), p.get("max_pixels"),
-                             p.get("scale"))
+            img, scale = fit(img, p.get("max_width"), p.get("max_height"), p.get("max_pixels"), p.get("scale"))
         fmt = (p.get("format") or "png").lower()
         data = encode(img, fmt, int(p.get("quality") or 80))
         return {
-            "data": _b64(data), "format": fmt, "mime": mime(fmt),
-            "width": img.width, "height": img.height, "scale": round(scale, 5),
-            "region": list(region) if region else [0, 0, *self.size], "fingerprint": fp,
+            "data": _b64(data),
+            "format": fmt,
+            "mime": mime(fmt),
+            "width": img.width,
+            "height": img.height,
+            "scale": round(scale, 5),
+            "region": list(region) if region else [0, 0, *self.size],
+            "fingerprint": fp,
         }
 
     def _draw_marks(self, img, offset) -> None:
@@ -335,8 +367,13 @@ class Agent:
         elif isinstance(ocr, str) and ocr.lower() in ("false", "no", "0", "off"):
             ocr = False
         try:
-            res = self.perception.see(ocr=ocr, window=p.get("window"),
-                                      max_elements=int(p.get("max_elements") or 250))
+            full = bool(p.get("full_text"))
+            res = self.perception.see(
+                ocr=ocr,
+                window=p.get("window"),
+                max_elements=int(p.get("max_elements") or (600 if full else 250)),
+                text_limit=4000 if full else 160,
+            )
         except WindowError as e:
             raise RpcError(str(e)) from e
         self.recorder.add("see", f"{len(res['elements'])} elements, {len(res['ocr'])} OCR lines")
@@ -378,13 +415,17 @@ class Agent:
                 elif action == "minimize":
                     self.windows.minimize(win.id)
                 elif action in ("move", "resize"):
-                    self.windows.move_resize(win.id, int(p.get("x", win.x)), int(p.get("y", win.y)),
-                                             int(p.get("w", p.get("width", win.w))),
-                                             int(p.get("h", p.get("height", win.h))))
+                    self.windows.move_resize(
+                        win.id,
+                        int(p.get("x", win.x)),
+                        int(p.get("y", win.y)),
+                        int(p.get("w", p.get("width", win.w))),
+                        int(p.get("h", p.get("height", win.h))),
+                    )
                 else:
                     raise RpcError(f"unknown window action {action!r}")
             time.sleep(0.2)
-            self.recorder.add("window", f"{action} \"{win.title}\"", self.screen.grab())
+            self.recorder.add("window", f'{action} "{win.title}"', self.screen.grab())
             return {"ok": True, "window": win.to_dict()}
         except WindowError as e:
             raise RpcError(str(e)) from e
@@ -456,7 +497,7 @@ class Agent:
             return f"pasted {len(text)} chars"
         if action == "fill":
             text = str(p.get("text") if p.get("text") is not None else "")
-            t = r(p.get("target"))
+            t = r(p.get("target"), prefer_input=True)
             el = t.element
             if isinstance(el, a11y.Element) and a11y.set_text(el, text):
                 return f"filled {t.desc} with {len(text)} chars"
@@ -471,7 +512,7 @@ class Agent:
         if action == "key":
             keys = p.get("keys")
             if not keys:
-                raise RpcError("key needs keys, e.g. \"ctrl+s\" or \"Return\"")
+                raise RpcError('key needs keys, e.g. "ctrl+s" or "Return"')
             repeat = max(1, min(int(p.get("repeat") or 1), 100))
             sent = self.xi.key(str(keys), repeat)
             return f"pressed {sent}" + (f" ×{repeat}" if repeat > 1 else "")
@@ -495,24 +536,24 @@ class Agent:
             timeout = max(0.5, min(float(p.get("timeout") or 10.0), 120.0))
             gone = bool(p.get("gone"))
             ok, elapsed = self.perception.wait_for(str(text), timeout=timeout, gone=gone)
-            what = f"\"{text}\" {'to disappear' if gone else 'to appear'}"
+            what = f'"{text}" {"to disappear" if gone else "to appear"}'
             if not ok:
                 raise RpcError(f"timed out after {timeout:g}s waiting for {what}")
             return f"waited {elapsed:.1f}s for {what}"
         if action == "focus":
             win = self.windows.find(p.get("window"))
             self.windows.activate(win.id)
-            return f"focused \"{win.title}\""
+            return f'focused "{win.title}"'
         if action == "open":
             res = self._open(p.get("target"), wait=float(p.get("wait") or 12.0))
             w = res.get("window")
-            return f"opened {res['command']}" + (f" → \"{w['title']}\"" if w else "")
+            return f"opened {res['command']}" + (f' → "{w["title"]}"' if w else "")
         raise RpcError(f"unknown action {action!r}")
 
     def m_act(self, p: dict) -> dict:
         steps = p.get("actions")
         if steps is None:
-            raise RpcError("act needs `actions`: a list like [{\"action\": \"click\", \"target\": \"@3\"}]")
+            raise RpcError('act needs `actions`: a list like [{"action": "click", "target": "@3"}]')
         if not isinstance(steps, list):
             steps = [steps]
         if not steps:
@@ -535,8 +576,14 @@ class Agent:
                 wins_before = {}
             for i, (action, params) in enumerate(parsed):
                 if error is not None:
-                    results.append({"action": action, "ok": False, "skipped": True,
-                                    "detail": "Not executed: an earlier action failed."})
+                    results.append(
+                        {
+                            "action": action,
+                            "ok": False,
+                            "skipped": True,
+                            "detail": "Not executed: an earlier action failed.",
+                        }
+                    )
                     continue
                 try:
                     detail = self._do(action, params)
@@ -548,9 +595,9 @@ class Agent:
                     error = str(e)
                     results.append({"action": action, "ok": False, "detail": error})
             if p.get("settle", True) is not False:
-                settled, waited, frame = settle(self.screen, timeout=float(p.get("settle_timeout") or 2.5))
+                settled, _, frame = settle(self.screen, timeout=float(p.get("settle_timeout") or 2.5))
             else:
-                settled, waited, frame = False, 0.0, self.screen.grab()
+                settled, frame = False, self.screen.grab()
             frac, bbox = diff(before, thumb(frame))
             change = describe_change(frac, bbox)
             try:
@@ -565,12 +612,20 @@ class Agent:
         closed = [w.to_dict() for wid, w in wins_before.items() if wid not in after_ids]
         focused = next((w for w in wins_after if w.focused), None)
         summary = self._summary(results, change, opened, closed, focused, wins_before)
-        self.recorder.add("act", " · ".join(r["detail"] for r in results if not r.get("skipped")),
-                          frame, ok=error is None)
+        self.recorder.add(
+            "act", " · ".join(r["detail"] for r in results if not r.get("skipped")), frame, ok=error is None
+        )
         out = {
-            "ok": error is None, "error": error, "steps": results, "summary": summary,
-            "settled": settled, "elapsed": round(time.monotonic() - t0, 3), "change": change,
-            "focused": focused.to_dict() if focused else None, "opened": opened, "closed": closed,
+            "ok": error is None,
+            "error": error,
+            "steps": results,
+            "summary": summary,
+            "settled": settled,
+            "elapsed": round(time.monotonic() - t0, 3),
+            "change": change,
+            "focused": focused.to_dict() if focused else None,
+            "opened": opened,
+            "closed": closed,
         }
         if p.get("screenshot"):
             img = frame.copy()
@@ -581,15 +636,24 @@ class Agent:
                 pass
             img, scale = fit(img, p.get("max_width"), p.get("max_height"))
             fmt = (p.get("format") or "png").lower()
-            out["screenshot"] = {"data": _b64(encode(img, fmt)), "format": fmt, "mime": mime(fmt),
-                                 "width": img.width, "height": img.height, "scale": round(scale, 5)}
+            out["screenshot"] = {
+                "data": _b64(encode(img, fmt)),
+                "format": fmt,
+                "mime": mime(fmt),
+                "width": img.width,
+                "height": img.height,
+                "scale": round(scale, 5),
+            }
         if p.get("see"):
             out["see"] = self.perception.see(ocr=p.get("ocr", "auto"))
         return out
 
     def _summary(self, results, change, opened, closed, focused, wins_before) -> str:
-        parts = [("✓ " if r["ok"] else ("· " if r.get("skipped") else "✗ ")) + r["detail"]
-                 for r in results if not r.get("skipped")]
+        parts = [
+            ("✓ " if r["ok"] else ("· " if r.get("skipped") else "✗ ")) + r["detail"]
+            for r in results
+            if not r.get("skipped")
+        ]
         skipped = sum(1 for r in results if r.get("skipped"))
         if skipped:
             parts.append(f"{skipped} later action{'s' if skipped > 1 else ''} not executed")
@@ -602,13 +666,13 @@ class Agent:
         else:
             tail.append("no visible change")
         for w in opened[:3]:
-            tail.append(f"opened \"{w['title']}\"")
+            tail.append(f'opened "{w["title"]}"')
         for w in closed[:3]:
-            tail.append(f"closed \"{w['title']}\"")
+            tail.append(f'closed "{w["title"]}"')
         if focused is not None:
             prev = next((w for w in wins_before.values() if w.focused), None)
             if prev is None or prev.id != focused.id or prev.title != focused.title:
-                tail.append(f"focused \"{focused.title}\"")
+                tail.append(f'focused "{focused.title}"')
         return "\n".join(parts) + "\n→ " + " · ".join(tail)
 
     # -- apps, shell, clipboard ---------------------------------------
@@ -645,8 +709,14 @@ class Agent:
             before = {}
         prev_focus = next((w for w in before.values() if w.focused), None)
         log = open(os.path.join(os.environ.get("MINION_RUNTIME_DIR", "/tmp"), "apps.log"), "ab")
-        proc = subprocess.Popen(["bash", "-lc", cmd], cwd=self.home, stdin=subprocess.DEVNULL,
-                                stdout=log, stderr=log, start_new_session=True)
+        proc = subprocess.Popen(
+            ["bash", "-lc", cmd],
+            cwd=self.home,
+            stdin=subprocess.DEVNULL,
+            stdout=log,
+            stderr=log,
+            start_new_session=True,
+        )
         log.close()
         t0 = time.monotonic()
         found = None
@@ -670,9 +740,13 @@ class Agent:
             self.windows.refine(found)
             settle(self.screen, timeout=4.0, quiet=0.4)
         code = proc.poll()
-        res = {"command": cmd, "kind": kind, "pid": proc.pid,
-               "window": found.to_dict() if found else None,
-               "elapsed": round(time.monotonic() - t0, 2)}
+        res = {
+            "command": cmd,
+            "kind": kind,
+            "pid": proc.pid,
+            "window": found.to_dict() if found else None,
+            "elapsed": round(time.monotonic() - t0, 2),
+        }
         if found is None and code not in (None, 0):
             res["error"] = f"exited with code {code}; see $MINION_RUNTIME_DIR/apps.log"
         return res
@@ -692,17 +766,28 @@ class Agent:
         cwd = os.path.expanduser(p.get("cwd") or self.home)
         if p.get("background"):
             log = open(os.path.join(os.environ.get("MINION_RUNTIME_DIR", "/tmp"), "apps.log"), "ab")
-            proc = subprocess.Popen(["bash", "-lc", command], cwd=cwd, stdin=subprocess.DEVNULL,
-                                    stdout=log, stderr=log, start_new_session=True)
+            proc = subprocess.Popen(
+                ["bash", "-lc", command],
+                cwd=cwd,
+                stdin=subprocess.DEVNULL,
+                stdout=log,
+                stderr=log,
+                start_new_session=True,
+            )
             log.close()
             self.recorder.add("run", f"{command} (background)")
             return {"pid": proc.pid, "background": True}
         timeout = max(1.0, min(float(p.get("timeout") or 60.0), 3600.0))
         t0 = time.monotonic()
         stdin = p.get("input")
-        proc = subprocess.Popen(["bash", "-lc", command], cwd=cwd,
-                                stdin=subprocess.PIPE if stdin is not None else subprocess.DEVNULL,
-                                stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True)
+        proc = subprocess.Popen(
+            ["bash", "-lc", command],
+            cwd=cwd,
+            stdin=subprocess.PIPE if stdin is not None else subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            start_new_session=True,
+        )
         timed_out = False
         try:
             out, err = proc.communicate(stdin.encode() if stdin is not None else None, timeout=timeout)
@@ -714,7 +799,8 @@ class Agent:
                 pass
             out, err = proc.communicate()
         res = {
-            "code": proc.returncode, "timed_out": timed_out,
+            "code": proc.returncode,
+            "timed_out": timed_out,
             "stdout": _trim(out.decode("utf-8", "replace")),
             "stderr": _trim(err.decode("utf-8", "replace")),
             "elapsed": round(time.monotonic() - t0, 3),
@@ -725,8 +811,13 @@ class Agent:
     def _clip_set(self, text: str) -> None:
         if not shutil.which("xclip"):
             raise RpcError("xclip is not installed in this desktop")
-        subprocess.run(["xclip", "-selection", "clipboard", "-i"], input=text.encode(),
-                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5)
+        subprocess.run(
+            ["xclip", "-selection", "clipboard", "-i"],
+            input=text.encode(),
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=5,
+        )
 
     def m_clipboard(self, p: dict) -> dict:
         if "text" in p and p["text"] is not None:
@@ -762,8 +853,15 @@ class Agent:
         draw_cursor(img, cur[0], cur[1])
         img, scale = fit(img, p.get("max_width") or 1600)
         data = encode(img, "jpeg", int(p.get("quality") or 72))
-        return {"key": key, "data": _b64(data), "mime": "image/jpeg", "width": img.width,
-                "height": img.height, "scale": round(scale, 5), "screen": list(self.size)}
+        return {
+            "key": key,
+            "data": _b64(data),
+            "mime": "image/jpeg",
+            "width": img.width,
+            "height": img.height,
+            "scale": round(scale, 5),
+            "screen": list(self.size),
+        }
 
     def m_input(self, p: dict) -> dict:
         """Raw input from a human in the live view (no settling, no element targets)."""
@@ -810,8 +908,9 @@ class Agent:
             return {"html": self.recorder.export_html(title)}
         if action == "gif":
             try:
-                data = self.recorder.export_gif(width=int(p.get("width") or 720),
-                                                frame_ms=int(p.get("frame_ms") or 900))
+                data = self.recorder.export_gif(
+                    width=int(p.get("width") or 720), frame_ms=int(p.get("frame_ms") or 900)
+                )
             except ValueError as e:
                 raise RpcError(str(e)) from e
             return {"data": _b64(data), "mime": "image/gif"}

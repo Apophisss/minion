@@ -7,8 +7,13 @@ from xml.sax.saxutils import escape
 FONT = "DejaVu Sans-9"
 
 
-def config(apps: list[dict], wallpaper: str | None, terminal: str = "x-terminal-emulator",
-           maximize: bool = True, tray_height: int = 30) -> str:
+def config(
+    apps: list[dict],
+    wallpaper: str | None,
+    terminal: str = "x-terminal-emulator",
+    maximize: bool = True,
+    tray_height: int = 30,
+) -> str:
     items = []
     seen = set()
     for app in apps:
@@ -20,13 +25,19 @@ def config(apps: list[dict], wallpaper: str | None, terminal: str = "x-terminal-
     if "terminal" not in seen:
         items.append(f'    <Program label="Terminal">{escape(terminal)}</Program>')
     menu = "\n".join(items)
-    background = (f'<Background type="scale">{escape(wallpaper)}</Background>' if wallpaper
-                  else '<Background type="solid">#0f172a</Background>')
+    background = (
+        f'<Background type="scale">{escape(wallpaper)}</Background>'
+        if wallpaper
+        else '<Background type="solid">#0f172a</Background>'
+    )
     groups = """
   <Group><Type>dialog</Type><Option>centered</Option></Group>"""
     if maximize:
-        groups = """
-  <Group><Type>normal</Type><Option>maximized</Option></Group>""" + groups
+        groups = (
+            """
+  <Group><Type>normal</Type><Option>maximized</Option></Group>"""
+            + groups
+        )
     return f"""<?xml version="1.0"?>
 <JWM>
   <RootMenu onroot="3" label="Applications">

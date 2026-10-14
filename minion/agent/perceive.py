@@ -54,16 +54,16 @@ def _norm(s: str) -> str:
 
 
 def match_score(query: str, label: str) -> int:
-    q, l = _norm(query), _norm(label)
-    if not q or not l:
+    q, lab = _norm(query), _norm(label)
+    if not q or not lab:
         return 0
-    if q == l:
+    if q == lab:
         return 100
-    if l.startswith(q) or l.endswith(q):
-        return 70 - min(30, len(l) - len(q))
-    if q in l:
-        return 50 - min(30, len(l) - len(q))
-    if len(q) > 3 and l in q:
+    if lab.startswith(q) or lab.endswith(q):
+        return 70 - min(30, len(lab) - len(q))
+    if q in lab:
+        return 50 - min(30, len(lab) - len(q))
+    if len(q) > 3 and lab in q:
         return 20
     return 0
 
@@ -77,8 +77,14 @@ class Perception:
         self.registry_time = 0.0
 
     # -- see ----------------------------------------------------------
-    def see(self, ocr="auto", window: str | None = None, max_elements: int = 250,
-            register: bool = True) -> dict:
+    def see(
+        self,
+        ocr="auto",
+        window: str | None = None,
+        max_elements: int = 250,
+        register: bool = True,
+        text_limit: int = 160,
+    ) -> dict:
         t0 = time.monotonic()
         wins = self.windows.list()
         target = None
@@ -90,10 +96,9 @@ class Perception:
         snap = None
         a11y_note = ""
         if a11y.AVAILABLE:
-            aw = a11y.find_window(title=target.title if target else None,
-                                  pid=target.pid if target else None)
+            aw = a11y.find_window(title=target.title if target else None, pid=target.pid if target else None)
             if aw is not None:
-                snap = a11y.snapshot(aw, max_elements=max_elements, screen=(sw, sh))
+                snap = a11y.snapshot(aw, max_elements=max_elements, screen=(sw, sh), text_limit=text_limit)
                 if snap.error:
                     a11y_note = snap.error
             else:
@@ -149,6 +154,7 @@ class Perception:
         if elements:
             out.append("")
             out.append(f"UI of {where} (click/fill with @id; (x,y) is the element center):")
+            out.extend(snap.header if snap else [])
             out.extend(a11y.format_elements(elements))
             if snap and snap.truncated:
                 out.append("  … truncated (large UI). Use `see` with window=..., OCR, or a screenshot for the rest.")
@@ -170,14 +176,16 @@ class Perception:
             "windows": [w.to_dict() for w in wins],
             "focused": target.to_dict() if target else None,
             "elements": [e.to_dict() for e in elements],
-            "ocr": [{"id": f"@{r.id}", "text": r.text, "x": r.center[0], "y": r.center[1],
-                     "box": [r.x, r.y, r.w, r.h]} for r in ocr_refs],
+            "ocr": [
+                {"id": f"@{r.id}", "text": r.text, "x": r.center[0], "y": r.center[1], "box": [r.x, r.y, r.w, r.h]}
+                for r in ocr_refs
+            ],
             "sources": {"a11y": bool(elements), "ocr": bool(ocr_refs)},
             "elapsed": round(time.monotonic() - t0, 3),
         }
 
     # -- targets ------------------------------------------------------
-    def resolve(self, target, allow_text: bool = True) -> Target:
+    def resolve(self, target, allow_text: bool = True, prefer_input: bool = False) -> Target:
         if target is None:
             raise TargetError("missing target")
         if isinstance(target, (list, tuple)):
@@ -197,7 +205,7 @@ class Perception:
             return self._ref(int(m.group(1)))
         if not allow_text:
             raise TargetError(f"expected coordinates or @id, got {s!r}")
-        return self._text(s)
+        return self._text(s, prefer_input)
 
     def _point(self, x, y) -> Target:
         try:
@@ -218,7 +226,7 @@ class Perception:
             return Target(cx, cy, f'@{rid} "{el.text}" ({cx},{cy})', el)
         box = a11y.refresh(el)
         if box is None:
-            raise TargetError(f"@{rid} ({el.role} \"{el.label()}\") is gone — call `see` again")
+            raise TargetError(f'@{rid} ({el.role} "{el.label()}") is gone — call `see` again')
         x, y, w, h = box
         sw, sh = self.size
         if w > 0 and h > 0 and (x + w <= 0 or y + h <= 0 or x >= sw or y >= sh):
@@ -229,26 +237,32 @@ class Perception:
         cx, cy = x + max(w, 1) // 2, y + max(h, 1) // 2
         cx, cy = min(max(cx, 0), sw - 1), min(max(cy, 0), sh - 1)
         label = el.label()
-        desc = f'@{rid} {el.role}{f" {chr(34)}{label}{chr(34)}" if label else ""} ({cx},{cy})'
+        desc = f"@{rid} {el.role}{f' {chr(34)}{label}{chr(34)}' if label else ''} ({cx},{cy})"
         return Target(cx, cy, desc, el)
 
-    def find_text(self, query: str, use_ocr: bool = True) -> list[tuple[int, Target]]:
+    def find_text(self, query: str, use_ocr: bool = True, prefer_input: bool = False) -> list[tuple[int, Target]]:
         """All on-screen matches for `query`, best first."""
         found: list[tuple[int, Target]] = []
         sw, sh = self.size
         if a11y.AVAILABLE:
             focused = self.windows.focused()
-            aw = a11y.find_window(title=focused.title if focused else None,
-                                  pid=focused.pid if focused else None)
+            aw = a11y.find_window(title=focused.title if focused else None, pid=focused.pid if focused else None)
             if aw is not None:
                 snap = a11y.snapshot(aw, max_elements=600, budget=2.5, screen=(sw, sh))
                 for el in snap.elements:
-                    best = max(match_score(query, el.name), match_score(query, el.text) - 5,
-                               match_score(query, el.value) - 10)
+                    best = max(
+                        match_score(query, el.name), match_score(query, el.text) - 5, match_score(query, el.value) - 10
+                    )
                     if best <= 0:
                         continue
                     if el.interactive:
                         best += 15
+                    if prefer_input and el.role in a11y.TEXT_INPUT:
+                        best += 30
+                    if prefer_input and el.role == "label":
+                        labelled = a11y.labelled_target(el)
+                        if labelled is not None:
+                            el, best = labelled, best + 25
                     cx, cy = el.center
                     if not (0 <= cx < sw and 0 <= cy < sh):
                         continue
@@ -263,7 +277,7 @@ class Perception:
                     qn = _norm(query).split()
                     words = ln.words
                     for i in range(len(words)):
-                        seg = words[i:i + len(qn)]
+                        seg = words[i : i + len(qn)]
                         if seg and _norm(" ".join(w.text for w in seg)) == " ".join(qn):
                             x0, y0 = seg[0].x, min(w.y for w in seg)
                             x1 = seg[-1].x + seg[-1].w
@@ -275,8 +289,8 @@ class Perception:
         found.sort(key=lambda t: -t[0])
         return found
 
-    def _text(self, query: str) -> Target:
-        found = self.find_text(query)
+    def _text(self, query: str, prefer_input: bool = False) -> Target:
+        found = self.find_text(query, prefer_input=prefer_input)
         if not found:
             raise TargetError(f'no visible element or text matches "{query}" — try `see` or a screenshot')
         best = found[0]
@@ -286,8 +300,9 @@ class Perception:
             t.desc += f" (first of {len(ties) + 1} matches; use @id to pick another)"
         return t
 
-    def wait_for(self, query: str, timeout: float = 10.0, gone: bool = False,
-                 interval: float = 0.4) -> tuple[bool, float]:
+    def wait_for(
+        self, query: str, timeout: float = 10.0, gone: bool = False, interval: float = 0.4
+    ) -> tuple[bool, float]:
         start = time.monotonic()
         tries = 0
         while True:

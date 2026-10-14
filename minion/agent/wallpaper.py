@@ -6,8 +6,7 @@ from PIL import Image, ImageDraw, ImageFilter, ImageFont, ImageOps
 
 
 def _font(size: int):
-    for path in ("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-                 "/usr/share/fonts/TTF/DejaVuSans-Bold.ttf"):
+    for path in ("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", "/usr/share/fonts/TTF/DejaVuSans-Bold.ttf"):
         try:
             return ImageFont.truetype(path, size)
         except OSError:
@@ -23,8 +22,10 @@ def make(path: str, width: int, height: int, label: str = "") -> str:
     img = Image.composite(deep, dark, grad)
 
     # Two soft glows.
-    for (cx, cy, r, color, strength) in ((0.78, 0.28, 0.55, (99, 102, 241), 0.55),
-                                         (0.12, 0.92, 0.45, (14, 165, 233), 0.35)):
+    for cx, cy, r, color, strength in (
+        (0.78, 0.28, 0.55, (99, 102, 241), 0.55),
+        (0.12, 0.92, 0.45, (14, 165, 233), 0.35),
+    ):
         size = int(max(w, h) * r)
         mask = ImageOps.invert(Image.radial_gradient("L").resize((size * 2, size * 2)))
         mask = mask.point(lambda v, s=strength: int(v * s))

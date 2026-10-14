@@ -13,7 +13,6 @@ import os
 import sys
 import tempfile
 import threading
-import time
 import traceback
 from concurrent.futures import Future
 from pathlib import Path
@@ -55,11 +54,28 @@ TOOLS = [
         "inputSchema": {
             "type": "object",
             "properties": {
-                "action": {"type": "string", "enum": ["create", "list", "profiles", "remove", "freeze", "thaw",
-                                                      "fork", "snapshot", "restore", "replay", "info"]},
+                "action": {
+                    "type": "string",
+                    "enum": [
+                        "create",
+                        "list",
+                        "profiles",
+                        "remove",
+                        "freeze",
+                        "thaw",
+                        "fork",
+                        "snapshot",
+                        "restore",
+                        "replay",
+                        "info",
+                    ],
+                },
                 "profile": {"type": "string", "description": "Profile for create (default: browser)."},
                 "name": {"type": "string", "description": "Desktop name. For create/fork: the new name (optional)."},
-                "size": {"type": "string", "description": "Screen size for create: 1280x800 (default) or e.g. 1024x768 for cheaper screenshots."},
+                "size": {
+                    "type": "string",
+                    "description": "Screen size for create: 1280x800 (default) or e.g. 1024x768 for cheaper screenshots.",
+                },
                 "tag": {"type": "string", "description": "Snapshot tag for snapshot/restore."},
             },
             "required": ["action"],
@@ -77,8 +93,18 @@ TOOLS = [
             "type": "object",
             "properties": {
                 "desktop": DESKTOP_PROP,
-                "ocr": {"type": "boolean", "description": "Also read text with OCR (slower). Use for canvases, images, or apps that expose no UI tree."},
-                "window": {"type": "string", "description": "Describe this window (title, app or index) instead of the focused one."},
+                "ocr": {
+                    "type": "boolean",
+                    "description": "Also read text with OCR (slower). Use for canvases, images, or apps that expose no UI tree.",
+                },
+                "window": {
+                    "type": "string",
+                    "description": "Describe this window (title, app or index) instead of the focused one.",
+                },
+                "full_text": {
+                    "type": "boolean",
+                    "description": "Keep paragraphs whole instead of truncating them (to read an article or document).",
+                },
             },
         },
         "annotations": {"title": "See the screen as text", "readOnlyHint": True},
@@ -95,8 +121,13 @@ TOOLS = [
             "properties": {
                 "desktop": DESKTOP_PROP,
                 "marks": {"type": "boolean", "description": "Label clickable elements with their @ids."},
-                "region": {"type": "array", "items": {"type": "integer"}, "minItems": 4, "maxItems": 4,
-                           "description": "[x, y, width, height] to crop."},
+                "region": {
+                    "type": "array",
+                    "items": {"type": "integer"},
+                    "minItems": 4,
+                    "maxItems": 4,
+                    "description": "[x, y, width, height] to crop.",
+                },
                 "zoom": {"type": "boolean", "description": "Magnify the region to 1024 px wide."},
                 "grid": {"type": "boolean", "description": "Overlay a labelled 100 px coordinate grid."},
             },
@@ -109,29 +140,49 @@ TOOLS = [
             "Use the mouse and keyboard. Runs the actions in order, stops at the first failure, waits for the "
             "screen to settle, then reports what changed (windows opened/closed, focus, changed region).\n"
             "Each action is an object with an `action` field:\n"
-            "- click | double_click | right_click: target (omit to click where the mouse is); modifiers e.g. \"ctrl\"\n"
+            '- click | double_click | right_click: target (omit to click where the mouse is); modifiers e.g. "ctrl"\n'
             "- move: target (hover)\n- drag: from, to\n"
             "- type: text (\\n presses Enter, \\t presses Tab)\n- paste: text (instant, through the clipboard)\n"
             "- fill: target, text (replace a field's contents)\n"
-            "- key: keys such as \"ctrl+s\", \"Return\", \"Escape\", \"alt+Tab\", \"ctrl+shift+t\"; repeat\n"
+            '- key: keys such as "ctrl+s", "Return", "Escape", "alt+Tab", "ctrl+shift+t"; repeat\n'
             "- scroll: direction (up|down|left|right), amount (default 3), optional target\n"
             "- wait: seconds\n- wait_for: text, timeout (default 10); gone=true waits until it disappears\n"
             "- focus: window (title or app)\n"
-            "Targets: \"@12\" (an id from the latest `see`), visible text like \"Save\" or \"Sign in\", or \"x,y\" pixels."
+            'Targets: "@12" (an id from the latest `see`), visible text like "Save" or "Sign in", or "x,y" pixels.'
         ),
         "inputSchema": {
             "type": "object",
             "properties": {
                 "actions": {
-                    "type": "array", "minItems": 1,
+                    "type": "array",
+                    "minItems": 1,
                     "items": {
                         "type": "object",
                         "properties": {
-                            "action": {"type": "string", "enum": [
-                                "click", "double_click", "triple_click", "right_click", "middle_click", "move",
-                                "drag", "type", "paste", "fill", "key", "scroll", "wait", "wait_for", "focus",
-                                "mouse_down", "mouse_up", "hold_key"]},
-                            "target": {"type": "string", "description": "@id, visible text, or \"x,y\"."},
+                            "action": {
+                                "type": "string",
+                                "enum": [
+                                    "click",
+                                    "double_click",
+                                    "triple_click",
+                                    "right_click",
+                                    "middle_click",
+                                    "move",
+                                    "drag",
+                                    "type",
+                                    "paste",
+                                    "fill",
+                                    "key",
+                                    "scroll",
+                                    "wait",
+                                    "wait_for",
+                                    "focus",
+                                    "mouse_down",
+                                    "mouse_up",
+                                    "hold_key",
+                                ],
+                            },
+                            "target": {"type": "string", "description": '@id, visible text, or "x,y".'},
                             "text": {"type": "string"},
                             "keys": {"type": "string"},
                             "repeat": {"type": "integer"},
@@ -159,9 +210,9 @@ TOOLS = [
     {
         "name": "open",
         "description": (
-            "Open something in the desktop and wait for its window: a profile app (\"writer\", \"calc\", "
-            "\"impress\", \"firefox\", \"terminal\", \"chromium\", \"geany\"), a URL (\"github.com\"), a file "
-            "inside the desktop (\"~/Documents/report.docx\"), or a shell command for a GUI program."
+            'Open something in the desktop and wait for its window: a profile app ("writer", "calc", '
+            '"impress", "firefox", "terminal", "chromium", "geany"), a URL ("github.com"), a file '
+            'inside the desktop ("~/Documents/report.docx"), or a shell command for a GUI program.'
         ),
         "inputSchema": {
             "type": "object",
@@ -201,7 +252,10 @@ TOOLS = [
             "properties": {
                 "action": {"type": "string", "enum": ["upload", "download", "read", "write"]},
                 "path": {"type": "string", "description": "Path inside the desktop."},
-                "local_path": {"type": "string", "description": "Path on this machine (upload source / download destination)."},
+                "local_path": {
+                    "type": "string",
+                    "description": "Path on this machine (upload source / download destination).",
+                },
                 "text": {"type": "string", "description": "Content for write."},
                 "desktop": DESKTOP_PROP,
             },
@@ -213,7 +267,7 @@ TOOLS = [
         "name": "view",
         "description": (
             "Get a live link where the human can watch the desktop and take over the mouse and keyboard. "
-            "With `message`, hand control to the human (e.g. \"Please sign in to your Google account\") and "
+            'With `message`, hand control to the human (e.g. "Please sign in to your Google account") and '
             "wait until they press Done (up to `timeout` seconds); returns their note."
         ),
         "inputSchema": {
@@ -299,7 +353,9 @@ class Server:
             elif method == "prompts/list":
                 result = {"prompts": []}
             else:
-                self.send({"jsonrpc": "2.0", "id": mid, "error": {"code": -32601, "message": f"Method not found: {method}"}})
+                self.send(
+                    {"jsonrpc": "2.0", "id": mid, "error": {"code": -32601, "message": f"Method not found: {method}"}}
+                )
                 return
             self.send({"jsonrpc": "2.0", "id": mid, "result": result})
         except Exception as e:
@@ -315,8 +371,13 @@ class Server:
             if token is None:
                 return
             counter[0] += 1
-            self.send({"jsonrpc": "2.0", "method": "notifications/progress",
-                       "params": {"progressToken": token, "progress": counter[0], "message": text[-200:]}})
+            self.send(
+                {
+                    "jsonrpc": "2.0",
+                    "method": "notifications/progress",
+                    "params": {"progressToken": token, "progress": counter[0], "message": text[-200:]},
+                }
+            )
 
         try:
             fn = getattr(self, f"tool_{name}", None)
@@ -338,8 +399,10 @@ class Server:
             try:
                 d = Desktop.attach(None, self.backend)
             except NotFound:
-                raise ToolError("No desktop yet. Create one: desktop(action=\"create\", profile=\"browser\") "
-                                "— profiles: browser, office, dev, research, data, base.") from None
+                raise ToolError(
+                    'No desktop yet. Create one: desktop(action="create", profile="browser") '
+                    "— profiles: browser, office, dev, research, data, base."
+                ) from None
             name = d.name
         if name not in self.desktops:
             self.desktops[name] = Desktop(name, self.backend)
@@ -375,9 +438,12 @@ class Server:
         if action == "list":
             desks = be.list()
             if not desks:
-                return [self.text("No desktops. Create one with action=\"create\".")]
-            lines = [f"- {d.name} ({d.profile}, {d.size}, {'frozen' if d.state == 'paused' else d.state})"
-                     + (" ← current" if d.name == self.current else "") for d in desks]
+                return [self.text('No desktops. Create one with action="create".')]
+            lines = [
+                f"- {d.name} ({d.profile}, {d.size}, {'frozen' if d.state == 'paused' else d.state})"
+                + (" ← current" if d.name == self.current else "")
+                for d in desks
+            ]
             return [self.text("Desktops:\n" + "\n".join(lines))]
         if action == "create":
             return self._create(args, progress)
@@ -386,8 +452,13 @@ class Server:
         if action == "info":
             hello = d.hello()
             info = d.info()
-            return [self.text(json.dumps({**info.to_dict(), "apps": hello.get("apps"),
-                                          "features": hello.get("features")}, indent=2))]
+            return [
+                self.text(
+                    json.dumps(
+                        {**info.to_dict(), "apps": hello.get("apps"), "features": hello.get("features")}, indent=2
+                    )
+                )
+            ]
         if action == "remove":
             d.remove()
             self.desktops.pop(d.name, None)
@@ -404,11 +475,15 @@ class Server:
             new = d.fork(args.get("name") if args.get("name") != d.name else None, progress=progress)
             self.desktops[new.name] = new
             self.current = new.name
-            return [self.text(f"Forked {d.name} → {new.name} (now the current desktop). The fork has the same "
-                              "files; apps start fresh.")]
+            return [
+                self.text(
+                    f"Forked {d.name} → {new.name} (now the current desktop). The fork has the same "
+                    "files; apps start fresh."
+                )
+            ]
         if action == "snapshot":
             tag = d.snapshot(args.get("tag"))
-            return [self.text(f"Saved snapshot {tag!r} of {d.name}. Restore with action=\"restore\", tag=\"{tag}\".")]
+            return [self.text(f'Saved snapshot {tag!r} of {d.name}. Restore with action="restore", tag="{tag}".')]
         if action == "restore":
             if not args.get("tag"):
                 snaps = be.snapshots(d.name)
@@ -433,8 +508,13 @@ class Server:
 
                 def work():
                     try:
-                        d = Desktop.create(profile, name=name, size=args.get("size"), backend=self.backend,
-                                           progress=lambda line: (self.log(line), progress(line)))
+                        d = Desktop.create(
+                            profile,
+                            name=name,
+                            size=args.get("size"),
+                            backend=self.backend,
+                            progress=lambda line: (self.log(line), progress(line)),
+                        )
                         fut.set_result(d)
                     except BaseException as e:
                         fut.set_exception(e)
@@ -444,9 +524,13 @@ class Server:
         try:
             d = fut.result(timeout=wait)
         except TimeoutError:
-            return [self.text(f"Still preparing the {profile!r} desktop (the first run downloads or builds its "
-                              "image, which can take a few minutes). Call desktop(action=\"create\") again with the "
-                              "same arguments to keep waiting — the work continues in the background.")]
+            return [
+                self.text(
+                    f"Still preparing the {profile!r} desktop (the first run downloads or builds its "
+                    'image, which can take a few minutes). Call desktop(action="create") again with the '
+                    "same arguments to keep waiting — the work continues in the background."
+                )
+            ]
         finally:
             with self.pending_lock:
                 if fut.done() and self.pending.get(key) is fut:
@@ -456,8 +540,10 @@ class Server:
         hello = d.hello()
         prof = profiles.get(profile)
         w, h = hello["screen"]
-        lines = [f"Desktop {d.name} is ready ({profile}, {w}x{h}). It is now the current desktop.",
-                 f"Apps (use with open): {', '.join(a.lower() for a in hello.get('apps', []))}"]
+        lines = [
+            f"Desktop {d.name} is ready ({profile}, {w}x{h}). It is now the current desktop.",
+            f"Apps (use with open): {', '.join(a.lower() for a in hello.get('apps', []))}",
+        ]
         if prof.merged("tips"):
             lines.append("Tips: " + prof.merged("tips"))
         url = self._view_url(d.name)
@@ -469,19 +555,22 @@ class Server:
     def tool_see(self, args: dict, progress) -> list:
         d = self.desk(args)
         ocr = True if args.get("ocr") else "auto"
-        obs = d.see(ocr=ocr, window=args.get("window"))
+        obs = d.see(ocr=ocr, window=args.get("window"), full_text=bool(args.get("full_text")))
         return [self.text(obs.text)]
 
     def tool_screenshot(self, args: dict, progress) -> list:
         d = self.desk(args)
         region = args.get("region")
         zoom = bool(args.get("zoom")) and region
-        shot = d.screenshot(region=region, width=1024 if zoom else None, marks=bool(args.get("marks")),
-                            grid=bool(args.get("grid")))
+        shot = d.screenshot(
+            region=region, width=1024 if zoom else None, marks=bool(args.get("marks")), grid=bool(args.get("grid"))
+        )
         if region:
             x, y = shot.region[0], shot.region[1]
-            note = (f"Region {list(shot.region)} at {shot.scale:g}x. Desktop coordinates = "
-                    f"({x} + px/{shot.scale:g}, {y} + py/{shot.scale:g}).")
+            note = (
+                f"Region {list(shot.region)} at {shot.scale:g}x. Desktop coordinates = "
+                f"({x} + px/{shot.scale:g}, {y} + py/{shot.scale:g})."
+            )
         else:
             note = f"Screen {shot.width}x{shot.height}; image pixels = desktop coordinates."
         if args.get("marks"):
@@ -492,7 +581,7 @@ class Server:
         d = self.desk(args)
         actions = args.get("actions")
         if not actions:
-            raise ToolError("act needs actions, e.g. [{\"action\": \"click\", \"target\": \"@3\"}]")
+            raise ToolError('act needs actions, e.g. [{"action": "click", "target": "@3"}]')
         res = d.act(actions, screenshot=bool(args.get("screenshot")), see=bool(args.get("see")), check=False)
         out = [self.text(res.summary)]
         if res.observation is not None:
@@ -508,12 +597,14 @@ class Server:
         res = d.open(args.get("target") or "")
         w = res.get("window")
         if w:
-            return [self.text(f"Opened {res['command']} → window \"{w['title']}\" ({w['app']}). "
-                              "Use see() to read it.")]
+            return [self.text(f'Opened {res["command"]} → window "{w["title"]}" ({w["app"]}). Use see() to read it.')]
         if "error" in res:
             raise ToolError(f"{res['command']}: {res['error']}")
-        return [self.text(f"Launched {res['command']}; no new window appeared yet (it may still be loading — "
-                          "check with see()).")]
+        return [
+            self.text(
+                f"Launched {res['command']}; no new window appeared yet (it may still be loading — check with see())."
+            )
+        ]
 
     def tool_run(self, args: dict, progress) -> list:
         d = self.desk(args)

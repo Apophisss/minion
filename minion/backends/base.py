@@ -16,8 +16,10 @@ NAME_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,40}$")
 
 def check_name(name: str) -> str:
     if not NAME_RE.match(name or ""):
-        raise MinionError(f"invalid desktop name {name!r}: use lowercase letters, digits, - and _ "
-                          "(max 41 characters, starting with a letter or digit)")
+        raise MinionError(
+            f"invalid desktop name {name!r}: use lowercase letters, digits, - and _ "
+            "(max 41 characters, starting with a letter or digit)"
+        )
     return name
 
 
@@ -28,9 +30,9 @@ class CreateOptions:
     cpus: str = ""
     shm: str = ""
     network: bool = True
-    mounts: list[str] = field(default_factory=list)   # "host_path:desktop_path[:ro]"
+    mounts: list[str] = field(default_factory=list)  # "host_path:desktop_path[:ro]"
     env: dict[str, str] = field(default_factory=dict)
-    ports: list[str] = field(default_factory=list)    # desktop ports to publish on 127.0.0.1
+    ports: list[str] = field(default_factory=list)  # desktop ports to publish on 127.0.0.1
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -45,14 +47,14 @@ class CreateOptions:
 class DesktopInfo:
     name: str
     profile: str
-    state: str                  # running | paused | stopped | created | unknown
+    state: str  # running | paused | stopped | created | unknown
     backend: str
     size: str = ""
     created: float = 0.0
     image: str = ""
     id: str = ""
-    memory: int | None = None   # bytes in use (live, when known)
-    cpu: float | None = None    # percent (live, when known)
+    memory: int | None = None  # bytes in use (live, when known)
+    cpu: float | None = None  # percent (live, when known)
     options: dict = field(default_factory=dict)
     ports: dict = field(default_factory=dict)
 
@@ -144,6 +146,10 @@ class Backend(ABC):
 
     @abstractmethod
     def delete_snapshot(self, name: str, tag: str) -> None: ...
+
+    def ensure_awake(self, name: str) -> None:  # noqa: B027 - optional hook
+        """Called before every RPC. Backends whose transport cannot tell that a desktop is
+        frozen (a stopped process still accepts socket connections) wake it here."""
 
     def logs(self, name: str, tail: int = 200) -> str:
         return ""

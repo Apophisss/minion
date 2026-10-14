@@ -29,8 +29,9 @@ def _loop(backend, threshold: float, interval: float) -> None:
                     idle = min(float(st.get("idle", 0)), float(st.get("viewed", st.get("idle", 0))))
                     if idle >= threshold:
                         d.freeze()
-                        sys.stderr.write(f"[minion] froze idle desktop {info.name!r} "
-                                         f"(idle {idle:.0f}s; it wakes on the next call)\n")
+                        sys.stderr.write(
+                            f"[minion] froze idle desktop {info.name!r} (idle {idle:.0f}s; it wakes on the next call)\n"
+                        )
                 except Exception:
                     pass
                 finally:
@@ -48,5 +49,9 @@ def start_reaper(backend, threshold: float, interval: float = 60.0) -> None:
         if _started:
             return
         _started = True
-    threading.Thread(target=_loop, args=(backend, threshold, min(interval, max(5.0, threshold / 2))),
-                     daemon=True, name="minion-reaper").start()
+    threading.Thread(
+        target=_loop,
+        args=(backend, threshold, min(interval, max(5.0, threshold / 2))),
+        daemon=True,
+        name="minion-reaper",
+    ).start()

@@ -10,9 +10,9 @@ from dataclasses import asdict, dataclass, field
 
 @dataclass
 class Window:
-    id: str            # hex X window id, e.g. "0x01a00003"
+    id: str  # hex X window id, e.g. "0x01a00003"
     title: str
-    app: str           # WM_CLASS class, e.g. "firefox-esr"
+    app: str  # WM_CLASS class, e.g. "firefox-esr"
     pid: int
     x: int
     y: int
@@ -114,8 +114,15 @@ class Windows:
                 continue
             app = wmclass.split(".")[-1] if "." in wmclass else wmclass
             win = Window(
-                id=wid_norm, title=title.strip(), app=app, pid=int(pid) if pid.isdigit() else 0,
-                x=int(x), y=int(y), w=int(w), h=int(h), focused=(wid_norm == active),
+                id=wid_norm,
+                title=title.strip(),
+                app=app,
+                pid=int(pid) if pid.isdigit() else 0,
+                x=int(x),
+                y=int(y),
+                w=int(w),
+                h=int(h),
+                focused=(wid_norm == active),
             )
             if with_states:
                 self.refine(win)
@@ -158,8 +165,7 @@ class Windows:
         self._run("wmctrl", "-i", "-c", wid)
 
     def maximize(self, wid: str, on: bool = True) -> None:
-        self._run("wmctrl", "-i", "-r", wid, "-b",
-                  ("add" if on else "remove") + ",maximized_vert,maximized_horz")
+        self._run("wmctrl", "-i", "-r", wid, "-b", ("add" if on else "remove") + ",maximized_vert,maximized_horz")
 
     def minimize(self, wid: str) -> None:
         self._run("xdotool", "windowminimize", str(int(wid, 16)))

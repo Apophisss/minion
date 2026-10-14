@@ -19,30 +19,53 @@ def _check(results: list, ok: bool, what: str, fix: str = "", level: str = "erro
 
 def run_checks(json_out: bool = False) -> int:
     results: list[dict] = []
-    _check(results, sys.version_info >= (3, 11), f"Python {platform.python_version()}",
-           "Minion needs Python 3.11 or newer.")
+    _check(
+        results,
+        sys.version_info >= (3, 11),
+        f"Python {platform.python_version()}",
+        "Minion needs Python 3.11 or newer.",
+    )
     backend = get_backend()
     ok, detail = backend.available()
-    _check(results, ok, f"backend: {backend.name} ({detail})",
-           "Start Docker Desktop / the Docker daemon, or install Docker: https://docs.docker.com/get-docker/ "
-           "(Linux without Docker: MINION_BACKEND=local)." if backend.name == "docker" else detail)
+    _check(
+        results,
+        ok,
+        f"backend: {backend.name} ({detail})",
+        "Start Docker Desktop / the Docker daemon, or install Docker: https://docs.docker.com/get-docker/ "
+        "(Linux without Docker: MINION_BACKEND=local)."
+        if backend.name == "docker"
+        else detail,
+    )
     if backend.name == "docker" and ok:
         have = []
         for name in profiles.names():
             p = profiles.get(name)
             if backend.image_labels(p.image) is not None:
                 have.append(name)
-        _check(results, bool(have), f"images ready: {', '.join(have) or 'none yet'}",
-               "Images download on first use; prepare ahead with `minion pull browser office`.", level="info")
+        _check(
+            results,
+            bool(have),
+            f"images ready: {', '.join(have) or 'none yet'}",
+            "Images download on first use; prepare ahead with `minion pull browser office`.",
+            level="info",
+        )
     if backend.name == "local":
         from .backends.local import missing_tools
 
         missing = missing_tools()
-        _check(results, not missing, "local desktop tools (Xvfb, xdotool, wmctrl, jwm, Pillow)",
-               "Install: sudo apt-get install -y " + " ".join(missing))
-    _check(results, shutil.which("uvx") is not None or shutil.which("pipx") is not None,
-           "uvx/pipx available (for `uvx minion-desktop mcp` in MCP configs)",
-           "Optional: install uv (https://docs.astral.sh/uv/) to run Minion without installing it.", level="info")
+        _check(
+            results,
+            not missing,
+            "local desktop tools (Xvfb, xdotool, wmctrl, jwm, Pillow)",
+            "Install: sudo apt-get install -y " + " ".join(missing),
+        )
+    _check(
+        results,
+        shutil.which("uvx") is not None or shutil.which("pipx") is not None,
+        "uvx/pipx available (for `uvx minion-desktop mcp` in MCP configs)",
+        "Optional: install uv (https://docs.astral.sh/uv/) to run Minion without installing it.",
+        level="info",
+    )
     if json_out:
         print(json.dumps({"version": __version__, "backend": backend.name, "checks": results}, indent=2))
     else:
