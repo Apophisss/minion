@@ -17,6 +17,11 @@ from minion.errors import BackendError, NotFound
 EXE = ".exe" if os.name == "nt" else ""
 
 
+def same(a, b) -> bool:
+    """The same path (Windows paths are case-insensitive, and `which` reports DOCKER.EXE in PATHEXT's case)."""
+    return os.path.normcase(str(a)) == os.path.normcase(str(b))
+
+
 def executable(path: Path) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("")
@@ -45,19 +50,24 @@ def test_docker_off_path_is_found_where_it_installs(no_path, monkeypatch):
     monkeypatch.setattr(docker, "cli_dirs", lambda: [str(f) for f in folders])
     podman = executable(folders[0] / f"podman{EXE}")
     found = executable(folders[1] / f"docker{EXE}")
-    assert docker.DockerBackend().bin == str(found)  # docker anywhere comes before podman
+    assert same(docker.DockerBackend().bin, found)  # docker anywhere comes before podman
     # its folder joins PATH (once), so docker finds its helpers, e.g. docker-credential-desktop
     assert os.environ["PATH"].split(os.pathsep) == [str(no_path / "empty"), str(folders[1])]
     docker.find_cli("docker")
     assert os.environ["PATH"].split(os.pathsep) == [str(no_path / "empty"), str(folders[1])]
     found.unlink()
-    assert docker.DockerBackend().bin == str(podman)
+    assert same(docker.DockerBackend().bin, podman)
 
 
 def test_nothing_found_keeps_the_old_message(no_path, monkeypatch):
     monkeypatch.setattr(docker, "cli_dirs", lambda: [str(no_path / "nowhere")])
     backend = docker.DockerBackend()
     assert backend.bin == "docker"
+
+    def missing(*args, **kwargs):  # (CI machines can have docker where Windows always looks: System32)
+        raise FileNotFoundError(args[0][0])
+
+    monkeypatch.setattr(docker.subprocess, "run", missing)
     with pytest.raises(BackendError, match="Install Docker"):
         backend._run("version")
 
@@ -66,11 +76,11 @@ def test_minion_docker_and_podman_backend(no_path, monkeypatch):
     folder = no_path / "podman/bin"
     monkeypatch.setattr(docker, "cli_dirs", lambda: [str(folder)])
     podman = executable(folder / f"podman{EXE}")
-    assert docker.DockerBackend("podman").bin == str(podman)  # MINION_BACKEND=podman
+    assert same(docker.DockerBackend("podman").bin, podman)  # MINION_BACKEND=podman
     assert docker.DockerBackend("podman").bin == "podman"  # its folder is on PATH now
     monkeypatch.setenv("PATH", str(no_path / "empty"))
     monkeypatch.setenv("MINION_DOCKER", "podman")
-    assert docker.DockerBackend().bin == str(podman)
+    assert same(docker.DockerBackend().bin, podman)
     monkeypatch.setenv("MINION_DOCKER", str(no_path / "custom" / "docker"))
     assert docker.DockerBackend().bin == str(no_path / "custom" / "docker")  # a path is used as is
 
@@ -81,13 +91,13 @@ def test_auto_backend_finds_docker_off_path(no_path, monkeypatch):
 
     monkeypatch.setattr(backends, "_cache", {})
     monkeypatch.delenv("MINION_BACKEND", raising=False)
-    monkeypatch.setattr(sys, "platform", "linux")
-    executable(no_path / "empty" / f"Xvfb{EXE}")
+    monkeypatch.setattr(sys, "platform", "linux")  # (so commands have no .exe, on every OS)
+    executable(no_path / "empty" / "Xvfb")
     folder = no_path / "Docker/bin"
     monkeypatch.setattr(docker, "cli_dirs", lambda: [str(folder)])
     assert backends.get_backend().name == "local"  # no Docker anywhere: the local backend
     monkeypatch.setattr(backends, "_cache", {})
-    found = executable(folder / f"docker{EXE}")
+    found = executable(folder / "docker")
     backend = backends.get_backend()
     assert backend.name == "docker" and shutil.which(backend.bin) == str(found)  # its folder joined PATH
 

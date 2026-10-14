@@ -222,7 +222,7 @@ def test_windsurf_is_left_to_devin(home):
 
 
 def test_detects_apps_by_their_command(home, tmp_path):
-    exe = tmp_path / "bin" / ("codex.exe" if os.name == "nt" else "codex")
+    exe = tmp_path / "bin" / "codex"  # (the fixture makes the platform Linux, where commands have no .exe)
     exe.write_text("")
     exe.chmod(0o755)
     assert [a.id for a in connect.detected()] == ["codex"]
