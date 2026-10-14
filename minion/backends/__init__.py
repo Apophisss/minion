@@ -15,7 +15,9 @@ _cache: dict[str, Backend] = {}
 def get_backend(name: str | None = None) -> Backend:
     name = (name or os.environ.get("MINION_BACKEND") or "auto").lower()
     if name == "auto":
-        if shutil.which(os.environ.get("MINION_DOCKER", "docker")) or shutil.which("podman"):
+        from .docker import find_cli  # also where Docker installs off PATH: GUI apps start Minion with a bare PATH
+
+        if find_cli(os.environ.get("MINION_DOCKER", "docker"), "podman"):
             name = "docker"
         elif sys.platform.startswith("linux") and shutil.which("Xvfb"):
             name = "local"

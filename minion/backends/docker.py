@@ -12,6 +12,7 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 import tarfile
 import tempfile
 import time
@@ -86,15 +87,50 @@ def _parse_size_bytes(text: str) -> int | None:
         return None
 
 
+def cli_dirs() -> list[str]:
+    """Where Docker and Podman put their commands. Apps launched from the GUI (Claude Desktop on macOS)
+    start MCP servers with a minimal PATH that often misses these folders."""
+    if sys.platform == "win32":
+        program_files = os.environ.get("ProgramFiles") or r"C:\Program Files"
+        return [os.path.join(program_files, "Docker", "Docker", "resources", "bin")]
+    home = os.path.expanduser("~")
+    return [
+        "/usr/local/bin",
+        "/opt/homebrew/bin",
+        os.path.join(home, ".docker", "bin"),
+        "/Applications/Docker.app/Contents/Resources/bin",
+        os.path.join(home, ".orbstack", "bin"),
+        os.path.join(home, ".rd", "bin"),  # Rancher Desktop
+        "/opt/podman/bin",
+    ]
+
+
+def find_cli(*names: str) -> str | None:
+    """The first of `names` on PATH (returned as is), else the full path of the first one found in `cli_dirs()`.
+    That folder is then added to PATH, so the CLI also finds its helpers (docker-credential-desktop, ...)."""
+    for name in names:
+        if shutil.which(name):
+            return name
+    for name in names:
+        for folder in cli_dirs():
+            found = shutil.which(name, path=folder)
+            if found:
+                path = os.environ.get("PATH", "")
+                if folder not in path.split(os.pathsep):
+                    os.environ["PATH"] = path + os.pathsep + folder if path else folder
+                return found
+    return None
+
+
 class DockerBackend(Backend):
     name = "docker"
 
     def __init__(self, binary: str | None = None):
-        self.bin = (
-            binary
-            or os.environ.get("MINION_DOCKER")
-            or ("docker" if shutil.which("docker") else "podman" if shutil.which("podman") else "docker")
-        )
+        wanted = binary or os.environ.get("MINION_DOCKER")
+        if wanted:  # a bare name is looked up like docker itself; a path is used as is
+            self.bin = wanted if os.path.dirname(wanted) else (find_cli(wanted) or wanted)
+        else:
+            self.bin = find_cli("docker", "podman") or "docker"
         self._awake: dict[str, float] = {}  # desktop -> when we last saw it running
 
     # -- plumbing ------------------------------------------------------
