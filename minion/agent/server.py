@@ -15,6 +15,7 @@ import shutil
 import signal
 import socket
 import subprocess
+import sys
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -33,6 +34,75 @@ PASSIVE = {"hello", "status", "frame", "record", "cursor"}
 MAX_OUTPUT = 64 * 1024
 URL_RE = re.compile(r"^[a-zA-Z][a-zA-Z0-9+.-]*://\S+$")
 DOMAIN_RE = re.compile(r"^(www\.)?[\w-]+(\.[\w-]+)*\.[a-zA-Z]{2,}(:\d+)?(/\S*)?$")
+
+
+def run_captured(
+    argv: list[str],
+    cwd: str,
+    timeout: float,
+    stdin: bytes | None,
+    out_limit: int = MAX_OUTPUT,
+    err_limit: int = MAX_OUTPUT,
+) -> dict:
+    """Run a process and capture its output without being held hostage by children that keep
+    stdout open (daemons, `xclip`): we wait for the process itself, then drain briefly."""
+    t0 = time.monotonic()
+    proc = subprocess.Popen(
+        argv,
+        cwd=cwd,
+        stdin=subprocess.PIPE if stdin is not None else subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        start_new_session=True,
+    )
+    chunks: dict[str, list[bytes]] = {"out": [], "err": []}
+
+    def drain(stream, key: str) -> None:
+        try:
+            for chunk in iter(lambda: stream.read1(65536), b""):
+                chunks[key].append(chunk)
+        except (OSError, ValueError):
+            pass
+
+    readers = [
+        threading.Thread(target=drain, args=(proc.stdout, "out"), daemon=True),
+        threading.Thread(target=drain, args=(proc.stderr, "err"), daemon=True),
+    ]
+    for r in readers:
+        r.start()
+    if stdin is not None:
+        try:
+            proc.stdin.write(stdin)
+            proc.stdin.close()
+        except OSError:
+            pass
+    timed_out = False
+    try:
+        proc.wait(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        timed_out = True
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+        except OSError:
+            pass
+        try:
+            proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            pass
+    for r in readers:
+        r.join(0.5)  # output still held by a background child is not waited for
+    for f in (proc.stdout, proc.stderr):
+        try:
+            f.close()
+        except OSError:
+            pass
+    return {
+        "code": proc.returncode,
+        "timed_out": timed_out,
+        "stdout": _trim(b"".join(chunks["out"]).decode("utf-8", "replace"), out_limit),
+        "stderr": _trim(b"".join(chunks["err"]).decode("utf-8", "replace"), err_limit),
+        "elapsed": round(time.monotonic() - t0, 3),
+    }
 
 
 class RpcError(Exception):
@@ -221,6 +291,8 @@ class Agent:
         self.started = time.time()
         self.last_activity = time.time()
         self.last_view = 0.0
+        self.inflight = 0  # non-passive calls running now (a long `run` is not "idle")
+        self._inflight_lock = threading.Lock()
         self.home = os.path.expanduser("~")
         self.handlers = {n[2:]: getattr(self, n) for n in dir(self) if n.startswith("m_")}
 
@@ -229,9 +301,17 @@ class Agent:
         handler = self.handlers.get(method or "")
         if handler is None:
             raise RpcError(f"unknown method {method!r}", code=-32601)
-        if method not in PASSIVE:
+        if method in PASSIVE:
+            return handler(params or {})
+        with self._inflight_lock:
+            self.inflight += 1
+        self.last_activity = time.time()
+        try:
+            return handler(params or {})
+        finally:
+            with self._inflight_lock:
+                self.inflight -= 1
             self.last_activity = time.time()
-        return handler(params or {})
 
     # -- info ----------------------------------------------------------
     def m_hello(self, p: dict) -> dict:
@@ -268,8 +348,9 @@ class Agent:
         now = time.time()
         return {
             "uptime": round(now - self.started, 1),
-            "idle": round(now - self.last_activity, 1),
+            "idle": 0.0 if self.inflight else round(now - self.last_activity, 1),
             "viewed": round(now - (self.last_view or self.started), 1),
+            "inflight": self.inflight,
             "memory": mem,
             "windows": nwin,
             "recording": self.recorder.info(),
@@ -373,6 +454,7 @@ class Agent:
                 window=p.get("window"),
                 max_elements=int(p.get("max_elements") or (600 if full else 250)),
                 text_limit=4000 if full else 160,
+                changes=bool(p.get("changes")),
             )
         except WindowError as e:
             raise RpcError(str(e)) from e
@@ -630,7 +712,12 @@ class Agent:
             "opened": opened,
             "closed": closed,
         }
+        observe = set(str(p.get("observe") or "summary").replace(",", "+").split("+"))
         if p.get("screenshot"):
+            observe.add("screenshot")
+        if p.get("see"):
+            observe.add("see")
+        if "screenshot" in observe:
             img = frame.copy()
             try:
                 cx, cy = self.xi.position()
@@ -647,9 +734,35 @@ class Agent:
                 "height": img.height,
                 "scale": round(scale, 5),
             }
-        if p.get("see"):
-            out["see"] = self.perception.see(ocr=p.get("ocr", "auto"))
+        if "crop" in observe and change.get("changed"):
+            out["crop"] = self._crop(frame, change["region"])
+        if "see" in observe or "changes" in observe:
+            out["see"] = self.perception.see(ocr=p.get("ocr", "auto"), changes="see" not in observe)
         return out
+
+    def _crop(self, frame, region) -> dict:
+        """Just the part of the screen that changed (with some context): far fewer image tokens."""
+        x, y, w, h = region
+        sw, sh = self.size
+        pad = 24
+        w2, h2 = max(w + 2 * pad, 320), max(h + 2 * pad, 200)
+        x0 = max(0, min(sw - w2, x - (w2 - w) // 2))
+        y0 = max(0, min(sh - h2, y - (h2 - h) // 2))
+        box = (x0, y0, min(sw, x0 + w2), min(sh, y0 + h2))
+        img = frame.crop(box)
+        try:
+            cx, cy = self.xi.position()
+            draw_cursor(img, cx, cy, offset=(box[0], box[1]))
+        except InputError:
+            pass
+        return {
+            "data": _b64(encode(img, "png")),
+            "format": "png",
+            "mime": "image/png",
+            "width": img.width,
+            "height": img.height,
+            "region": [box[0], box[1], box[2] - box[0], box[3] - box[1]],
+        }
 
     def _summary(self, results, change, opened, closed, focused, wins_before) -> str:
         parts = [
@@ -855,34 +968,36 @@ class Agent:
             self.recorder.add("run", f"{command} (background)")
             return {"pid": proc.pid, "background": True}
         timeout = max(1.0, min(float(p.get("timeout") or 60.0), 3600.0))
-        t0 = time.monotonic()
         stdin = p.get("input")
-        proc = subprocess.Popen(
-            ["bash", "-lc", command],
-            cwd=cwd,
-            stdin=subprocess.PIPE if stdin is not None else subprocess.DEVNULL,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            start_new_session=True,
-        )
-        timed_out = False
-        try:
-            out, err = proc.communicate(stdin.encode() if stdin is not None else None, timeout=timeout)
-        except subprocess.TimeoutExpired:
-            timed_out = True
-            try:
-                os.killpg(proc.pid, signal.SIGKILL)
-            except OSError:
-                pass
-            out, err = proc.communicate()
-        res = {
-            "code": proc.returncode,
-            "timed_out": timed_out,
-            "stdout": _trim(out.decode("utf-8", "replace")),
-            "stderr": _trim(err.decode("utf-8", "replace")),
-            "elapsed": round(time.monotonic() - t0, 3),
-        }
+        res = run_captured(["bash", "-lc", command], cwd, timeout, stdin.encode() if stdin is not None else None)
         self.recorder.add("run", f"$ {command[:200]} → exit {res['code']}")
+        return res
+
+    def m_script(self, p: dict) -> dict:
+        """Run a Python program inside the desktop with the minion_agent.client API preloaded.
+        Loops and retries happen here, not in the model's context: only what it prints returns."""
+        code = p.get("code")
+        if not code or not str(code).strip():
+            raise RpcError("script needs Python code")
+        timeout = max(1.0, min(float(p.get("timeout") or 120.0), 1800.0))
+        folder = os.path.join(os.environ.get("MINION_RUNTIME_DIR", "/tmp/minion"), "scripts")
+        os.makedirs(folder, exist_ok=True)
+        path = os.path.join(folder, f"script-{int(time.time() * 1000)}.py")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(str(code))
+        bootstrap = (
+            "import sys; from minion_agent.client import *; "
+            "exec(compile(open(sys.argv[1], encoding='utf-8').read(), '<script>', 'exec'))"
+        )
+        res = run_captured(
+            [sys.executable, "-u", "-c", bootstrap, path],
+            self.home,
+            timeout,
+            None,
+            out_limit=32 * 1024,
+            err_limit=16 * 1024,
+        )
+        self.recorder.add("script", f"{len(str(code).splitlines())} lines → exit {res['code']}")
         return res
 
     def _clip_set(self, text: str) -> None:

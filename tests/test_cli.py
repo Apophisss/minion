@@ -34,6 +34,7 @@ def test_targets(parts, expected):
         (":~/a.txt", (None, "~/a.txt")),
         ("report.pdf", None),
         ("C:\\Users\\me\\a.txt", None),
+        ("c:/data/x.csv", None),
         ("./local:file", None),
     ],
 )

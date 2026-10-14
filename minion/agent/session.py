@@ -124,6 +124,13 @@ class Session:
             f = home / ".config" / gtk / "settings.ini"
             if not f.exists():
                 f.write_text(GTK_SETTINGS)
+        # `minion-install <anything>` inside the desktop (apt names, .deb/.AppImage/archive URLs, pip:, npm:).
+        bin_dir = home / ".local" / "bin"
+        bin_dir.mkdir(parents=True, exist_ok=True)
+        tool = bin_dir / "minion-install"
+        if not tool.exists():
+            tool.write_text('#!/bin/sh\nexec python3 -m minion_agent.install "$@"\n')
+            tool.chmod(0o755)
         env = os.environ
         env["DISPLAY"] = self.display
         env["XDG_RUNTIME_DIR"] = str(xdg)
@@ -142,6 +149,9 @@ class Session:
         env["GTK_OVERLAY_SCROLLING"] = "0"
         env.setdefault("LIBGL_ALWAYS_SOFTWARE", "1")
         env["MINION_SESSION"] = "1"
+        local_bin = str(Path(os.path.expanduser("~")) / ".local" / "bin")
+        if local_bin not in env.get("PATH", "").split(os.pathsep):
+            env["PATH"] = local_bin + os.pathsep + env.get("PATH", "/usr/bin:/bin")
 
     def clean_stale(self) -> None:
         lock = Path(f"/tmp/.X{self.num}-lock")

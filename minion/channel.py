@@ -16,6 +16,10 @@ class ConnectionLost(BackendError):
 
 
 class Transport:
+    def __init__(self) -> None:
+        self.pending: dict[int, _Pending] = {}  # requests in flight on this connection
+        self.wlock = threading.Lock()
+
     def write(self, data: bytes) -> None: ...
     def readline(self) -> bytes: ...
     def close(self) -> None: ...
@@ -27,28 +31,30 @@ class ProcessTransport(Transport):
     """Talks through a helper process, e.g. `docker exec -i <c> python3 bridge.py`."""
 
     def __init__(self, cmd: list[str]):
+        super().__init__()
         try:
-            self.proc = subprocess.Popen(
-                cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, bufsize=0
-            )
+            # Buffered pipes: readline() on an unbuffered pipe reads one byte per syscall.
+            self.proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         except FileNotFoundError as e:
             raise BackendError(f"{cmd[0]} is not installed or not on PATH") from e
         self._err = b""
-        threading.Thread(target=self._drain, daemon=True).start()
+        self._drainer = threading.Thread(target=self._drain, daemon=True)
+        self._drainer.start()
 
     def _drain(self) -> None:
         try:
-            for chunk in iter(lambda: self.proc.stderr.read(4096), b""):
+            for chunk in iter(lambda: self.proc.stderr.read1(4096), b""):
                 self._err = (self._err + chunk)[-4096:]
         except (OSError, ValueError):
             pass
 
     def write(self, data: bytes) -> None:
-        try:
-            self.proc.stdin.write(data)
-            self.proc.stdin.flush()
-        except (BrokenPipeError, OSError, ValueError) as e:
-            raise ConnectionLost(self.error_text() or "connection to the desktop was closed") from e
+        with self.wlock:  # several threads share one connection: never interleave two messages
+            try:
+                self.proc.stdin.write(data)
+                self.proc.stdin.flush()
+            except (BrokenPipeError, OSError, ValueError) as e:
+                raise ConnectionLost(self.error_text() or "connection to the desktop was closed") from e
 
     def readline(self) -> bytes:
         try:
@@ -60,7 +66,7 @@ class ProcessTransport(Transport):
         for f in (self.proc.stdin, self.proc.stdout):
             try:
                 f.close()
-            except OSError:
+            except (OSError, ValueError):
                 pass
         try:
             self.proc.terminate()
@@ -69,18 +75,19 @@ class ProcessTransport(Transport):
             self.proc.kill()
 
     def error_text(self) -> str:
+        self._drainer.join(0.3)  # let the last bytes of stderr (Docker's real error) arrive
         return self._err.decode("utf-8", "replace").strip()
 
 
 class SocketTransport(Transport):
     def __init__(self, path: str):
+        super().__init__()
         self.sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         try:
             self.sock.connect(path)
         except OSError as e:
             raise ConnectionLost(f"cannot connect to the desktop agent at {path}: {e}") from e
         self.file = self.sock.makefile("rb")
-        self.wlock = threading.Lock()
 
     def write(self, data: bytes) -> None:
         with self.wlock:
@@ -120,7 +127,6 @@ class Channel:
         self.label = label
         self._t: Transport | None = None
         self._lock = threading.Lock()
-        self._pending: dict[int, _Pending] = {}
         self._next = 0
 
     def _reader(self, t: Transport) -> None:
@@ -132,11 +138,13 @@ class Channel:
                 msg = json.loads(line)
             except json.JSONDecodeError:
                 continue
+            if not isinstance(msg, dict):
+                continue
             with self._lock:
-                pend = self._pending.pop(msg.get("id"), None)
+                pend = t.pending.pop(msg.get("id"), None)
             if pend is None:
                 continue
-            if "error" in msg and msg["error"]:
+            if msg.get("error"):
                 err = msg["error"]
                 pend.error = AgentError(err.get("message", "unknown error"), err.get("code", -32000))
             else:
@@ -146,9 +154,9 @@ class Channel:
         with self._lock:
             if self._t is t:
                 self._t = None
-            pending, self._pending = self._pending, {}
+            pending, t.pending = t.pending, {}
         t.close()
-        for pend in pending.values():
+        for pend in pending.values():  # only this connection's requests fail
             pend.error = ConnectionLost(detail or f"lost connection to {self.label}")
             pend.event.set()
 
@@ -165,7 +173,7 @@ class Channel:
             t = self._ensure()
             self._next += 1
             rid = self._next
-            self._pending[rid] = pend
+            t.pending[rid] = pend
         data = (
             json.dumps({"id": rid, "method": method, "params": params or {}}, separators=(",", ":"), ensure_ascii=False)
             + "\n"
@@ -174,15 +182,15 @@ class Channel:
             t.write(data)
         except ConnectionLost:
             with self._lock:
-                self._pending.pop(rid, None)
+                t.pending.pop(rid, None)
                 if self._t is t:
                     self._t = None
             t.close()
             raise
         if not pend.event.wait(timeout):
             with self._lock:
-                self._pending.pop(rid, None)
-            raise AgentError(f"{method} timed out after {timeout:.0f}s on {self.label}")
+                t.pending.pop(rid, None)
+            raise AgentError(f"{method} timed out after {timeout:.0f}s on {self.label}", code=-32001)
         if pend.error is not None:
             raise pend.error
         return pend.result

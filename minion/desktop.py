@@ -30,6 +30,11 @@ from .errors import AgentError, MinionError, NotFound
 SIZE_RE = re.compile(r"^\s*(\d{3,4})\s*[x×]\s*(\d{3,4})\s*$")
 
 
+def _backend(backend) -> Backend:
+    """A backend object as is (anything with the Backend methods), or one looked up by name."""
+    return backend if backend is not None and not isinstance(backend, str) else get_backend(backend)
+
+
 def normalize_size(size: str | tuple | None) -> str:
     if size is None or size == "":
         return config.DEFAULT_SIZE
@@ -86,6 +91,7 @@ class Observation:
     focused: dict | None = None
     ocr: list = field(default_factory=list)
     screen: tuple = (0, 0)
+    changes: dict | None = None  # counts when this was a "changes" look
 
     def __str__(self) -> str:
         return self.text
@@ -107,6 +113,7 @@ class ActResult:
     error: str | None = None
     screenshot: Screenshot | None = None
     observation: Observation | None = None
+    crop: Screenshot | None = None
     elapsed: float = 0.0
 
     def __str__(self) -> str:
@@ -152,12 +159,13 @@ def _screenshot(d: dict) -> Screenshot:
 
 def _observation(d: dict) -> Observation:
     return Observation(
-        d.get("text", ""),
-        d.get("elements", []),
-        d.get("windows", []),
-        d.get("focused"),
-        d.get("ocr", []),
-        tuple(d.get("screen") or (0, 0)),
+        text=d.get("text", ""),
+        elements=d.get("elements", []),
+        windows=d.get("windows", []),
+        focused=d.get("focused"),
+        ocr=d.get("ocr", []),
+        screen=tuple(d.get("screen") or (0, 0)),
+        changes=d.get("changes"),
     )
 
 
@@ -167,7 +175,7 @@ class Desktop:
 
     def __init__(self, name: str, backend: Backend | str | None = None, *, _owned: bool = False):
         self.name = name
-        self.backend = backend if isinstance(backend, Backend) else get_backend(backend)
+        self.backend = _backend(backend)
         self._channel: Channel | None = None
         self._lock = threading.Lock()
         self._owned = _owned
@@ -192,7 +200,7 @@ class Desktop:
         keep: bool = True,
     ) -> Desktop:
         """Create and start a desktop. `keep=False` removes it when used as a context manager."""
-        be = backend if isinstance(backend, Backend) else get_backend(backend)
+        be = _backend(backend)
         prof = profiles.get(profile)
         name = name or cls._free_name(be, prof.name)
         opts = CreateOptions(
@@ -210,6 +218,34 @@ class Desktop:
         config.update_state(current=name)
         return desk
 
+    @classmethod
+    def create_many(
+        cls,
+        profile: str = config.DEFAULT_PROFILE,
+        count: int = 2,
+        *,
+        names: list[str] | None = None,
+        progress=None,
+        **kw,
+    ) -> list[Desktop]:
+        """Create several desktops in parallel (one per worker/sub-agent)."""
+        from concurrent.futures import ThreadPoolExecutor
+
+        be = kw.pop("backend", None)
+        be = _backend(be)
+        prof = profiles.get(profile)
+        be.prepare(prof, progress)  # pull/build the image once, not once per desktop
+        if names is None:
+            taken = {d.name for d in be.list()}
+            names, n = [], 1
+            while len(names) < count:
+                if f"{profile}-{n}" not in taken:
+                    names.append(f"{profile}-{n}")
+                n += 1
+        with ThreadPoolExecutor(max_workers=min(len(names), 8)) as pool:
+            futures = [pool.submit(cls.create, profile, name=n, backend=be, progress=progress, **kw) for n in names]
+            return [f.result() for f in futures]
+
     @staticmethod
     def _free_name(be: Backend, profile: str) -> str:
         taken = {d.name for d in be.list()}
@@ -221,7 +257,7 @@ class Desktop:
     @classmethod
     def attach(cls, name: str | None = None, backend: Backend | str | None = None) -> Desktop:
         """Connect to an existing desktop (default: the current/most recent one)."""
-        be = backend if isinstance(backend, Backend) else get_backend(backend)
+        be = _backend(backend)
         if name:
             info = be.get(name)
             desk = cls(name, be)
@@ -240,7 +276,7 @@ class Desktop:
 
     @classmethod
     def list(cls, backend: Backend | str | None = None, stats: bool = False) -> list[DesktopInfo]:
-        be = backend if isinstance(backend, Backend) else get_backend(backend)
+        be = _backend(backend)
         return be.list(stats=stats)
 
     def __enter__(self) -> Desktop:
@@ -296,6 +332,10 @@ class Desktop:
         try:
             return self._call_once(method, params, timeout)
         except AgentError as e:
+            if e.code == -32001 and self.info().state == "paused":  # frozen while the call was queued
+                self.close()
+                self.backend.thaw(self.name)
+                raise AgentError(f"{e} — the desktop had been frozen; it is awake now, retry the call") from e
             if e.code == -32601:
                 raise AgentError(
                     f"{e} — this desktop runs an older Minion agent; restart it to update: "
@@ -363,9 +403,17 @@ class Desktop:
         window: str | None = None,
         max_elements: int | None = None,
         full_text: bool = False,
+        changes: bool = False,
     ) -> Observation:
-        """The screen as text. `full_text=True` keeps paragraphs whole (for reading articles)."""
-        params = {"ocr": ocr, "window": window, "max_elements": max_elements, "full_text": full_text}
+        """The screen as text. `changes=True` returns only what changed since the previous look
+        (ids are stable across looks); `full_text=True` keeps paragraphs whole (for reading)."""
+        params = {
+            "ocr": ocr,
+            "window": window,
+            "max_elements": max_elements,
+            "full_text": full_text,
+            "changes": changes,
+        }
         return _observation(self.call("see", params, timeout=90))
 
     def cursor(self) -> tuple[int, int]:
@@ -379,6 +427,7 @@ class Desktop:
     def act(
         self,
         *actions,
+        observe: str = "summary",
         screenshot: bool = False,
         see: bool = False,
         settle: bool = True,
@@ -394,6 +443,7 @@ class Desktop:
             flat.extend(a if isinstance(a, list) else [a])
         params = {
             "actions": flat,
+            "observe": observe,
             "screenshot": screenshot,
             "see": see,
             "settle": settle,
@@ -414,6 +464,8 @@ class Desktop:
         )
         if res.get("screenshot"):
             out.screenshot = _screenshot(res["screenshot"])
+        if res.get("crop"):
+            out.crop = _screenshot(res["crop"])
         if res.get("see"):
             out.observation = _observation(res["see"])
         if check and not out.ok:
@@ -483,6 +535,12 @@ class Desktop:
             return RunResult(code=None, pid=res.get("pid"))
         return RunResult(res["code"], res["stdout"], res["stderr"], res["timed_out"], res.get("elapsed", 0.0))
 
+    def script(self, code: str, timeout: float = 120.0) -> RunResult:
+        """Run Python inside the desktop with the GUI API preloaded (see minion/agent/client.py):
+        loops and retries without a round trip per step. Returns what it printed."""
+        res = self.call("script", {"code": code, "timeout": timeout}, timeout=timeout + 30)
+        return RunResult(res["code"], res["stdout"], res["stderr"], res["timed_out"], res.get("elapsed", 0.0))
+
     def upload(self, src: str | os.PathLike, dst: str = "~/") -> str:
         self._wake()
         self.backend.copy_in(self.name, str(src), dst)
@@ -497,7 +555,7 @@ class Desktop:
     def write_text(self, path: str, text: str) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             local = Path(tmp) / Path(path).name
-            local.write_text(text, encoding="utf-8")
+            local.write_bytes(text.encode("utf-8"))  # no CRLF translation on Windows hosts
             self.upload(local, path)
 
     def read_text(self, path: str) -> str:

@@ -49,6 +49,20 @@ def _desk(name: str) -> Desktop:
         return d
 
 
+_toolkits: dict = {}
+
+
+def _toolkit(session: str):
+    from .tools import Toolkit
+
+    with _desk_lock:
+        tk = _toolkits.get(session)
+        if tk is None:
+            tk = Toolkit(in_process_viewer=True)
+            _toolkits[session] = tk
+        return tk
+
+
 def _forget(name: str) -> None:
     with _desk_lock:
         d = _desktops.pop(name, None)
@@ -60,6 +74,7 @@ class Handler(BaseHTTPRequestHandler):
     server_version = f"minion/{__version__}"
     token: str | None = None
     quiet = False
+    local_only = True
 
     # -- plumbing -----------------------------------------------------------
     def log_message(self, fmt, *args):  # noqa: N802 - stdlib API
@@ -69,7 +84,8 @@ class Handler(BaseHTTPRequestHandler):
     def _authorized(self, query: dict) -> bool:
         if not self.token:
             return True
-        if query.get("token", [None])[0] == self.token:
+        given = query.get("token", [None])[0]
+        if given and secrets.compare_digest(given, self.token):
             return True
         auth = self.headers.get("Authorization", "")
         if auth.startswith("Bearer ") and secrets.compare_digest(auth[7:], self.token):
@@ -78,6 +94,26 @@ class Handler(BaseHTTPRequestHandler):
         if COOKIE in cookie and secrets.compare_digest(cookie[COOKIE].value, self.token):
             return True
         return False
+
+    def _host_ok(self) -> bool:
+        """On a loopback bind, only loopback Host names (blocks DNS-rebinding pages)."""
+        if not self.local_only:
+            return True
+        host = self.headers.get("Host") or ""
+        name = host[: host.find("]") + 1] if host.startswith("[") else host.split(":")[0]
+        return name.lower() in ("127.0.0.1", "localhost", "[::1]", "")
+
+    def _csrf_ok(self) -> bool:
+        """Mutating requests must be impossible to forge from another web page: a Bearer token,
+        our custom header or a JSON body all force a CORS preflight, which this server never grants."""
+        if self.headers.get("Authorization", "").startswith("Bearer "):
+            return True
+        origin = self.headers.get("Origin")
+        if origin and urlparse(origin).netloc != (self.headers.get("Host") or ""):
+            return False
+        return self.headers.get("X-Minion") == "1" or (self.headers.get("Content-Type") or "").startswith(
+            "application/json"
+        )
 
     def _send(self, code: int, body: bytes, ctype: str, headers: dict | None = None) -> None:
         self.send_response(code)
@@ -139,8 +175,17 @@ class Handler(BaseHTTPRequestHandler):
         url = urlparse(self.path)
         query = parse_qs(url.query)
         parts = [p for p in url.path.split("/") if p]
+        if not self._host_ok():
+            return self._error(403, "forbidden host")
         if method == "GET" and parts[:1] == ["static"]:  # public assets (no data in them)
             return self._static("/".join(parts[1:]), query)
+        if method == "GET" and parts == ["openapi.json"]:  # public: describes the API, holds no data
+            from .tools import openapi
+
+            host = self.headers.get("Host") or "127.0.0.1:4747"
+            return self._json(openapi(f"http://{host}"))
+        if method in ("POST", "DELETE") and not self._csrf_ok():
+            return self._error(403, "cross-site request refused: send JSON, a Bearer token or `X-Minion: 1`")
         if not self._authorized(query):
             if method == "GET" and (not parts or parts[0] in ("view",)):
                 self._send(
@@ -181,6 +226,8 @@ class Handler(BaseHTTPRequestHandler):
         if parts == ["profiles"]:
             reg = profiles.load_all()
             return self._json([reg[n].summary() for n in profiles.names(reg)])
+        if parts and parts[0] == "tools":
+            return self._tools(method, parts[1:], query)
         if not parts or parts[0] != "desktops":
             return self._error(404, "unknown endpoint")
         be = get_backend()
@@ -301,6 +348,26 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(new.to_dict(), 201)
         return self._error(404, f"unknown operation {op!r}")
 
+    def _tools(self, method: str, parts: list[str], query: dict) -> None:
+        """The universal toolkit over HTTP: definitions in every format, and calls.
+        Pass a session id (body "session" or header X-Minion-Session) to keep each agent's
+        "current desktop" separate."""
+        fmt = query.get("format", ["mcp"])[0]
+        compact = query.get("compact", ["0"])[0] in ("1", "true")
+        if method == "GET" and not parts:
+            return self._json(_toolkit("default").definitions(fmt, compact=compact))
+        if method != "POST":
+            return self._error(405, "POST a tool call")
+        body = self._body()
+        session = body.get("session") or self.headers.get("X-Minion-Session") or "default"
+        if parts == ["call"]:
+            name, args = body.get("name"), body.get("arguments") or {}
+        elif len(parts) == 1:
+            name, args = parts[0], {k: v for k, v in body.items() if k != "session"}
+        else:
+            return self._error(404, "unknown tools endpoint")
+        return self._json(_toolkit(session).call(name, args).to_mcp())
+
     def _handoff(self, method: str, name: str, query: dict) -> None:
         with _handoff_lock:
             h = _handoffs.get(name)
@@ -347,7 +414,8 @@ def make_server(
     if token == "":
         token = secrets.token_urlsafe(16)
     port = _free_port(host, port, fallback)
-    handler = type("MinionHandler", (Handler,), {"token": token, "quiet": quiet})
+    local_only = host in ("127.0.0.1", "localhost", "::1")
+    handler = type("MinionHandler", (Handler,), {"token": token, "quiet": quiet, "local_only": local_only})
     httpd = ThreadingHTTPServer((host, port), handler)
     httpd.daemon_threads = True
     shown = "127.0.0.1" if host in ("0.0.0.0", "") else host

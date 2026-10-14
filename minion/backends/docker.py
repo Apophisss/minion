@@ -95,6 +95,7 @@ class DockerBackend(Backend):
             or os.environ.get("MINION_DOCKER")
             or ("docker" if shutil.which("docker") else "podman" if shutil.which("podman") else "docker")
         )
+        self._awake: dict[str, float] = {}  # desktop -> when we last saw it running
 
     # -- plumbing ------------------------------------------------------
     def _run(
@@ -423,12 +424,14 @@ class DockerBackend(Backend):
             self._wait_ready(name)
 
     def stop(self, name: str) -> None:
+        self._awake.pop(name, None)
         info = self.get(name)
         if info.state == "paused":
             self._run("unpause", self.cname(name), check=False)
         self._run("stop", "-t", "5", self.cname(name), timeout=60)
 
     def freeze(self, name: str) -> None:
+        self._awake.pop(name, None)
         info = self.get(name)
         if info.state == "running":
             self._run("pause", self.cname(name))
@@ -440,6 +443,21 @@ class DockerBackend(Backend):
         if info.state == "paused":
             self._run("unpause", self.cname(name))
 
+    def ensure_awake(self, name: str) -> None:
+        """A paused container freezes our open `docker exec` bridge too: unpause before writing.
+        The state is cached for a second so bursts of calls cost one `docker inspect`."""
+        now = time.monotonic()
+        cache = self._awake
+        if now - cache.get(name, -10.0) < 1.0:
+            return
+        res = self._run("inspect", "-f", "{{.State.Status}}", self.cname(name), check=False, timeout=20)
+        status = res.stdout.decode().strip()
+        if status == "paused":
+            self._run("unpause", self.cname(name), check=False, timeout=30)
+        elif status in ("exited", "created", "dead"):
+            self.start(name)
+        cache[name] = time.monotonic()
+
     def channel(self, name: str) -> Channel:
         cmd = [self.bin, "exec", "-i", self.cname(name), "python3", "-S", BRIDGE]
         return Channel(lambda: ProcessTransport(cmd), label=f"desktop {name!r}")
@@ -449,8 +467,11 @@ class DockerBackend(Backend):
             raise NotFound(f"{src} does not exist")
         c = self.cname(name)
         dst = expand_home(dst)
+        into_dir = dst.endswith("/") or self._run("exec", c, "test", "-d", dst, check=False, timeout=30).returncode == 0
+        target = f"{dst.rstrip('/')}/{os.path.basename(os.path.normpath(src))}" if into_dir else dst
         self._run("cp", src, f"{c}:{dst}", timeout=600)
-        self._run("exec", "-u", "root", c, "chown", "-R", "agent:agent", dst, check=False, timeout=120)
+        if target.startswith((HOME + "/", "/tmp/")):  # never chown system directories
+            self._run("exec", "-u", "root", c, "chown", "-R", "agent:agent", target, check=False, timeout=120)
 
     def copy_out(self, name: str, src: str, dst: str) -> None:
         self._run("cp", f"{self.cname(name)}:{expand_home(src)}", dst, timeout=600)

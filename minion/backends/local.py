@@ -11,6 +11,7 @@ import json
 import os
 import shutil
 import signal
+import stat
 import subprocess
 import sys
 import tarfile
@@ -108,6 +109,9 @@ class LocalBackend(Backend):
         meta = self._meta(name)
         base = Path(f"/tmp/minion-{os.getuid()}")
         base.mkdir(mode=0o700, exist_ok=True)
+        st = os.lstat(base)
+        if not stat.S_ISDIR(st.st_mode) or st.st_uid != os.getuid() or (st.st_mode & 0o077):
+            raise BackendError(f"{base} is not a private directory owned by you; remove it and retry")
         return base / meta["id"][:12]
 
     def _save_meta(self, name: str, meta: dict) -> None:

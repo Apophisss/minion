@@ -75,6 +75,42 @@ class Perception:
         self.size = display_size
         self.registry: dict[int, object] = {}
         self.registry_time = 0.0
+        # Stable @ids: the same control keeps its id across looks (keys: AT-SPI node objects,
+        # which libatspi/PyGObject keep identical while they live, or a role/name/place key).
+        self._ids: dict[object, int] = {}
+        self._seen_at: dict[object, int] = {}
+        self._next_id = 1
+        self._look = 0
+        self.last_view: dict | None = None  # for "changes" diffs
+
+    # -- ids ----------------------------------------------------------
+    def _key(self, el) -> object:
+        node = getattr(el, "node", None)
+        if node is not None and not isinstance(el, OcrRef):
+            return node
+        cx, cy = el.center
+        return ("ocr", getattr(el, "text", ""), cx // 12, cy // 12)
+
+    def _assign(self, items: list) -> None:
+        self._look += 1
+        for el in items:
+            key = self._key(el)
+            eid = self._ids.get(key)
+            if eid is None:
+                eid = self._next_id
+                self._next_id += 1
+                self._ids[key] = eid
+            self._seen_at[key] = self._look
+            el.id = eid
+        if len(self._ids) > 4000 or self._look % 20 == 0:  # forget controls unseen for a while
+            stale = [k for k, look in self._seen_at.items() if self._look - look > 5]
+            for k in stale:
+                self._ids.pop(k, None)
+                self._seen_at.pop(k, None)
+        if self._next_id > 99999:
+            self._ids.clear()
+            self._seen_at.clear()
+            self._next_id = 1
 
     # -- see ----------------------------------------------------------
     def see(
@@ -84,6 +120,7 @@ class Perception:
         max_elements: int = 250,
         register: bool = True,
         text_limit: int = 160,
+        changes: bool = False,
     ) -> dict:
         t0 = time.monotonic()
         wins = self.windows.list()
@@ -125,21 +162,45 @@ class Perception:
                     ocr_note = f"OCR failed: {e}"
             else:
                 ocr_note = "OCR is not installed"
-
-        refs: dict[int, object] = {el.id: el for el in elements}
-        next_id = len(elements) + 1
-        ocr_refs = []
-        for ln in ocr_lines:
-            ref = OcrRef(next_id, ln.text, ln.x, ln.y, ln.w, ln.h)
-            refs[next_id] = ref
-            ocr_refs.append(ref)
-            next_id += 1
+        ocr_refs = [OcrRef(0, ln.text, ln.x, ln.y, ln.w, ln.h) for ln in ocr_lines]
         if register:
-            self.registry = refs
+            self._assign(list(elements) + ocr_refs)
+            self.registry = {el.id: el for el in elements}
+            self.registry.update({r.id: r for r in ocr_refs})
             self.registry_time = time.time()
+        else:
+            for i, el in enumerate(list(elements) + ocr_refs, 1):
+                el.id = i
 
-        # -- compose text --------------------------------------------
-        out = [f"Screen {sw}x{sh} · {len(wins)} window{'s' if len(wins) != 1 else ''}"]
+        where = f'"{target.title}"' if target else "the screen"
+        full = self._compose((sw, sh), wins, where, elements, ocr_refs, snap, a11y_note, ocr_note, want_ocr)
+        view = self._view(wins, target, elements, ocr_refs)
+        text = full
+        diff = None
+        if changes and register and self.last_view is not None:
+            diff = self._diff(self.last_view, view)
+            if diff is not None:
+                text = diff["text"]
+        if register:
+            self.last_view = view
+        return {
+            "text": text,
+            "screen": [sw, sh],
+            "windows": [w.to_dict() for w in wins],
+            "focused": target.to_dict() if target else None,
+            "elements": [e.to_dict() for e in elements],
+            "ocr": [
+                {"id": f"@{r.id}", "text": r.text, "x": r.center[0], "y": r.center[1], "box": [r.x, r.y, r.w, r.h]}
+                for r in ocr_refs
+            ],
+            "sources": {"a11y": bool(elements), "ocr": bool(ocr_refs)},
+            "changes": {k: v for k, v in diff.items() if k != "text"} if diff else None,
+            "elapsed": round(time.monotonic() - t0, 3),
+        }
+
+    @staticmethod
+    def _compose(size, wins, where, elements, ocr_refs, snap, a11y_note, ocr_note, want_ocr) -> str:
+        out = [f"Screen {size[0]}x{size[1]} · {len(wins)} window{'s' if len(wins) != 1 else ''}"]
         for i, w in enumerate(wins, 1):
             flags = []
             if w.focused:
@@ -150,7 +211,6 @@ class Perception:
             out.append(f'  [{i}] "{w.title}" — {w.app}{tag} at {w.x},{w.y} {w.w}x{w.h}')
         if not wins:
             out.append("  (no windows open — use `open` to launch an app)")
-        where = f'"{target.title}"' if target else "the screen"
         if elements:
             out.append("")
             out.append(f"UI of {where} (click/fill with @id; (x,y) is the element center):")
@@ -170,18 +230,65 @@ class Perception:
             out.append(f"(No readable UI: {note}. Take a screenshot to look at it.)")
         elif ocr_note and want_ocr:
             out.append(f"({ocr_note})")
+        return "\n".join(out)
+
+    @staticmethod
+    def _view(wins, target, elements, ocr_refs) -> dict:
+        items = {}
+        for el in elements:
+            cx, cy = el.center
+            line = a11y.format_elements([el])[0].strip()
+            items[el.id] = ((el.role, el.name, el.text, el.value, tuple(el.states), cx // 6, cy // 6), line)
+        for r in ocr_refs:
+            cx, cy = r.center
+            items[r.id] = (("ocr", r.text, cx // 6, cy // 6), f'@{r.id} text "{r.text}" ({cx},{cy}) [OCR]')
         return {
-            "text": "\n".join(out),
-            "screen": [sw, sh],
-            "windows": [w.to_dict() for w in wins],
-            "focused": target.to_dict() if target else None,
-            "elements": [e.to_dict() for e in elements],
-            "ocr": [
-                {"id": f"@{r.id}", "text": r.text, "x": r.center[0], "y": r.center[1], "box": [r.x, r.y, r.w, r.h]}
-                for r in ocr_refs
-            ],
-            "sources": {"a11y": bool(elements), "ocr": bool(ocr_refs)},
-            "elapsed": round(time.monotonic() - t0, 3),
+            "time": time.time(),
+            "windows": {w.id: (w.title, w.focused) for w in wins},
+            "focused": target.id if target else None,
+            "items": items,
+        }
+
+    @staticmethod
+    def _diff(old: dict, new: dict) -> dict | None:
+        """What changed between two looks, or None when a full view is the better answer."""
+        if old.get("focused") != new.get("focused"):
+            return None  # another window: show everything
+        o, n = old["items"], new["items"]
+        added = [i for i in n if i not in o]
+        removed = [i for i in o if i not in n]
+        changed = [i for i in n if i in o and n[i][0] != o[i][0]]
+        if len(added) + len(changed) > max(25, 0.6 * max(1, len(n))):
+            return None  # most of the screen changed: show everything
+        lines = []
+        ow, nw = old["windows"], new["windows"]
+        for wid, (title, _) in nw.items():
+            if wid not in ow:
+                lines.append(f'  window opened: "{title}"')
+            elif ow[wid][0] != title:
+                lines.append(f'  window renamed: "{ow[wid][0]}" → "{title}"')
+        for wid, (title, _) in ow.items():
+            if wid not in nw:
+                lines.append(f'  window closed: "{title}"')
+        for i in added:
+            lines.append("  + " + n[i][1])
+        for i in changed:
+            lines.append("  ~ " + n[i][1])
+        for i in removed:
+            lines.append("  - " + o[i][1].split(" (")[0])
+        ago = max(0.0, new["time"] - old["time"])
+        unchanged = len(n) - len(added) - len(changed)
+        head = (
+            f"Changes since your last look {ago:.1f}s ago "
+            f"({unchanged} element{'s' if unchanged != 1 else ''} unchanged; their @ids still work):"
+        )
+        if not lines:
+            lines.append("  (nothing changed)")
+        return {
+            "text": "\n".join([head, *lines]),
+            "added": len(added),
+            "changed": len(changed),
+            "removed": len(removed),
         }
 
     # -- targets ------------------------------------------------------
@@ -309,8 +416,9 @@ class Perception:
             tries += 1
             present = any(match_score(query, w.title) >= 50 for w in self.windows.list(with_states=False))
             if not present:
-                # OCR is slow: only every third poll.
-                present = bool(self.find_text(query, use_ocr=(tries % 3 == 1)))
+                # OCR is slow: when waiting for text to appear, only every third poll uses it. When
+                # waiting for it to go, absence only counts if OCR looked too (text may be OCR-only).
+                present = bool(self.find_text(query, use_ocr=gone or tries % 3 == 1))
             if present != gone:
                 return True, time.monotonic() - start
             if time.monotonic() - start >= timeout:

@@ -10,7 +10,7 @@ const toast = (text, ms = 3000) => {
   clearTimeout(toast._t); toast._t = setTimeout(() => (t.style.display = "none"), ms);
 };
 const post = (path, body) => fetch(BASE + path, { method: "POST", credentials: "same-origin",
-  headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) });
+  headers: { "Content-Type": "application/json", "X-Minion": "1" }, body: JSON.stringify(body || {}) });
 
 function setStatus(kind, text) {
   $("#dot").className = "dot " + kind;
@@ -112,8 +112,9 @@ catcher.addEventListener("keydown", (e) => {
     lastEsc = now;
   }
   const mods = [];
-  if (e.ctrlKey) mods.push("ctrl");
-  if (e.altKey) mods.push("alt");
+  const altGr = e.getModifierState && e.getModifierState("AltGraph");
+  if (e.ctrlKey && !altGr) mods.push("ctrl");
+  if (e.altKey && !altGr) mods.push("alt");
   if (e.metaKey) mods.push("super");
   let k = KEYMAP[e.key] || (e.key.length === 1 ? e.key : /^F\d{1,2}$/.test(e.key) ? e.key : null);
   if (!k) return;

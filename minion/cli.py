@@ -82,9 +82,11 @@ def act_and_print(args, *actions, **kw) -> int:
     d = desktop(args)
     res: ActResult = d.act(*actions, check=False, screenshot=bool(getattr(args, "shot", None)), **kw)
     if args.json:
-        emit_json({k: v for k, v in res.__dict__.items() if k not in ("screenshot", "observation")})
+        emit_json({k: v for k, v in res.__dict__.items() if k not in ("screenshot", "observation", "crop")})
     else:
         print(res.summary)
+        if res.observation is not None:
+            print(res.observation.text)
     if res.screenshot is not None:
         path = args.shot
         res.screenshot.save(path)
@@ -97,7 +99,7 @@ REMOTE_RE = re.compile(r"^([a-z0-9][a-z0-9_-]*)?:([^\\].*)$")
 
 def split_remote(path: str) -> tuple[str | None, str] | None:
     """'office-1:~/a.txt' -> ('office-1', '~/a.txt'); ':~/a.txt' -> (None, '~/a.txt')."""
-    if re.match(r"^[A-Za-z]:\\", path):  # a Windows drive path
+    if re.match(r"^[A-Za-z]:[\\/]", path):  # a Windows drive path (C:\x or c:/x)
         return None
     m = REMOTE_RE.match(path)
     if not m:
@@ -109,6 +111,22 @@ def split_remote(path: str) -> tuple[str | None, str] | None:
 def cmd_up(args) -> int:
     profile = args.profile or config.DEFAULT_PROFILE
     t0 = time.time()
+    if args.count and args.count > 1:
+        desks = Desktop.create_many(
+            profile,
+            args.count,
+            size=args.size,
+            memory=args.memory or "",
+            cpus=args.cpus or "",
+            network=not args.offline,
+            progress=None if args.quiet else progress_printer,
+        )
+        if args.json:
+            emit_json([d.to_dict() for d in desks])
+        else:
+            ok(f"{len(desks)} desktops ready in {time.time() - t0:.1f}s: {', '.join(d.name for d in desks)}")
+            info("  Use one with -d NAME, e.g. minion -d " + desks[0].name + " see")
+        return 0
     d = Desktop.create(
         profile,
         name=args.name,
@@ -291,7 +309,7 @@ def cmd_pull(args) -> int:
 def cmd_see(args) -> int:
     d = desktop(args)
     ocr = True if args.ocr else ("auto" if not args.no_ocr else False)
-    obs = d.see(ocr=ocr, window=args.window, full_text=args.full)
+    obs = d.see(ocr=ocr, window=args.window, full_text=args.full, changes=args.changes)
     if args.json:
         emit_json(obs.__dict__)
     else:
@@ -403,7 +421,7 @@ def cmd_act(args) -> int:
             steps.extend(data if isinstance(data, list) else [data])
         else:
             steps.append(s)
-    return act_and_print(args, *steps)
+    return act_and_print(args, *steps, observe=args.observe)
 
 
 def cmd_open(args) -> int:
@@ -539,7 +557,47 @@ def cmd_serve(args) -> int:
 def cmd_mcp(args) -> int:
     from .mcp import main as mcp_main
 
-    mcp_main(preload=args.preload, idle_freeze=args.idle_freeze)
+    mcp_main(preload=args.preload, idle_freeze=args.idle_freeze, compact=args.compact)
+    return 0
+
+
+def cmd_script(args) -> int:
+    d = desktop(args)
+    src = args.code
+    if src == "-":
+        code = sys.stdin.read()
+    elif os.path.isfile(src):
+        code = Path(src).read_text(encoding="utf-8")
+    else:
+        code = src
+    res = d.script(code, timeout=args.timeout)
+    if args.json:
+        emit_json(res.__dict__)
+        return 0 if res.ok else 1
+    if res.stdout:
+        sys.stdout.write(res.stdout if res.stdout.endswith("\n") else res.stdout + "\n")
+    if res.stderr:
+        sys.stderr.write(res.stderr if res.stderr.endswith("\n") else res.stderr + "\n")
+    return 124 if res.timed_out else (res.code or 0)
+
+
+def cmd_tools(args) -> int:
+    from .tools import Toolkit
+
+    tk = Toolkit()
+    if args.call:
+        arguments = json.loads(args.arguments) if args.arguments else {}
+        res = tk.call(args.call, arguments)
+        if args.json:
+            emit_json(res.to_mcp())
+        else:
+            print(res.text)
+            for i, (mime, data) in enumerate(res.images, 1):
+                path = Path(f"tool-image-{i}.{mime.split('/')[-1]}")
+                path.write_bytes(__import__("base64").b64decode(data))
+                info(f"image → {path}")
+        return 1 if res.is_error else 0
+    emit_json(tk.definitions(args.format, compact=args.compact))
     return 0
 
 
@@ -603,6 +661,7 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--env", "-e", action="append", help="environment variable KEY=VALUE (repeatable)")
     sp.add_argument("--port", "-p", action="append", help="publish a desktop port on 127.0.0.1 (repeatable)")
     sp.add_argument("--view", action="store_true", help="open the live view when ready")
+    sp.add_argument("--count", "-c", type=int, default=1, help="create N desktops in parallel")
     sp.add_argument("--quiet", "-q", action="store_true", help="no progress output")
 
     sp = add("ls", cmd_ls, "list desktops", aliases=["list", "ps"])
@@ -655,6 +714,7 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--no-ocr", action="store_true", help="never run OCR")
     sp.add_argument("--window", "-w", help="describe this window instead of the focused one")
     sp.add_argument("--full", action="store_true", help="keep paragraphs whole (for reading)")
+    sp.add_argument("--changes", action="store_true", help="only what changed since the previous look")
 
     sp = add("shot", cmd_shot, "take a screenshot", aliases=["screenshot"])
     sp.add_argument("-o", "--output", help="file (.png/.jpg/.webp) or - for stdout")
@@ -715,6 +775,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     sp = add("act", cmd_act, 'run several actions: minion act "click @3" "type hello" "key Return"')
     sp.add_argument("steps", nargs="+", help="action strings, JSON objects/lists, or - for JSON on stdin")
+    sp.add_argument(
+        "--observe", default="summary", choices=["summary", "changes", "see"], help="what to report after the actions"
+    )
     sp.add_argument("--shot", metavar="FILE")
 
     sp = add("open", cmd_open, "open an app, URL, file or command")
@@ -746,6 +809,18 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("-o", "--output", help="file.html (default) or file.gif")
     sp.add_argument("--open", action="store_true")
 
+    sp = add("script", cmd_script, "run Python inside the desktop with the GUI API (FILE, - or code)")
+    sp.add_argument("code", help="a .py file, - for stdin, or Python code")
+    sp.add_argument("--timeout", "-t", type=float, default=120.0)
+
+    sp = add("tools", cmd_tools, "print tool definitions for any LLM API, or call a tool")
+    sp.add_argument(
+        "--format", "-f", default="openai", choices=["openai", "openai-responses", "anthropic", "gemini", "mcp"]
+    )
+    sp.add_argument("--compact", action="store_true", help="the single `computer` tool")
+    sp.add_argument("--call", metavar="NAME", help="call a tool, e.g. --call see")
+    sp.add_argument("arguments", nargs="?", help="JSON arguments for --call")
+
     sp = add("logs", cmd_logs, "show the desktop's session log")
     sp.add_argument("--tail", type=int, default=200)
 
@@ -764,6 +839,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     sp = add("mcp", cmd_mcp, "run the MCP server on stdio (for Claude Code, Claude Desktop, Cursor, ...)")
     sp.add_argument("--preload", help="comma-separated profiles to prepare in the background")
+    sp.add_argument("--compact", action="store_true", help="expose one `computer` tool (smallest context)")
     sp.add_argument("--idle-freeze", type=float, default=config.env_float("MINION_IDLE_FREEZE", 600))
 
     add("doctor", cmd_doctor, "check that everything is set up")

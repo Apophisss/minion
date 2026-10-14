@@ -2,7 +2,7 @@
 const $ = (s) => document.querySelector(s);
 const api = async (path, opts = {}) => {
   const r = await fetch(path, { credentials: "same-origin", ...opts,
-    headers: { "Content-Type": "application/json", ...(opts.headers || {}) } });
+    headers: { "Content-Type": "application/json", "X-Minion": "1", ...(opts.headers || {}) } });
   if (!r.ok) {
     let msg = r.statusText;
     try { msg = (await r.json()).error || msg; } catch (_) {}
