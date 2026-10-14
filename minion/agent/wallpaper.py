@@ -16,7 +16,8 @@ def _font(size: int):
 
 def make(path: str, width: int, height: int, label: str = "") -> str:
     w, h = max(64, width), max(64, height)
-    grad = Image.linear_gradient("L").rotate(-32, expand=True).resize((w, h))
+    horiz = Image.linear_gradient("L").rotate(90).transpose(Image.Transpose.FLIP_LEFT_RIGHT).resize((w, h))
+    grad = Image.blend(horiz, Image.linear_gradient("L").resize((w, h)), 0.35)
     dark = Image.new("RGB", (w, h), (10, 14, 32))
     deep = Image.new("RGB", (w, h), (40, 33, 110))
     img = Image.composite(deep, dark, grad)
@@ -28,7 +29,7 @@ def make(path: str, width: int, height: int, label: str = "") -> str:
     ):
         size = int(max(w, h) * r)
         mask = ImageOps.invert(Image.radial_gradient("L").resize((size * 2, size * 2)))
-        mask = mask.point(lambda v, s=strength: int(v * s))
+        mask = mask.point(lambda v, s=strength: int(max(0, v - 96) * 1.6 * s))  # 0 well before the edge
         glow = Image.new("RGB", mask.size, color)
         img.paste(glow, (int(w * cx) - size, int(h * cy) - size), mask)
     img = img.filter(ImageFilter.GaussianBlur(radius=2))

@@ -62,3 +62,26 @@ def test_pages_and_cookie(http):
     with pytest.raises(urllib.error.HTTPError) as e:
         get(f"{base}/static/../server.py")
     assert e.value.code in (400, 404)
+
+
+def test_handoff_round_trip(http):
+    base, token = http
+    hdr = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+
+    def call(method, path, body=None):
+        data = json.dumps(body).encode() if body is not None else None
+        req = urllib.request.Request(f"{base}{path}", data=data, method=method, headers=hdr)
+        with urllib.request.urlopen(req, timeout=5) as r:
+            raw = r.read()
+        return json.loads(raw) if raw else None
+
+    path = "/api/desktops/demo/handoff"
+    assert call("GET", path) is None
+    call("POST", path, {"message": "Please sign in"})
+    pending = call("GET", path)
+    assert pending["message"] == "Please sign in" and not pending["done"]
+    call("POST", path, {"note": "signed in"})
+    done = call("GET", path)
+    assert done["done"] and done["note"] == "signed in"
+    call("DELETE", path)
+    assert call("GET", path) is None

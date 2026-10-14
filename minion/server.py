@@ -199,8 +199,10 @@ class Handler(BaseHTTPRequestHandler):
                     _desktops[d.name] = d
                 return self._json({**d.to_dict(), "hello": d.hello()}, 201)
         name = parts[1]
-        d = _desk(name)
         op = parts[2] if len(parts) > 2 else None
+        if op == "handoff":  # pure server state: no desktop connection needed
+            return self._handoff(method, name, query)
+        d = _desk(name)
         if op is None:
             if method == "GET":
                 return self._json({**d.to_dict(), "hello": d.hello()})
@@ -254,8 +256,6 @@ class Handler(BaseHTTPRequestHandler):
             if q("format") == "gif":
                 return self._send(200, d.recording("gif"), "image/gif")
             return self._send(200, d.recording("html").encode(), "text/html; charset=utf-8")
-        if op == "handoff":
-            return self._handoff(method, name, query)
         if method != "POST":
             return self._error(405, "method not allowed")
         body = self._body()

@@ -286,6 +286,63 @@ def _expand_embedded(node, raw: str) -> str:
     return "".join(out)
 
 
+def _col(c: int) -> str:
+    """0 -> A, 25 -> Z, 26 -> AA (spreadsheet column names)."""
+    out, c = "", c + 1
+    while c:
+        c, r = divmod(c - 1, 26)
+        out = chr(65 + r) + out
+    return out
+
+
+def _cell_rc(table, cell) -> tuple[int, int] | None:
+    try:
+        res = Atspi.TableCell.get_position(cell)
+        if isinstance(res, tuple) and len(res) == 3 and res[0]:
+            return int(res[1]), int(res[2])
+    except Exception:
+        pass
+    try:
+        idx = cell.get_index_in_parent()
+        return int(Atspi.Table.get_row_at_index(table, idx)), int(Atspi.Table.get_column_at_index(table, idx))
+    except Exception:
+        return None
+
+
+def _visible_cells(table, x: int, y: int, w: int, h: int, deadline: float, max_rows: int = 60,
+                   max_cols: int = 26, max_cells: int = 150):
+    """The non-empty cells currently on screen in a huge table (a spreadsheet), with their A1 refs."""
+    try:
+        tl = Atspi.Component.get_accessible_at_point(table, x + 3, y + 3, Atspi.CoordType.SCREEN)
+        br = Atspi.Component.get_accessible_at_point(table, x + w - 4, y + h - 4, Atspi.CoordType.SCREEN)
+    except Exception:
+        return None
+    if tl is None or br is None:
+        return None
+    a, b = _cell_rc(table, tl), _cell_rc(table, br)
+    if a is None or b is None:
+        return None
+    r0, c0 = a
+    r1, c1 = min(b[0], r0 + max_rows - 1), min(b[1], c0 + max_cols - 1)
+    found = []
+    for r in range(r0, r1 + 1):
+        for c in range(c0, c1 + 1):
+            if time.monotonic() > deadline or len(found) >= max_cells:
+                return (r0, c0, r1, c1), found
+            try:
+                cell = Atspi.Table.get_accessible_at(table, r, c)
+            except Exception:
+                continue
+            if cell is None:
+                continue
+            content = _text(cell, 80) if "Text" in _interfaces(cell) else ""
+            if not content:
+                continue
+            ext = _extents(cell) or (0, 0, 0, 0)
+            found.append((f"{_col(c)}{r + 1}", content, cell, ext))
+    return (r0, c0, r1, c1), found
+
+
 def _value(node) -> str:
     try:
         v = Atspi.Value.get_current_value(node)
@@ -506,6 +563,32 @@ def snapshot(
         except Exception:
             return
         if n > max_children * 10:
+            cells = _visible_cells(node, x, y, w, h, deadline) if "Table" in ifaces and boxed else None
+            if cells is not None:
+                (r0, c0, r1, c1), found = cells
+                elements.append(
+                    Element(
+                        id=len(elements) + 1,
+                        role="sheet" if role == "table" else role,
+                        name=name,
+                        depth=child_shown_depth,
+                        x=x,
+                        y=y,
+                        w=w,
+                        h=h,
+                        text=f"visible {_col(c0)}{r0 + 1}:{_col(c1)}{r1 + 1}, {len(found)} non-empty cells",
+                        node=node,
+                        in_doc=in_doc,
+                    )
+                )
+                for ref, content, cell, (cx0, cy0, cw, ch) in found:
+                    elements.append(
+                        Element(
+                            id=len(elements) + 1, role="cell", name=ref, depth=child_shown_depth + 1,
+                            x=cx0, y=cy0, w=cw, h=ch, text=content, node=cell, in_doc=in_doc,
+                        )
+                    )
+                return
             elements.append(
                 Element(
                     id=len(elements) + 1,

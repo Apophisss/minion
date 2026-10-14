@@ -499,16 +499,19 @@ class Agent:
             text = str(p.get("text") if p.get("text") is not None else "")
             t = r(p.get("target"), prefer_input=True)
             el = t.element
-            if isinstance(el, a11y.Element) and a11y.set_text(el, text):
+            # Native apps: set the text directly (instant, exact). Web pages: really type it, so the
+            # page's own input handlers (React, Vue, autocomplete...) see every keystroke.
+            native = isinstance(el, a11y.Element) and not el.in_doc
+            if native and len(text) > 40 and a11y.set_text(el, text):
                 return f"filled {t.desc} with {len(text)} chars"
             self.xi.click(t.x, t.y)
-            time.sleep(0.05)
+            time.sleep(0.08)
             self.xi.key("ctrl+a")
             if text:
                 self.xi.type(text)
             else:
                 self.xi.key("BackSpace")
-            return f"filled {t.desc} with {len(text)} chars (typed)"
+            return f"filled {t.desc} with {len(text)} chars"
         if action == "key":
             keys = p.get("keys")
             if not keys:
@@ -696,8 +699,32 @@ class Agent:
             return f"{self._browser()} {shlex.quote(url)}", "url"
         path = os.path.expanduser(t)
         if os.path.exists(path):
-            return f"xdg-open {shlex.quote(path)}", "file"
+            return self._file_opener(path), "file"
         return t, "command"
+
+    OFFICE_EXT = {".docx", ".doc", ".odt", ".rtf", ".xlsx", ".xls", ".ods", ".csv", ".tsv", ".pptx", ".ppt",
+                  ".odp", ".odg"}
+    WEB_EXT = {".pdf", ".html", ".htm", ".svg", ".png", ".jpg", ".jpeg", ".gif", ".webp"}
+    TEXT_EXT = {".txt", ".md", ".py", ".js", ".ts", ".json", ".yaml", ".yml", ".toml", ".sh", ".css", ".xml",
+                ".log", ".ini", ".cfg"}
+
+    def _file_opener(self, path: str) -> str:
+        """Pick the app for a file by extension (deterministic), falling back to xdg-open."""
+        ext = os.path.splitext(path)[1].lower()
+        q = shlex.quote(path)
+        if ext in self.OFFICE_EXT and shutil.which("libreoffice"):
+            return f"libreoffice {q}"
+        if ext in self.WEB_EXT and self._browser() != "xdg-open":
+            return f"{self._browser()} {q}"
+        if ext in self.TEXT_EXT:
+            for editor in ("mousepad", "geany", "gedit"):
+                if shutil.which(editor):
+                    return f"{editor} {q}"
+        if os.path.isdir(path):
+            for fm in ("pcmanfm", "thunar", "nautilus"):
+                if shutil.which(fm):
+                    return f"{fm} {q}"
+        return f"xdg-open {q}"
 
     def _open(self, target, wait: float = 12.0) -> dict:
         if not target:

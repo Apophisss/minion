@@ -15,7 +15,7 @@ RUN printf '%s\n' \
 
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
-      tini sudo ca-certificates curl procps xdg-utils \
+      tini sudo ca-certificates curl procps xdg-utils desktop-file-utils shared-mime-info \
       xvfb xauth x11-xserver-utils x11-utils xdotool wmctrl xclip jwm xterm \
       dbus-daemon dbus-bin at-spi2-core gir1.2-atspi-2.0 \
       python3 python3-pil python3-gi \
