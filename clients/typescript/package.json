@@ -1,6 +1,6 @@
 {
   "name": "minion-desktop",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Zero-dependency TypeScript client for Minion: instant Linux desktops for AI agents (Vercel AI SDK, Mastra, LangChain.js or plain fetch).",
   "keywords": [
     "ai-agents",

@@ -22,9 +22,9 @@ The package will be published to npm as `minion-desktop`. Until then, install it
 ```bash
 git clone https://github.com/apophisss/minion
 cd minion/clients/typescript
-npm install && npm pack                   # builds dist/ and writes minion-desktop-0.1.0.tgz
+npm install && npm pack                   # builds dist/ and writes minion-desktop-1.0.0.tgz
 cd /path/to/your-project
-npm install /path/to/minion/clients/typescript/minion-desktop-0.1.0.tgz
+npm install /path/to/minion/clients/typescript/minion-desktop-1.0.0.tgz
 ```
 
 Once it is published, this will be `npm install minion-desktop`. The package is ESM only.

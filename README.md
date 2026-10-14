@@ -6,7 +6,7 @@
 
 <p align="center">
   Featherweight Linux desktops (office, dev, research, browser, data, Windows apps) that any agent can use:<br>
-  over <b>MCP</b>, <b>function calling</b> for any model, <b>HTTP/OpenAPI</b>, a <b>CLI</b>, <b>Python</b> or <b>TypeScript</b>.<br>
+  Claude, ChatGPT, Gemini, Cursor, VS Code, LangChain, your own code, or a model running on your laptop.<br>
   Agents read the screen as text, act in batches or in code, and use any program or website.
 </p>
 
@@ -19,14 +19,44 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-6366f1" alt="MIT"></a>
 </p>
 
+<!-- mcp-name: io.github.apophisss/minion -->
+
+## Get started
+
+All you need is [Docker](https://docs.docker.com/get-docker/) (or OrbStack or Podman). Then pick one:
+
+**1. One click** in your AI app:
+
+[![Download the Claude Desktop extension](https://img.shields.io/badge/Claude_Desktop-Download_extension-D97757?style=flat-square&logo=claude&logoColor=white)](https://github.com/apophisss/minion/releases/latest/download/minion.mcpb)
+[![Install in VS Code](https://img.shields.io/badge/VS_Code-Install_Minion-0098FF?style=flat-square)](https://insiders.vscode.dev/redirect/mcp/install?name=minion&config=%7B%22command%22%3A%22uvx%22%2C%22args%22%3A%5B%22minion-desktop%22%2C%22mcp%22%5D%7D)
+[![Add to Cursor](https://cursor.com/deeplink/mcp-install-dark.svg)](https://cursor.com/install-mcp?name=minion&config=eyJjb21tYW5kIjoidXZ4IiwiYXJncyI6WyJtaW5pb24tZGVza3RvcCIsIm1jcCJdfQ%3D%3D)
+[![Install in Visual Studio](https://img.shields.io/badge/Visual_Studio-Install_Minion-C16FDE?style=flat-square)](https://vs-open.link/mcp-install?%7B%22name%22%3A%22minion%22%2C%22command%22%3A%22uvx%22%2C%22args%22%3A%5B%22minion-desktop%22%2C%22mcp%22%5D%7D)
+[![Add to LM Studio](https://files.lmstudio.ai/deeplink/mcp-install-light.svg)](https://lmstudio.ai/install-mcp?name=minion&config=eyJjb21tYW5kIjoidXZ4IiwiYXJncyI6WyJtaW5pb24tZGVza3RvcCIsIm1jcCJdfQ%3D%3D)
+[![Install in Goose](https://goose-docs.ai/img/extension-install-dark.svg)](https://goose-docs.ai/extension?cmd=uvx&arg=minion-desktop&arg=mcp&timeout=900&id=minion&name=Minion&description=Linux%20desktops%20that%20agents%20read%20as%20text%20and%20control)
+[![Add to Kiro](https://kiro.dev/images/add-to-kiro.svg)](https://kiro.dev/launch/mcp/add?name=minion&config=%7B%22command%22%3A%22uvx%22%2C%22args%22%3A%5B%22minion-desktop%22%2C%22mcp%22%5D%7D)
+
+Claude Code: `claude plugin marketplace add apophisss/minion && claude plugin install minion@minion`. The buttons
+start Minion with [uv](https://docs.astral.sh/uv/); the Claude Desktop extension needs nothing else.
+
+**2. One line** that installs Minion and connects every AI app on your computer (Claude Desktop, Claude Code,
+Cursor, VS Code, Windsurf/Devin, Gemini CLI, Codex, LM Studio, Cline, Kiro):
+
 ```bash
-pipx install minion-desktop        # or: uv tool install minion-desktop   (needs Docker)
-minion up office                   # a full office desktop, ready in ~1.5 s
-minion open writer                 # LibreOffice Writer opens
-minion see                         # the screen as text: every control has an @id
-minion click "Bold" && minion type "Hello from an agent"
-minion view                        # watch it live in your browser
+curl -fsSL https://raw.githubusercontent.com/apophisss/minion/main/install.sh | sh        # macOS, Linux
 ```
+
+```powershell
+irm https://raw.githubusercontent.com/apophisss/minion/main/install.ps1 | iex             # Windows
+```
+
+It ends with `minion setup`, which checks Docker, prepares a desktop and runs `minion connect`. Run either one again
+any time.
+
+**3. From ChatGPT, Claude.ai or Le Chat** in the browser: run `minion share` and paste the URL it prints into the
+app's connector settings ([how](docs/remote.md)).
+
+Then just ask: *"Create an office desktop, write a one-page brief about our Q3 numbers in Writer and save it as
+brief.docx."* Every way to install is in [docs/install.md](docs/install.md).
 
 <p align="center"><img src="docs/assets/demo.gif" alt="An agent searching Wikipedia on a Minion desktop, recorded by Minion's flight recorder" width="720"></p>
 <p align="center"><sub>An agent on a <code>research</code> desktop. The GIF was made by Minion's built-in flight recorder (<code>minion replay -o demo.gif</code>).</sub></p>
@@ -39,98 +69,58 @@ minion view                        # watch it live in your browser
   file dialogs and installers, plus Windows programs through the `windows` (Wine) profile. Anything missing is one
   command away: `minion-install gimp`, a `.deb`/`.AppImage` URL, `pip:` or `npm:`.
 - **🧠 Agents read the screen as text.** `see` turns any window into a list of controls with **stable `@ids`**, taken
-  from the accessibility tree with OCR as a fallback: `@12 button "Save" (210,62)`. Spreadsheets come out as
-  `A1: value`. The text is exact and clickable, and when pixels matter, screenshots can draw the `@ids` for you.
-- **🪙 Built to save tokens.** You get diffs instead of re-reads (`see(changes=true)`: about 60 tokens instead of about 900). **Code mode**
-  runs a 50-step GUI loop in one call, actions report what changed so no extra look is needed, crops and half-size
-  screenshots cut image cost, and a **compact mode** shrinks the tool definitions from about 2,100 tokens to 230.
+  from the accessibility tree with OCR as a fallback: `@12 button "Save" (210,62)`. Web pages, editors (with line
+  numbers), terminals, dropdowns with their options, and spreadsheets (`A1: value`) all come out as exact text.
+  When pixels matter, screenshots can draw the `@ids` for you.
+- **🎯 Honest actions.** Every action waits for the screen to settle (and for web pages to load) and reports what
+  changed. Text targets must really be on screen: a miss fails with the closest candidates instead of clicking
+  something else.
+- **🪙 Built to save tokens.** You get diffs instead of re-reads (`see(changes=true)`: about 60 tokens instead of
+  about 900). **Code mode** runs a 50-step GUI loop in one call, crops and half-size screenshots cut image cost,
+  a **compact mode** shrinks the tool definitions from about 2,100 tokens to 230, and the Agent Skill costs about
+  100 tokens until it is used.
 - **🪶 Featherweight.** One small container per desktop (Xvfb, a 2-process window manager and taskbar, a small agent),
-  with no VNC and no desktop environment. Desktops are ready in about 1.5 s and use about 60 MB when idle. Idle desktops are frozen
-  automatically (0% CPU) and wake in about 0.2 s.
-- **🔌 Works with every agent.** One toolset is served everywhere: MCP for Claude Code, Cursor, VS Code, Codex,
-  Gemini CLI, OpenAI Agents SDK, LangChain, CrewAI and others; function-calling definitions for OpenAI, Anthropic,
-  Gemini and local models; HTTP with OpenAPI; a CLI and an Agent Skill for shell agents; Python and TypeScript SDKs; and native
-  adapters for **Claude, OpenAI and Gemini computer use**.
+  with no VNC and no desktop environment. Desktops are ready in about 1.5 s and use about 60 MB when idle. Idle
+  desktops are frozen automatically (0% CPU) and wake in about 0.2 s.
+- **🔌 Works with every agent.** One toolset everywhere: MCP (local or remote), function calling for OpenAI,
+  Anthropic, Gemini and local models, HTTP with OpenAPI, a CLI and an Agent Skill for shell agents, Python and
+  TypeScript SDKs, and native adapters for **Claude, OpenAI and Gemini computer use**.
 - **⚡ Parallel by design.** `create count=8` starts a desktop per worker, `fork` clones one before a risky step,
   and sessions keep agents apart.
-- **🙋 Humans in the loop.** A live view in the browser offers one-click *take control*. Agents can **hand off** ("please
-  sign in") and wait for *Done*.
-- **🎞️ Teach once, replay forever.** Every action is recorded. Export an HTML timeline or GIF, or turn the session into
-  a **Python script that replays it with no model at all**.
+- **🙋 Humans in the loop.** A live view in the browser offers one-click *take control*. Agents can **hand off**
+  ("please sign in") and wait for *Done*.
+- **🎞️ Teach once, replay forever.** Every action is recorded. Export an HTML timeline or GIF, or turn the session
+  into a **Python script that replays it with no model at all**.
 - **📦 Zero dependencies.** The host side is pure Python standard library. Desktops run in Docker or Podman
   (macOS, Windows, Linux), or natively on Linux.
 
-## Quick start
+## A quick tour from the shell
 
-**1. Install** (Python 3.11+ and [Docker](https://docs.docker.com/get-docker/) or Podman):
-
-```bash
-pipx install minion-desktop          # or: uv tool install minion-desktop / pip install minion-desktop
-minion doctor                        # checks your setup
-```
-
-The first desktop of each profile downloads its image (188–710 MB, shared layers): `minion pull office research`.
-
-**2. Connect your agent.** With MCP:
-
-```bash
-claude mcp add minion -- uvx minion-desktop mcp           # Claude Code (9 tools)
-claude mcp add minion -- uvx minion-desktop mcp --compact # one `computer` tool, smallest context
-```
-
-Or install the Claude Code plugin, which adds the MCP tools plus a skill that teaches efficient use:
-`claude plugin marketplace add apophisss/minion && claude plugin install minion@minion`.
-
-<details>
-<summary><b>Claude Desktop, Cursor, VS Code, Windsurf, Codex, Gemini CLI, …</b></summary>
-
-Most clients take the same JSON (Claude Desktop: `claude_desktop_config.json`, Cursor: `~/.cursor/mcp.json`, Windsurf: `~/.codeium/windsurf/mcp_config.json`, Gemini CLI: `~/.gemini/settings.json`):
-
-```json
-{ "mcpServers": { "minion": { "command": "uvx", "args": ["minion-desktop", "mcp"] } } }
-```
-
-VS Code (`.vscode/mcp.json`):
-
-```json
-{ "servers": { "minion": { "type": "stdio", "command": "uvx", "args": ["minion-desktop", "mcp"] } } }
-```
-
-OpenAI Codex CLI (`~/.codex/config.toml`):
-
-```toml
-[mcp_servers.minion]
-command = "uvx"
-args = ["minion-desktop", "mcp"]
-```
-
-Framework recipes (OpenAI Agents SDK, LangChain/LangGraph, LlamaIndex, CrewAI, smolagents, Pydantic AI, Google ADK, AutoGen) are in [docs/integrations.md](docs/integrations.md).
-</details>
-
-Then just ask: *"Create an office desktop, write a one-page brief about our Q3 numbers in Writer and save it as brief.docx."*
-
-**3. Or drive it from a shell.** Any agent with a terminal (Claude Code, Codex CLI, Aider, Open Interpreter, Goose) can use the CLI directly:
+Any agent with a terminal (Claude Code, Codex CLI, Aider, Open Interpreter, Goose) can use the CLI directly, and
+`minion skill --install` teaches it how:
 
 ```bash
 minion up research
-minion open "en.wikipedia.org"
+minion open en.wikipedia.org             # waits until the page has loaded
 minion fill "Search Wikipedia" "Ada Lovelace" && minion key Return
-minion wait-for "Analytical Engine"
-minion see --full                       # read the article as text
-minion shot -o page.png --marks         # a screenshot with @ids drawn on it
+minion wait-for "Analytical Engine"      # says where it saw the text
+minion see --full                        # read the article as text
+minion select @14 "Title"                # pick a dropdown option
+minion shot -o page.png --marks          # a screenshot with @ids drawn on it
 minion run "pdftotext -layout ~/Downloads/paper.pdf - | head"
-minion cp :~/Documents/notes.md .       # copy files out (and in)
+minion cp :~/Documents/notes.md .        # copy files out (and in)
 ```
 
 ## Works with every agent
 
 | Your agent | Connect with |
 |---|---|
-| MCP clients and frameworks (Claude Code/Desktop, Cursor, VS Code, Codex, Gemini CLI, OpenAI Agents SDK, LangChain, CrewAI, LlamaIndex, smolagents, Pydantic AI, ADK, AutoGen) | `uvx minion-desktop mcp` ([recipes](docs/integrations.md)) |
+| Claude Desktop/Code, Cursor, VS Code, Codex, Gemini CLI, Windsurf/Devin, LM Studio, Kiro, Goose | one click, `minion connect`, or `uvx minion-desktop mcp` ([install](docs/install.md)) |
+| Agent frameworks: OpenAI Agents SDK, LangChain/LangGraph, LlamaIndex, CrewAI, smolagents, Pydantic AI, Google ADK, AutoGen | the same MCP server ([verified recipes](docs/integrations.md)) |
+| ChatGPT, Claude.ai, Le Chat (web apps) | `minion share`: remote MCP over HTTPS ([docs](docs/remote.md)) |
 | Any model with function calling (OpenAI, Anthropic, Gemini, Mistral, local models via Ollama/vLLM) | `Toolkit().definitions("openai" \| "anthropic" \| "gemini")` + `Toolkit().run_calls()` ([docs](docs/agents.md#without-mcp-function-calling-with-any-model)) |
-| Anything that speaks HTTP (n8n, Dify, GPT Actions, any language) | `minion serve` → `/api/tools/*` and `/openapi.json` ([docs](docs/http-api.md)) |
-| Shell agents | the `minion` CLI ([docs](docs/cli.md)) |
-| Agents that read [Agent Skills](https://agentskills.io) (Claude Code, Codex CLI, Cursor, Gemini CLI, Copilot, Goose, …) | `minion skill --install [DIR]` writes a `SKILL.md` that teaches the CLI (about 100 tokens until it is used) |
+| Anything that speaks HTTP (n8n, Dify, GPT Actions, any language) | `minion serve` → `/api/tools/*`, `/mcp` and `/openapi.json` ([docs](docs/http-api.md)) |
+| Shell agents | the `minion` CLI ([docs](docs/cli.md)) and its [Agent Skill](https://agentskills.io) (`minion skill --install`) |
 | Python / TypeScript code | `from minion import Desktop` ([docs](docs/python.md)) · [`clients/typescript`](clients/typescript) |
 | Native computer-use models | Claude toolset ([docs](docs/computer-use.md)) · OpenAI and Gemini computer use ([docs](docs/computer-use-openai-gemini.md)) |
 
@@ -213,8 +203,8 @@ Claude's `computer_toolset_20260801` (all 17 actions) and the earlier `computer_
 
 | Profile | What's inside | Download | Idle RAM |
 |---|---|---|---|
-| 🌐 `browser` | Firefox with uBlock Origin (ads, trackers, cookie banners, newsletter pop-ups), downloads straight to `~/Downloads` | 352 MB | ~55–100 MB |
-| 📄 `office` | LibreOffice Writer, Calc, Impress + text editor + file manager + Firefox. Saves Microsoft formats by default | 511 MB | ~85 MB |
+| 🌐 `browser` | Firefox with uBlock Origin (ads, trackers, cookie banners, newsletter pop-ups), downloads straight to `~/Downloads`, a terminal `see` can read | 352 MB | ~55–100 MB |
+| 📄 `office` | LibreOffice Writer, Calc, Impress + text editor + file manager + Firefox + PDF tools. Saves Microsoft formats by default, and types exactly what the agent sends (no AutoCorrect) | 515 MB | ~85 MB |
 | 🛠️ `dev` | git, Python, Node.js, build tools, Geany IDE, a real terminal (readable by `see`), Firefox + Chromium | 703 MB | ~55 MB |
 | 🔎 `research` | Firefox + `pdftotext`, `pandoc`, a notes editor, Python with requests and BeautifulSoup | 410 MB | ~55 MB |
 | 📊 `data` | `office` + pandas, NumPy, SciPy, matplotlib, seaborn, openpyxl, SQLite | 662 MB | ~105 MB |
@@ -320,13 +310,14 @@ Read [docs/design.md](docs/design.md) for the reasoning behind each choice, and 
 
 Each desktop is an unprivileged container with no host mounts by default. Use `--offline` to cut network access,
 or limit resources with `--memory` and `--cpus`. The HTTP server binds to `127.0.0.1`, needs a random token, and refuses
-cross-site and DNS-rebinding requests. The desktop user has passwordless `sudo` **inside** the container, so agents
+cross-site and DNS-rebinding requests. File transfers to and from your computer stay inside one folder, and `minion
+share` URLs carry a fresh token and stop working when you stop sharing. The desktop user has passwordless `sudo` **inside** the container, so agents
 can install software. Treat everything on a screen as untrusted input (prompt injection), and keep credentials
 out of desktops unless a human hands off. Read [SECURITY.md](SECURITY.md).
 
 ## Documentation
 
-[Design](docs/design.md) · [Agents & MCP](docs/agents.md) · [Integrations](docs/integrations.md) · [CLI](docs/cli.md) · [Python](docs/python.md) · [HTTP API](docs/http-api.md) · [Claude computer use](docs/computer-use.md) · [OpenAI & Gemini computer use](docs/computer-use-openai-gemini.md) · [Profiles](docs/profiles.md) · [Windows apps](docs/windows-apps.md) · [Architecture](docs/architecture.md) · [FAQ](docs/faq.md)
+[Website](https://apophisss.github.io/minion/) · [Install](docs/install.md) · [Connect your apps](docs/connect.md) · [Remote MCP](docs/remote.md) · [Design](docs/design.md) · [Agents & MCP](docs/agents.md) · [Integrations](docs/integrations.md) · [CLI](docs/cli.md) · [Python](docs/python.md) · [HTTP API](docs/http-api.md) · [Claude computer use](docs/computer-use.md) · [OpenAI & Gemini computer use](docs/computer-use-openai-gemini.md) · [Profiles](docs/profiles.md) · [Windows apps](docs/windows-apps.md) · [Architecture](docs/architecture.md) · [FAQ](docs/faq.md)
 
 ## Contributing
 

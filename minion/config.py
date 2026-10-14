@@ -8,8 +8,11 @@ import sys
 import threading
 from pathlib import Path
 
+from .agent import VERSION
+
 REGISTRY = os.environ.get("MINION_REGISTRY", "ghcr.io/apophisss")
-IMAGE_TAG = os.environ.get("MINION_IMAGE_TAG", "0.1")
+# Desktop images are tagged major.minor: patch releases reuse them.
+IMAGE_TAG = os.environ.get("MINION_IMAGE_TAG", ".".join(VERSION.split(".")[:2]))
 DEFAULT_PROFILE = os.environ.get("MINION_DEFAULT_PROFILE", "browser")
 DEFAULT_SIZE = os.environ.get("MINION_SIZE", "1280x800")
 LABEL = "dev.minion"
