@@ -792,8 +792,9 @@ class Agent:
             if proc.poll() is not None and proc.returncode != 0 and kind != "url":
                 break
         if found is not None:
+            found = self._until_ready(found, before, deadline=t0 + wait + 6)
             self.windows.refine(found)
-            settle(self.screen, timeout=4.0, quiet=0.4)
+            settle(self.screen, timeout=4.0, quiet=0.5)
         code = proc.poll()
         res = {
             "command": cmd,
@@ -805,6 +806,27 @@ class Agent:
         if found is None and code not in (None, 0):
             res["error"] = f"exited with code {code}; see $MINION_RUNTIME_DIR/apps.log"
         return res
+
+    def _until_ready(self, found, before: dict, deadline: float):
+        """Apps often map a window before they are ready (a splash, a generic title that changes when
+        the document loads). Wait until the new windows and their titles stop changing for a moment."""
+        stable_since = time.monotonic()
+        last = None
+        while time.monotonic() < deadline:
+            try:
+                now = [w for w in self.windows.list(with_states=False) if w.id not in before]
+            except WindowError:
+                break
+            sig = tuple((w.id, w.title) for w in now)
+            if sig != last:
+                last = sig
+                stable_since = time.monotonic()
+                if now:
+                    found = next((w for w in now if w.focused), now[-1])
+            elif time.monotonic() - stable_since >= 0.8:
+                break
+            time.sleep(0.15)
+        return found
 
     def m_open(self, p: dict) -> dict:
         with self.input_lock:
