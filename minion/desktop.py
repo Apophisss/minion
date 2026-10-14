@@ -317,22 +317,24 @@ class Desktop:
             return True
         return False
 
-    def _call_once(self, method: str, params: dict | None, timeout: float):
-        self.backend.ensure_awake(self.name)
+    def _call_once(self, method: str, params: dict | None, timeout: float, wake: bool = True):
+        if wake:
+            self.backend.ensure_awake(self.name)
         with self._lock:
             if self._channel is None:
                 self._channel = self.backend.channel(self.name)
             ch = self._channel
         return ch.call(method, params, timeout=timeout)
 
-    def call(self, method: str, params: dict | None = None, timeout: float = 120.0):
+    def call(self, method: str, params: dict | None = None, timeout: float = 120.0, *, wake: bool = True):
         """Raw RPC to the in-desktop agent (see minion/agent/server.py for methods).
 
-        A frozen or stopped desktop is woken up transparently."""
+        A frozen or stopped desktop is woken up transparently, unless wake=False (then the call
+        fails instead, which is what housekeeping like the idle reaper wants)."""
         try:
-            return self._call_once(method, params, timeout)
+            return self._call_once(method, params, timeout, wake)
         except AgentError as e:
-            if e.code == -32001 and self.info().state == "paused":  # frozen while the call was queued
+            if wake and e.code == -32001 and self.info().state == "paused":  # frozen while the call was queued
                 self.close()
                 self.backend.thaw(self.name)
                 raise AgentError(f"{e} — the desktop had been frozen; it is awake now, retry the call") from e
@@ -345,6 +347,8 @@ class Desktop:
             raise
         except ConnectionLost:
             self.close()
+            if not wake:
+                raise
             woke = self._wake()
             # Retry only if the desktop was asleep (the call never ran) or the call is
             # read-only; never replay actions that may already have happened.

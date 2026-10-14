@@ -38,8 +38,8 @@ def _loop(backend, threshold: float, interval: float) -> None:
                 if info.state != "running":
                     continue
                 d = Desktop(info.name, backend)
-                try:
-                    st = d.call("status", timeout=15)
+                try:  # never wake a desktop from here: someone may have frozen it since list()
+                    st = d.call("status", timeout=15, wake=False)
                     if st.get("inflight"):
                         continue
                     idle = min(float(st.get("idle", 0)), float(st.get("viewed", st.get("idle", 0))))

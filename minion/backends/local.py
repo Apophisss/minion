@@ -331,10 +331,25 @@ class LocalBackend(Backend):
             if info.state == "paused":
                 return
             raise MinionError(f"desktop {name!r} is {info.state}; only running desktops can be frozen")
-        self._signal_all(self._meta(name)["id"], signal.SIGSTOP)
+        meta = self._meta(name)
+        self._signal_all(meta["id"], signal.SIGSTOP)
+        self._settle(meta, stopped=True)
 
     def thaw(self, name: str) -> None:
-        self._signal_all(self._meta(name)["id"], signal.SIGCONT)
+        meta = self._meta(name)
+        self._signal_all(meta["id"], signal.SIGCONT)
+        self._settle(meta, stopped=False)
+
+    @staticmethod
+    def _settle(meta: dict, stopped: bool, timeout: float = 2.0) -> None:
+        """Signals take effect when the process is next scheduled: wait for that (like `docker pause`)."""
+        pid = int(meta.get("pid") or 0)
+        deadline = time.monotonic() + timeout
+        while pid and time.monotonic() < deadline:
+            state = _proc_state(pid)
+            if not state or (state == "T") == stopped:
+                return
+            time.sleep(0.01)
 
     def ensure_awake(self, name: str) -> None:
         meta = self._meta(name)
