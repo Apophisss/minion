@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Minion · live view</title>
+  <link rel="icon" href="/static/logo.svg">
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body class="view">
+  <header class="top">
+    <a class="brand" href="/"><img src="/static/logo.svg" alt=""><span>minion</span></a>
+    <span class="name" id="title"></span>
+    <span class="status"><span class="dot" id="dot"></span><span id="state">connecting…</span></span>
+    <div class="spacer"></div>
+    <button class="btn" id="control" title="Use your mouse and keyboard on the desktop (Esc ×2 to release)">🖐 Take control</button>
+    <button class="btn hide-sm" id="paste" title="Type your clipboard text into the desktop">Paste</button>
+    <button class="btn hide-sm" id="shot" title="Download a screenshot">Screenshot</button>
+    <button class="btn hide-sm" id="replay" title="Flight recorder: everything the agent did">Replay</button>
+    <button class="btn" id="freeze">Freeze</button>
+  </header>
+  <div class="handoff" id="handoff">
+    <span>🙋 <b>The agent needs you:</b> <span id="handoff-msg"></span></span>
+    <input id="handoff-note" placeholder="Optional note for the agent (e.g. 'signed in')">
+    <button class="btn primary" id="handoff-done">Done — hand back</button>
+  </div>
+  <div class="stage">
+    <div class="screen" id="screen">
+      <img id="img" alt="desktop" draggable="false">
+      <div class="catcher" id="catcher" tabindex="0"></div>
+    </div>
+    <div class="hint" id="hint">Watching · click “Take control” to use mouse and keyboard</div>
+  </div>
+  <div class="toast" id="toast"></div>
+  <script src="/static/view.js"></script>
+</body>
+</html>

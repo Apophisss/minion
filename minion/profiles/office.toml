@@ -1,0 +1,76 @@
+name = "office"
+title = "Office"
+icon = "📄"
+extends = "browser"
+description = "LibreOffice Writer, Calc and Impress, a text editor and a file manager, plus Firefox. Saves .docx/.xlsx/.pptx by default and never shows tips, donation bars or recovery dialogs."
+memory = "3g"
+shm = "1g"
+packages = [
+  "libreoffice-writer",
+  "libreoffice-calc",
+  "libreoffice-impress",
+  "libreoffice-gtk3",
+  "fonts-crosextra-carlito",
+  "fonts-crosextra-caladea",
+  "mousepad",
+  "pcmanfm",
+]
+env = { SAL_USE_VCLPLUGIN = "gtk3" }
+apps = [
+  { name = "Writer", id = "writer", command = "libreoffice --writer" },
+  { name = "Calc", id = "calc", command = "libreoffice --calc" },
+  { name = "Impress", id = "impress", command = "libreoffice --impress" },
+  { name = "Text Editor", id = "editor", command = "mousepad" },
+  { name = "Files", id = "files", command = "pcmanfm" },
+]
+tips = """
+Launch apps with `open writer`, `open calc`, `open impress`, or open a file: `open ~/Documents/report.docx`.
+Documents save as .docx/.xlsx/.pptx by default. Move files in and out with `copy`.
+For bulk or exact data work, `run` is faster than the GUI: e.g. `soffice --headless --convert-to pdf ~/Documents/report.docx --outdir ~/Documents`.
+"""
+
+[files]
+"/usr/lib/libreoffice/share/registry/minion.xcd" = '''<?xml version="1.0" encoding="UTF-8"?>
+<oor:data xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:oor="http://openoffice.org/2001/registry">
+  <dependency file="main"/>
+  <dependency file="writer"/>
+  <dependency file="calc"/>
+  <dependency file="impress"/>
+  <oor:component-data oor:name="Common" oor:package="org.openoffice.Office">
+    <node oor:name="Misc">
+      <prop oor:name="ShowTipOfTheDay" oor:op="fuse"><value>false</value></prop>
+      <prop oor:name="FirstRun" oor:op="fuse"><value>false</value></prop>
+    </node>
+    <node oor:name="Save">
+      <node oor:name="Document">
+        <prop oor:name="WarnAlienFormat" oor:op="fuse"><value>false</value></prop>
+      </node>
+    </node>
+  </oor:component-data>
+  <oor:component-data oor:name="Recovery" oor:package="org.openoffice.Office">
+    <node oor:name="RecoveryInfo">
+      <prop oor:name="Enabled" oor:op="fuse"><value>false</value></prop>
+    </node>
+  </oor:component-data>
+  <oor:component-data oor:name="Setup" oor:package="org.openoffice">
+    <node oor:name="Product">
+      <prop oor:name="ooSetupLastVersion" oor:op="fuse"><value>25.2</value></prop>
+      <prop oor:name="LastTimeGetInvolvedShown" oor:op="fuse"><value>4102444800</value></prop>
+      <prop oor:name="LastTimeDonateShown" oor:op="fuse"><value>4102444800</value></prop>
+    </node>
+    <node oor:name="Office">
+      <node oor:name="Factories">
+        <node oor:name="com.sun.star.text.TextDocument" oor:op="fuse">
+          <prop oor:name="ooSetupFactoryDefaultFilter" oor:op="fuse"><value>MS Word 2007 XML</value></prop>
+        </node>
+        <node oor:name="com.sun.star.sheet.SpreadsheetDocument" oor:op="fuse">
+          <prop oor:name="ooSetupFactoryDefaultFilter" oor:op="fuse"><value>Calc MS Excel 2007 XML</value></prop>
+        </node>
+        <node oor:name="com.sun.star.presentation.PresentationDocument" oor:op="fuse">
+          <prop oor:name="ooSetupFactoryDefaultFilter" oor:op="fuse"><value>Impress MS PowerPoint 2007 XML</value></prop>
+        </node>
+      </node>
+    </node>
+  </oor:component-data>
+</oor:data>
+'''

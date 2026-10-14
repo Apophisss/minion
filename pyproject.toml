@@ -3,70 +3,72 @@ requires = ["setuptools>=69", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "minion-ai"
+name = "minion-desktop"
 dynamic = ["version"]
-description = "Self-hosted, self-improving AI agent platform: one chat for OpenClaw, Hermes, opencode, Goose and any MCP server, with a built-in Docker desktop."
+description = "Instant, featherweight Linux desktops for AI agents: office, dev, research and browser profiles, controlled through MCP, a CLI, Python or HTTP."
 readme = "README.md"
-license = { text = "MIT" }
+license = "MIT"
+license-files = ["LICENSE"]
 requires-python = ">=3.11"
 authors = [{ name = "Minion contributors" }]
-keywords = ["ai", "agents", "mcp", "claude", "anthropic", "openclaw", "hermes", "self-hosted", "computer-use", "automation"]
+keywords = [
+  "ai-agents", "computer-use", "mcp", "model-context-protocol", "desktop", "virtual-desktop",
+  "automation", "claude", "llm", "docker", "xvfb", "rpa", "browser-automation", "accessibility",
+]
 classifiers = [
-    "Programming Language :: Python :: 3",
-    "License :: OSI Approved :: MIT License",
-    "Operating System :: POSIX :: Linux",
-    "Framework :: FastAPI",
-    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+  "Development Status :: 4 - Beta",
+  "Environment :: Console",
+  "Intended Audience :: Developers",
+  "Operating System :: MacOS",
+  "Operating System :: Microsoft :: Windows",
+  "Operating System :: POSIX :: Linux",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+  "Topic :: Software Development :: Testing",
+  "Topic :: Desktop Environment",
 ]
-dependencies = [
-    "anthropic>=1.12.1,<2",
-    "mcp>=2.3.0,<3",
-    "docker>=7.1,<8",
-    "fastapi>=0.115",
-    "uvicorn[standard]>=0.30",
-    "pydantic>=2.9,<3",
-    "pydantic-settings>=2.6,<3",
-    "aiosqlite>=0.20",
-    "httpx>=0.27",
-    "pyyaml>=6.0",
-    "croniter>=3.0",
-    "websockets>=13",
-]
+dependencies = []  # zero dependencies: the host side is pure standard library
 
 [project.optional-dependencies]
-dev = ["pytest>=8", "pytest-asyncio>=0.24", "ruff>=0.6"]
+anthropic = ["anthropic>=1.0"]
+dev = ["pytest>=8", "ruff>=0.6"]
 
 [project.scripts]
-minion = "minion.cli:main"
+minion = "minion.cli:entry"
+minion-desktop = "minion.cli:entry"
 
 [project.urls]
 Homepage = "https://github.com/apophisss/minion"
+Documentation = "https://github.com/apophisss/minion/tree/main/docs"
 Issues = "https://github.com/apophisss/minion/issues"
+Changelog = "https://github.com/apophisss/minion/blob/main/CHANGELOG.md"
 
 [tool.setuptools.dynamic]
-version = { attr = "minion.__version__" }
+version = { attr = "minion.agent.VERSION" }
 
 [tool.setuptools.packages.find]
 include = ["minion*"]
 
 [tool.setuptools.package-data]
-minion = ["web/*", "web/**/*"]
+minion = ["profiles/*.toml", "images/*", "web/*", "py.typed"]
 
 [tool.pytest.ini_options]
-asyncio_mode = "auto"
-asyncio_default_fixture_loop_scope = "function"
 testpaths = ["tests"]
 markers = [
-    "docker: needs a reachable Docker daemon",
-    "network: needs internet access",
-    "slow: slow tests",
+  "x11: needs Xvfb and the desktop tools on this machine (local backend)",
+  "docker: needs a reachable Docker daemon",
+  "slow: builds images or starts browsers",
 ]
-filterwarnings = ["ignore::DeprecationWarning"]
 
 [tool.ruff]
 line-length = 120
 target-version = "py311"
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "I", "B", "UP", "ASYNC"]
-ignore = ["E501", "B008", "UP007"]
+select = ["E", "F", "W", "I", "B", "UP"]
+ignore = ["E501", "B008", "UP038"]

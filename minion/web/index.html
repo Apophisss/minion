@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Minion · desktops for AI agents</title>
+  <link rel="icon" href="/static/logo.svg">
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+  <header class="top">
+    <div class="brand"><img src="/static/logo.svg" alt=""><span>minion</span><small id="version"></small></div>
+    <div class="spacer"></div>
+    <span class="meta hide-sm" id="summary"></span>
+  </header>
+  <main class="wrap">
+    <h2>Desktops</h2>
+    <div class="grid" id="grid">
+      <div class="card new" id="new-card">
+        <div class="name">New desktop</div>
+        <select id="profile"></select>
+        <div class="profile-desc" id="profile-desc"></div>
+        <div class="row">
+          <select id="size" style="flex:1">
+            <option value="1280x800">1280×800</option>
+            <option value="1024x768">1024×768 (cheaper screenshots)</option>
+            <option value="1366x768">1366×768</option>
+            <option value="1920x1080">1920×1080</option>
+          </select>
+          <button class="btn primary" id="create">Create</button>
+        </div>
+      </div>
+    </div>
+    <h2>Connect your agent</h2>
+    <div class="connect">
+      <div class="meta">Claude Code</div>
+      <pre>claude mcp add minion -- uvx minion-desktop mcp</pre>
+      <div class="meta" style="margin-top:12px">Any shell-capable agent</div>
+      <pre>minion up office &amp;&amp; minion open writer &amp;&amp; minion see</pre>
+      <div class="meta" style="margin-top:12px">Python</div>
+      <pre>from minion import Desktop
+desk = Desktop.create("research")
+desk.open("arxiv.org")
+print(desk.see())</pre>
+    </div>
+  </main>
+  <div class="toast" id="toast"></div>
+  <script src="/static/dashboard.js"></script>
+</body>
+</html>

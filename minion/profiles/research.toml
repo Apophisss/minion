@@ -1,0 +1,25 @@
+name = "research"
+title = "Research"
+icon = "🔎"
+extends = "browser"
+description = "Firefox for reading and searching, PDF and document tools (pdftotext, pandoc), a notes editor and Python with requests and BeautifulSoup for quick scraping."
+memory = "2g"
+shm = "1g"
+packages = [
+  "poppler-utils",
+  "pandoc",
+  "mousepad",
+  "python3-requests",
+  "python3-bs4",
+  "python3-lxml",
+  "jq",
+  "wget",
+]
+apps = [
+  { name = "Notes", id = "notes", command = "mousepad" },
+]
+tips = """
+Browse with `open <url>`; PDFs open in Firefox's viewer. For long documents, extract text instead of reading screenshots:
+`run pdftotext -layout ~/Downloads/paper.pdf - | head -200`. Keep notes in ~/Documents/notes.md (`open notes`), and
+convert them with pandoc (`pandoc notes.md -o report.docx`). Use `see` to read pages as text — far cheaper than screenshots.
+"""

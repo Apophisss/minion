@@ -1,0 +1,88 @@
+name = "browser"
+title = "Browser"
+icon = "🌐"
+extends = "base"
+description = "Firefox with ad, tracker, cookie-banner and newsletter-popup blocking, no first-run wizards and downloads straight to ~/Downloads. The everyday web desktop."
+memory = "2g"
+shm = "1g"
+packages = [
+  "firefox-esr",
+  "webext-ublock-origin-firefox",
+  "fonts-liberation2",
+  "fonts-noto-core",
+  "fonts-noto-color-emoji",
+  "fonts-wqy-microhei",
+]
+env = { MINION_BROWSER = "firefox-esr", MOZ_ENABLE_WAYLAND = "0" }
+apps = [
+  { name = "Firefox", id = "firefox", command = "firefox-esr" },
+]
+tips = """
+Open a page with `open` and a URL (e.g. "github.com"); it opens in Firefox. Downloads land in ~/Downloads without a dialog.
+Firefox exposes the page to `see`: links, buttons and form fields get @ids you can click or fill.
+Cookie banners and most ads are blocked. PDFs open in Firefox's built-in viewer.
+"""
+
+[files]
+"/usr/share/firefox-esr/distribution/policies.json" = '''
+{
+  "policies": {
+    "DisableAppUpdate": true,
+    "DisableTelemetry": true,
+    "DisableFirefoxStudies": true,
+    "DisablePocket": true,
+    "DisableFeedbackCommands": true,
+    "DisableProfileImport": true,
+    "DisableSetDesktopBackground": true,
+    "DontCheckDefaultBrowser": true,
+    "NoDefaultBookmarks": true,
+    "OverrideFirstRunPage": "",
+    "OverridePostUpdatePage": "",
+    "PasswordManagerEnabled": false,
+    "OfferToSaveLogins": false,
+    "PromptForDownloadLocation": false,
+    "DefaultDownloadDirectory": "${home}/Downloads",
+    "ShowHomeButton": false,
+    "Homepage": { "URL": "about:home", "StartPage": "homepage" },
+    "FirefoxHome": { "Search": true, "TopSites": false, "SponsoredTopSites": false, "Highlights": false, "Pocket": false, "SponsoredPocket": false, "Snippets": false, "Locked": false },
+    "FirefoxSuggest": { "WebSuggestions": false, "SponsoredSuggestions": false, "ImproveSuggest": false, "Locked": false },
+    "UserMessaging": { "ExtensionRecommendations": false, "FeatureRecommendations": false, "UrlbarInterventions": false, "SkipOnboarding": true, "MoreFromMozilla": false, "FirefoxLabs": false, "Locked": false },
+    "Preferences": {
+      "browser.aboutConfig.showWarning": { "Value": false, "Status": "default" },
+      "browser.tabs.warnOnClose": { "Value": false, "Status": "default" },
+      "browser.warnOnQuit": { "Value": false, "Status": "default" },
+      "browser.sessionstore.resume_from_crash": { "Value": false, "Status": "default" },
+      "browser.startup.couldRestoreSession.count": { "Value": -1, "Status": "default" },
+      "browser.translations.automaticallyPopup": { "Value": false, "Status": "default" },
+      "browser.download.alwaysOpenPanel": { "Value": false, "Status": "default" },
+      "browser.download.open_pdf_attachments_inline": { "Value": true, "Status": "default" },
+      "browser.uitour.enabled": { "Value": false, "Status": "default" },
+      "browser.tabs.firefox-view": { "Value": false, "Status": "default" },
+      "browser.newtabpage.activity-stream.showSponsored": { "Value": false, "Status": "default" },
+      "browser.newtabpage.activity-stream.showSponsoredTopSites": { "Value": false, "Status": "default" },
+      "browser.shell.checkDefaultBrowser": { "Value": false, "Status": "default" },
+      "datareporting.policy.dataSubmissionPolicyBypassNotification": { "Value": true, "Status": "default" },
+      "extensions.autoDisableScopes": { "Value": 0, "Status": "default" },
+      "general.smoothScroll": { "Value": false, "Status": "default" },
+      "media.autoplay.default": { "Value": 5, "Status": "default" },
+      "signon.rememberSignons": { "Value": false, "Status": "default" },
+      "ui.prefersReducedMotion": { "Value": 1, "Status": "default" },
+      "widget.gtk.overlay-scrollbars.enabled": { "Value": false, "Status": "default" }
+    },
+    "3rdparty": {
+      "Extensions": {
+        "uBlock0@raymondhill.net": {
+          "toOverwrite": {
+            "filterLists": [
+              "user-filters", "ublock-filters", "ublock-badware", "ublock-privacy",
+              "ublock-quick-fixes", "ublock-unbreak", "easylist", "easyprivacy", "urlhaus-1",
+              "plowe-0", "fanboy-cookiemonster", "ublock-cookies-easylist",
+              "easylist-newsletters", "easylist-notifications"
+            ]
+          }
+        }
+      }
+    }
+  }
+}
+'''
