@@ -127,14 +127,14 @@ minion cp :~/Documents/notes.md .       # copy files out (and in)
 | Your agent | Connect with |
 |---|---|
 | MCP clients and frameworks (Claude Code/Desktop, Cursor, VS Code, Codex, Gemini CLI, OpenAI Agents SDK, LangChain, CrewAI, LlamaIndex, smolagents, Pydantic AI, ADK, AutoGen) | `uvx minion-desktop mcp` ([recipes](docs/integrations.md)) |
-| Any model with function calling (OpenAI, Anthropic, Gemini, Mistral, local models via Ollama/vLLM) | `Toolkit().definitions("openai" \| "anthropic" \| "gemini")` + `Toolkit().call()` |
+| Any model with function calling (OpenAI, Anthropic, Gemini, Mistral, local models via Ollama/vLLM) | `Toolkit().definitions("openai" \| "anthropic" \| "gemini")` + `Toolkit().run_calls()` ([docs](docs/agents.md#without-mcp-function-calling-with-any-model)) |
 | Anything that speaks HTTP (n8n, Dify, GPT Actions, any language) | `minion serve` → `/api/tools/*` and `/openapi.json` ([docs](docs/http-api.md)) |
 | Shell agents | the `minion` CLI ([docs](docs/cli.md)) |
 | Agents that read [Agent Skills](https://agentskills.io) (Claude Code, Codex CLI, Cursor, Gemini CLI, Copilot, Goose, …) | `minion skill --install [DIR]` writes a `SKILL.md` that teaches the CLI (about 100 tokens until it is used) |
 | Python / TypeScript code | `from minion import Desktop` ([docs](docs/python.md)) · [`clients/typescript`](clients/typescript) |
 | Native computer-use models | Claude toolset ([docs](docs/computer-use.md)) · OpenAI and Gemini computer use ([docs](docs/computer-use-openai-gemini.md)) |
 
-A complete agent with **any** OpenAI-compatible model in 11 lines (`"anthropic"`, `"gemini"` and
+A complete agent with **any** OpenAI-compatible model in about a dozen lines (`"anthropic"`, `"gemini"` and
 `"openai-responses"` work the same way):
 
 ```python

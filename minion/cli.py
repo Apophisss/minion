@@ -917,7 +917,19 @@ def main(argv: list[str] | None = None) -> int:
         return 2 if isinstance(e, NotFound) else 1
 
 
+def _utf8_streams() -> None:
+    """Agents read this output through pipes, which on Windows default to the ANSI code page: it can't
+    encode ✓ or most text on screen. Always speak UTF-8."""
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            if (stream.encoding or "").lower().replace("-", "") != "utf8":
+                stream.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, ValueError):  # not a TextIOWrapper (e.g. replaced by a test harness)
+            pass
+
+
 def entry() -> None:
+    _utf8_streams()
     sys.exit(main())
 
 

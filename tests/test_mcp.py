@@ -143,3 +143,22 @@ def test_cancelled_calls_get_no_response(monkeypatch):
         ],
     )
     assert [r["id"] for r in replies] == [8]
+
+
+def test_utf8_through_ansi_code_page_pipes(tmp_path):
+    """Windows pipes default to the ANSI code page; the server must still read and write UTF-8."""
+    import os
+    import subprocess
+    import sys
+
+    msg = {"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "nope ✓ שלום", "arguments": {}}}
+    env = {**os.environ, "PYTHONIOENCODING": "cp1252", "MINION_HOME": str(tmp_path)}
+    out = subprocess.run(
+        [sys.executable, "-m", "minion.cli", "mcp", "--idle-freeze", "0"],
+        input=(json.dumps(msg, ensure_ascii=False) + "\n").encode("utf-8"),
+        capture_output=True,
+        timeout=60,
+        env=env,
+    )
+    reply = json.loads(out.stdout.decode("utf-8").splitlines()[0])
+    assert "nope ✓ שלום" in reply["result"]["content"][0]["text"], out.stderr.decode(errors="replace")

@@ -139,6 +139,13 @@ class Server:
 
 
 def main(preload: str | None = None, idle_freeze: float = 600, compact: bool = False, images: bool = True) -> None:
+    # MCP messages are UTF-8 JSON lines. Windows pipes default to the ANSI code page (and CRLF), which would
+    # garble or crash on non-Latin text, so set the encoding explicitly.
+    for stream, kw in ((sys.stdin, {"errors": "replace"}), (sys.stdout, {"newline": "\n"})):
+        try:
+            stream.reconfigure(encoding="utf-8", **kw)
+        except (AttributeError, ValueError):  # not a TextIOWrapper (e.g. replaced in tests)
+            pass
     server = Server(preload=preload, idle_freeze=idle_freeze, compact=compact, images=images)
     for line in sys.stdin:
         line = line.strip()
