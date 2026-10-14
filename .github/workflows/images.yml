@@ -1,0 +1,62 @@
+name: Images
+
+# Builds every built-in profile for linux/amd64 + linux/arm64 (windows: amd64 only, because Wine runs
+# x86 programs only on x86-64) and publishes it to GHCR as ghcr.io/<owner>/minion-<profile>:<image tag>.
+# Profiles build in dependency order.
+
+on:
+  push:
+    branches: [main]
+    paths: ["minion/agent/**", "minion/images/**", "minion/profiles/**", ".github/workflows/images.yml"]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      registry: ${{ steps.vars.outputs.registry }}
+      tag: ${{ steps.vars.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: vars
+        run: |
+          echo "registry=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_OUTPUT"
+          echo "tag=$(python3 -c 'import sys; sys.path.insert(0, "."); from minion import config; print(config.IMAGE_TAG)')" >> "$GITHUB_OUTPUT"
+
+  base:
+    needs: plan
+    uses: ./.github/workflows/image-build.yml
+    with: { profile: base, registry: "${{ needs.plan.outputs.registry }}", tag: "${{ needs.plan.outputs.tag }}" }
+
+  browser:
+    needs: [plan, base]
+    uses: ./.github/workflows/image-build.yml
+    with: { profile: browser, registry: "${{ needs.plan.outputs.registry }}", tag: "${{ needs.plan.outputs.tag }}" }
+
+  on-browser:
+    needs: [plan, browser]
+    strategy:
+      fail-fast: false
+      matrix:
+        profile: [office, dev, research]
+    uses: ./.github/workflows/image-build.yml
+    with: { profile: "${{ matrix.profile }}", registry: "${{ needs.plan.outputs.registry }}", tag: "${{ needs.plan.outputs.tag }}" }
+
+  data:
+    needs: [plan, on-browser]
+    uses: ./.github/workflows/image-build.yml
+    with: { profile: data, registry: "${{ needs.plan.outputs.registry }}", tag: "${{ needs.plan.outputs.tag }}" }
+
+  windows:
+    needs: [plan, browser]
+    uses: ./.github/workflows/image-build.yml
+    with:
+      profile: windows
+      registry: "${{ needs.plan.outputs.registry }}"
+      tag: "${{ needs.plan.outputs.tag }}"
+      platforms: linux/amd64

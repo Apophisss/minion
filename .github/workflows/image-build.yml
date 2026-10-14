@@ -1,0 +1,41 @@
+name: Build one profile image
+
+on:
+  workflow_call:
+    inputs:
+      profile: { type: string, required: true }
+      registry: { type: string, required: true }
+      tag: { type: string, required: true }
+      platforms: { type: string, default: "linux/amd64,linux/arm64" }
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 scripts/gen_dockerfiles.py --registry "${{ inputs.registry }}" --tag "${{ inputs.tag }}" --out build
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: build/${{ inputs.profile }}
+          platforms: ${{ inputs.platforms }}
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: |
+            ${{ inputs.registry }}/minion-${{ inputs.profile }}:${{ inputs.tag }}
+            ${{ inputs.registry }}/minion-${{ inputs.profile }}:latest
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.title=minion-${{ inputs.profile }}
+            org.opencontainers.image.licenses=MIT
+          cache-from: type=gha,scope=${{ inputs.profile }}
+          cache-to: type=gha,mode=max,scope=${{ inputs.profile }}
