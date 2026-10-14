@@ -14,13 +14,16 @@ The first release of Minion: instant desktops that any AI agent can use.
 **Seeing**
 - `see`: the screen as text with **stable** `@ids` from the accessibility tree, with OCR as a fallback.
 - `see` covers web pages (including text inside cells, divs and inline code), editors (numbered lines with indentation),
-  terminals, dropdowns with their value and options, and spreadsheet cells as `A1: value`.
-- `see(changes=true)` returns only what changed since the last look. Moves and truncation don't count as changes.
-  Long diffs fall back to the full view and say why.
+  terminals, dropdowns with their value and options, and spreadsheet cells as `A1: value (=formula)`, with failed
+  formulas as `#ERROR`.
+- `see(changes=true)` returns only what changed since the last look at that window, including new terminal output and
+  changed editor lines. Moves and truncation don't count as changes. Long diffs fall back to the full view and say why.
 
 **Acting**
-- Actions wait for the screen to settle, and for web pages to finish loading. Each one reports what changed.
-- Text targets must really be on screen. A miss fails with the closest candidates instead of clicking something else.
+- Actions wait for the screen to settle, for web pages and documents to be ready, and for dialogs that appear a moment
+  later. Each one reports what changed.
+- Text targets match exactly: "Delete" never clicks "Delete all". A miss fails with the closest controls and their
+  `@ids` instead of clicking something else.
 - `fill` only types into text fields. `select` picks dropdown options. Unknown key names are errors.
 - Typing in LibreOffice is lossless for any language, and its coordinates are correct from the first look.
 - **Code mode** (`script`): Python runs inside the desktop with a GUI API, so loops cost one call.
