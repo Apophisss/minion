@@ -2,6 +2,7 @@
 
     claude mcp add minion -- uvx minion-desktop mcp            # nine tools
     claude mcp add minion -- uvx minion-desktop mcp --compact  # one `computer` tool (smallest context)
+    uvx minion-desktop mcp --no-images                          # text only, for clients that can't show images
 
 Implements the Model Context Protocol's tools surface (initialize, tools/list, tools/call,
 ping, progress notifications) over newline-delimited JSON-RPC. The tools themselves live in
@@ -22,9 +23,12 @@ PROTOCOL_VERSIONS = ["2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"]
 
 
 class Server:
-    def __init__(self, preload: str | None = None, idle_freeze: float = 600, compact: bool = False):
+    def __init__(
+        self, preload: str | None = None, idle_freeze: float = 600, compact: bool = False, images: bool = True
+    ):
         self.out_lock = threading.Lock()
-        self.toolkit = Toolkit(in_process_viewer=True)
+        self.toolkit = Toolkit(in_process_viewer=True, images=images)
+        self.cancelled: set = set()  # request ids the client gave up on: their results are not sent
         self.compact = compact
         self.protocol = PROTOCOL_VERSIONS[0]
         if preload:
@@ -67,8 +71,10 @@ class Server:
             if mid is not None and "result" not in msg and "error" not in msg:
                 self.error(mid, -32600, "Invalid request: missing method")
             return  # responses to requests we never send
-        if mid is None:
-            return  # notifications: initialized, cancelled, ...
+        if mid is None:  # notifications: initialized, cancelled, ...
+            if method == "notifications/cancelled" and isinstance(msg.get("params"), dict):
+                self.cancelled.add(msg["params"].get("requestId"))
+            return
         try:
             if method == "initialize":
                 params = msg.get("params") if isinstance(msg.get("params"), dict) else {}
@@ -126,11 +132,14 @@ class Server:
             self.log(traceback.format_exc())
             result = {"content": [{"type": "text", "text": f"{type(e).__name__}: {e}"}], "isError": True}
         state["done"] = True
+        if mid in self.cancelled:  # the client cancelled it: no response (MCP spec)
+            self.cancelled.discard(mid)
+            return
         self.send({"jsonrpc": "2.0", "id": mid, "result": result})
 
 
-def main(preload: str | None = None, idle_freeze: float = 600, compact: bool = False) -> None:
-    server = Server(preload=preload, idle_freeze=idle_freeze, compact=compact)
+def main(preload: str | None = None, idle_freeze: float = 600, compact: bool = False, images: bool = True) -> None:
+    server = Server(preload=preload, idle_freeze=idle_freeze, compact=compact, images=images)
     for line in sys.stdin:
         line = line.strip()
         if not line:

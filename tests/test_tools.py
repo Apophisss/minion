@@ -1,4 +1,5 @@
 import json
+from types import SimpleNamespace
 
 import pytest
 
@@ -29,6 +30,8 @@ def _toolkit():
     t._lock = threading.Lock()
     t.in_process_viewer = None
     t.files_root = None
+    t.images = True
+    t._local = threading.local()
     return t
 
 
@@ -193,3 +196,26 @@ def test_http_toolkits_get_a_files_root(tmp_path, monkeypatch):
     monkeypatch.setattr(server, "_toolkits", {})
     monkeypatch.setattr("minion.tools._backend", lambda b: FakeBackend())
     assert server._toolkit("agent-1").files_root == (tmp_path / "data" / "files").resolve()
+
+
+def test_text_only_clients_and_nulls():
+    tk = _shot_toolkit()
+    tk.images = False
+    assert "screenshot" not in [t["name"] for t in tk.definitions("anthropic")]
+    r = tk.call("screenshot", {})
+    assert not r.images and "1 image(s) left out" in r.text and not r.is_error
+    seen = []
+    tk.t_see = lambda a, p: seen.append(a) or [{"type": "text", "text": "ok"}]
+    tk.call("see", {"window": None, "ocr": None, "changes": True})
+    assert seen == [{"changes": True}]  # nulls dropped
+    assert not tk.call("see", "[1, 2]").is_error  # non-object JSON arguments are ignored
+
+
+def test_fallback_desktop_is_named_in_the_result(monkeypatch):
+    tk = _toolkit()
+    tk.backend.get = lambda name: SimpleNamespace(name=name)
+    monkeypatch.setattr("minion.tools.Desktop.attach", lambda name, backend: SimpleNamespace(name="other-agent-1"))
+    tk.t_see = lambda a, p: (tk.desk(a), [{"type": "text", "text": "screen"}])[1]
+    r = tk.call("see", {})
+    assert "Used desktop 'other-agent-1'" in r.text
+    assert "Used desktop" not in tk.call("see", {}).text  # now it is this session's current desktop

@@ -35,7 +35,7 @@ from .errors import MinionError, NotFound
 INSTRUCTIONS = """\
 Minion gives you real Linux computers (isolated desktops with GUI apps; any program can be installed).
 1. desktop(action="create", profile=...) — browser, office (LibreOffice), dev (git/Python/Node/Chromium),
-   research, data, base; count=N creates several at once for parallel work.
+   research, data, windows (Windows .exe programs via Wine), base; count=N creates several at once.
 2. see() — the screen as text: windows + UI elements with stable @ids. Exact and cheap; prefer it to
    screenshots. see(changes=true) returns only what changed since your last look.
 3. act(actions=[...]) — click/type/key/scroll/fill/drag by @id, visible text ("Save") or "x,y". Batch
@@ -60,7 +60,8 @@ TOOLS: list[dict] = [
             "restore, replay (HTML timeline of everything done), macro (the actions so far as a Python script that "
             "replays them with the script tool, no model needed). Profiles: browser (Firefox, blocks ads and "
             "cookie banners), office (LibreOffice + Firefox), dev (git, Python, Node.js, Chromium, IDE), "
-            "research (Firefox + PDF/notes tools), data (office + pandas/matplotlib), base (minimal)."
+            "research (Firefox + PDF/notes tools), data (office + pandas/matplotlib), windows (Windows .exe/.msi "
+            "programs via Wine, x86-64 hosts), base (minimal)."
         ),
         "input_schema": {
             "type": "object",
@@ -444,8 +445,11 @@ class Toolkit:
         *,
         in_process_viewer: bool | None = None,
         files_root: str | os.PathLike | None = None,
+        images: bool = True,
     ):
         self.backend = _backend(backend)
+        self.images = images  # False: text-only clients (no screenshot tool, images left out of results)
+        self._local = threading.local()
         self.current: str | None = None
         self.desktops: dict[str, Desktop] = {}
         self._pending: dict[str, Future] = {}
@@ -458,7 +462,7 @@ class Toolkit:
     # -- definitions ----------------------------------------------------
     def definitions(self, format: str = "mcp", *, compact: bool = False) -> list[dict]:
         """Tool definitions for: mcp, openai (Chat Completions), openai-responses, anthropic, gemini."""
-        tools = [COMPUTER_TOOL] if compact else TOOLS
+        tools = [COMPUTER_TOOL] if compact else [t for t in TOOLS if self.images or t["name"] != "screenshot"]
         fmt = format.lower()
         out = []
         for t in tools:
@@ -510,15 +514,28 @@ class Toolkit:
                 args = json.loads(arguments) or {}
             except json.JSONDecodeError:
                 args = {"command": arguments} if name == "computer" else {}
+        if not isinstance(args, dict):  # e.g. '"see"' or '[1, 2]'
+            args = {"command": args} if name == "computer" and isinstance(args, str) else {}
+        args = {k: v for k, v in args.items() if v is not None}  # explicit nulls mean "use the default"
         fn = getattr(self, f"t_{name}", None) if name in self.names else None
         if fn is None:
             return ToolResult([_text(f"unknown tool {name!r}; tools: {', '.join(self.names)}")], True)
+        self._local.note = None
         try:
-            return ToolResult(fn(args, progress or (lambda _line: None)))
+            result = ToolResult(fn(args, progress or (lambda _line: None)))
         except MinionError as e:
             return ToolResult([_text(str(e))], True)
         except Exception as e:  # report instead of crashing the caller's agent loop
             return ToolResult([_text(f"{type(e).__name__}: {e}")], True)
+        if not self.images and result.images:
+            n = len(result.images)
+            result.content = [c for c in result.content if c["type"] != "image"]
+            result.content.append(
+                _text(f"({n} image(s) left out: this client gets text only; see() reads the screen.)")
+            )
+        if self._local.note:
+            result.content.append(_text(self._local.note))
+        return result
 
     def run_calls(self, calls, format: str = "openai"):
         """Run a model's tool calls and return what to send back, in that API's shape.
@@ -601,8 +618,10 @@ class Toolkit:
             except NotFound:
                 raise ToolError(
                     'No desktop yet. Create one: desktop(action="create", profile="browser") '
-                    "(profiles: browser, office, dev, research, data, base)."
+                    "(profiles: browser, office, dev, research, data, windows, base)."
                 ) from None
+            # A client that starts a new server per call has no "current desktop": say which one this used.
+            self._local.note = f"(Used desktop {name!r}, the most recent one; pass desktop=NAME to choose.)"
         if name not in self.desktops:
             try:
                 self.backend.get(name)  # validate before making it current

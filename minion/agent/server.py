@@ -233,15 +233,19 @@ def parse_step(step) -> tuple[str, dict]:
         return canon, {**verb_defaults, **params}
     if not isinstance(step, dict):
         raise RpcError(f"an action must be an object or a string, got {type(step).__name__}")
+    # Explicit nulls mean "use the default": some clients send every optional field as null.
     step = dict(step)
-    if "action" in step:
+    if step.get("action") is not None:
         name = str(step.pop("action")).lower()
+        step = {k: v for k, v in step.items() if v is not None}
     else:
-        keys = [k for k in step if k in ACTIONS]
+        step.pop("action", None)
+        keys = [k for k in step if k in ACTIONS and step[k] is not None] or [k for k in step if k in ACTIONS]
         if len(keys) != 1:
             raise RpcError(f"cannot tell which action this is: {json.dumps(step)[:120]}")
         name = keys[0]
         value = step.pop(name)
+        step = {k: v for k, v in step.items() if v is not None}
         main = MAIN_PARAM.get(name)
         if main and value is not None and value is not True:
             step.setdefault(main, value)
@@ -851,6 +855,7 @@ class Agent:
         ".odg",
     }
     WEB_EXT = {".pdf", ".html", ".htm", ".svg", ".png", ".jpg", ".jpeg", ".gif", ".webp"}
+    WINE_EXT = {".exe", ".msi", ".bat", ".cmd", ".lnk"}
     TEXT_EXT = {
         ".txt",
         ".md",
@@ -875,6 +880,8 @@ class Agent:
         q = shlex.quote(path)
         if ext in self.OFFICE_EXT and shutil.which("libreoffice"):
             return f"libreoffice {q}"
+        if ext in self.WINE_EXT and shutil.which("wine"):  # Windows programs (the `windows` profile)
+            return f"wine msiexec /i {q}" if ext == ".msi" else f"wine start /unix {q}"
         if ext in self.WEB_EXT and self._browser() != "xdg-open":
             return f"{self._browser()} {q}"
         if ext in self.TEXT_EXT:

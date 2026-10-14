@@ -16,14 +16,14 @@ class FakeBackend:
         raise NotFound(name)
 
 
-def run_session(monkeypatch, messages, compact=False):
+def run_session(monkeypatch, messages, compact=False, images=True):
     import minion.desktop as desktop_mod
 
     monkeypatch.setattr(desktop_mod, "get_backend", lambda name=None: FakeBackend())
     out = io.StringIO()
     monkeypatch.setattr("sys.stdin", io.StringIO("\n".join(json.dumps(m) for m in messages) + "\n"))
     monkeypatch.setattr("sys.stdout", out)
-    mcp.main(idle_freeze=0, compact=compact)
+    mcp.main(idle_freeze=0, compact=compact, images=images)
     import time
 
     time.sleep(0.3)  # tools/call replies come from worker threads
@@ -116,3 +116,30 @@ def test_malformed_messages_do_not_kill_the_server(monkeypatch):
     replies = run_session(monkeypatch, ["hello", [1, 2], {"jsonrpc": "2.0", "id": 9, "method": "ping"}])
     assert any(r.get("id") == 9 and r.get("result") == {} for r in replies)
     assert sum(1 for r in replies if r.get("error", {}).get("code") == -32600) == 3
+
+
+def test_text_only_server(monkeypatch):
+    replies = run_session(monkeypatch, [{"jsonrpc": "2.0", "id": 1, "method": "tools/list"}], images=False)
+    names = [t["name"] for t in replies[0]["result"]["tools"]]
+    assert "screenshot" not in names and "see" in names
+
+
+def test_cancelled_calls_get_no_response(monkeypatch):
+    import time
+
+    from minion.tools import Toolkit, ToolResult
+
+    def slow_call(self, name, arguments=None, progress=None):
+        time.sleep(0.15)  # still running when the cancellation arrives
+        return ToolResult([{"type": "text", "text": "done"}])
+
+    monkeypatch.setattr(Toolkit, "call", slow_call)
+    replies = run_session(
+        monkeypatch,
+        [
+            {"jsonrpc": "2.0", "id": 7, "method": "tools/call", "params": {"name": "see", "arguments": {}}},
+            {"jsonrpc": "2.0", "method": "notifications/cancelled", "params": {"requestId": 7, "reason": "timeout"}},
+            {"jsonrpc": "2.0", "id": 8, "method": "ping"},
+        ],
+    )
+    assert [r["id"] for r in replies] == [8]

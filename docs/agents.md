@@ -29,6 +29,8 @@ use `uvx --from git+https://github.com/apophisss/minion minion mcp`.
 | Variable / flag | Default | Meaning |
 |---|---|---|
 | `--preload office,research` | none | prepare these profiles' images in the background when the server starts |
+| `--compact` | off | one `computer` tool with CLI-style commands instead of nine tools |
+| `--no-images` | off | text only: no `screenshot` tool, and images are left out of results. Use it for clients that pass images to the model as base64 text (LlamaIndex, Google ADK, AutoGen) |
 | `--idle-freeze SECONDS` / `MINION_IDLE_FREEZE` | `600` | freeze desktops nobody used or watched for this long (`0` = never) |
 | `MINION_DEFAULT_PROFILE` | `browser` | profile for `desktop(action="create")` without a profile |
 | `MINION_MCP_CREATE_WAIT` | `240` | seconds `create` waits for a first-time image download before replying "still preparing" |

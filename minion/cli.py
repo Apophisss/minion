@@ -573,7 +573,7 @@ def cmd_serve(args) -> int:
 def cmd_mcp(args) -> int:
     from .mcp import main as mcp_main
 
-    mcp_main(preload=args.preload, idle_freeze=args.idle_freeze, compact=args.compact)
+    mcp_main(preload=args.preload, idle_freeze=args.idle_freeze, compact=args.compact, images=not args.no_images)
     return 0
 
 
@@ -652,7 +652,7 @@ def cmd_version(args) -> int:
 HELP = """\
 minion — instant, featherweight Linux desktops for AI agents.
 
-Start:     minion up [office|dev|research|browser|data|base]    then: minion see · minion view
+Start:     minion up [office|dev|research|browser|data|windows|base]    then: minion see · minion view
 Look:      see · shot · windows
 Act:       click · type · key · scroll · drag · fill · open · run · act (batch) · wait-for
 Manage:    ls · rm · stop · start · freeze · thaw · fork · snapshot · restore · use · cp · clip
@@ -883,6 +883,12 @@ def build_parser() -> argparse.ArgumentParser:
     sp = add("mcp", cmd_mcp, "run the MCP server on stdio (for Claude Code, Claude Desktop, Cursor, ...)")
     sp.add_argument("--preload", help="comma-separated profiles to prepare in the background")
     sp.add_argument("--compact", action="store_true", help="expose one `computer` tool (smallest context)")
+    sp.add_argument(
+        "--no-images",
+        action="store_true",
+        help="text only: no screenshot tool, no images in results (for clients "
+        "that would pass images to the model as base64 text)",
+    )
     sp.add_argument("--idle-freeze", type=float, default=config.env_float("MINION_IDLE_FREEZE", 600))
 
     add("doctor", cmd_doctor, "check that everything is set up")

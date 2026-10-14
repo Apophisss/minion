@@ -49,3 +49,12 @@ def test_claude_field_names():
 def test_invalid(bad):
     with pytest.raises(RpcError):
         parse_step(bad)
+
+
+def test_explicit_nulls_mean_defaults():
+    # Some MCP clients (CrewAI) send every optional field, as null.
+    assert parse_step({"action": "click", "target": "@3", "button": None, "count": None, "text": None}) == parse_step(
+        {"action": "click", "target": "@3"}
+    )
+    assert parse_step({"click": "@3", "key": None, "target": None}) == ("click", parse_step("click @3")[1])
+    assert parse_step({"action": None, "type": "hi"})[0] == "type"
