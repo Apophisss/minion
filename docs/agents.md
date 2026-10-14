@@ -33,6 +33,7 @@ use `uvx --from git+https://github.com/apophisss/minion minion mcp`.
 | `MINION_DEFAULT_PROFILE` | `browser` | profile for `desktop(action="create")` without a profile |
 | `MINION_MCP_CREATE_WAIT` | `240` | seconds `create` waits for a first-time image download before replying "still preparing" |
 | `MINION_BACKEND` | `auto` | `docker`, `podman` or `local` |
+| `MINION_FILES_ROOT` | none | confine the `files` tool's `upload`/`download` to this folder on your machine |
 
 ## The tools
 

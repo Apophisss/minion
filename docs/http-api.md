@@ -48,7 +48,12 @@ Pages: `/` is the dashboard and `/view/{name}` is the live view.
 
 Results always look like `{"content": [{"type": "text", "text": "..."}, {"type": "image", "data": "<base64>",
 "mimeType": "image/png"}], "isError": false}`. Each `session` (or `X-Minion-Session` header) keeps its own
-"current desktop", so many agents can share one server.
+"current desktop", so many agents can share one server. Over HTTP, `files` `upload`/`download` only use paths
+inside `MINION_FILES_ROOT` on the server (default `files/` in Minion's data directory; relative paths start
+there). To move content without touching the server's disk, use `files` `read`/`write`.
+
+The TypeScript client ([`clients/typescript`](../clients/typescript)) wraps these endpoints, including
+`toVercelAiTools()` for the Vercel AI SDK.
 
 Mutating requests must carry the Bearer token, a JSON content type or the `X-Minion: 1` header, which stops
 other web pages from forging them. On a loopback bind, only loopback `Host` names are accepted.

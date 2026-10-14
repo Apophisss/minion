@@ -3,7 +3,7 @@ import json
 import pytest
 
 from minion.errors import MinionError
-from minion.tools import TOOLS, Toolkit, ToolResult, openapi
+from minion.tools import TOOLS, ToolError, Toolkit, ToolResult, openapi
 
 
 class FakeBackend:
@@ -28,6 +28,7 @@ def _toolkit():
 
     t._lock = threading.Lock()
     t.in_process_viewer = None
+    t.files_root = None
     return t
 
 
@@ -38,6 +39,7 @@ def test_definitions_in_every_format(tk):
         t["type"] == "function" and t["function"]["parameters"]["type"] == "object" for t in tk.definitions("openai")
     )
     assert [t["name"] for t in tk.definitions("openai-responses")] == names
+    assert all(t["strict"] is False for t in tk.definitions("openai-responses"))  # schemas have optional fields
     assert all("input_schema" in t for t in tk.definitions("anthropic"))
     gem = tk.definitions("gemini")
     assert all(set(t) == {"name", "description", "parameters"} for t in gem)
@@ -168,3 +170,26 @@ def test_run_calls_anthropic_responses_gemini():
     ]
     with pytest.raises(MinionError):
         tk.run_calls([{}], "cobol")
+
+
+def test_files_root_confines_host_paths(tmp_path):
+    tk = _toolkit()
+    assert tk._host_path("~/x.pdf").endswith("/x.pdf")  # no root: any path (the local MCP/Python default)
+    root = (tmp_path / "files").resolve()
+    tk.files_root = root
+    assert tk._host_path("report.pdf") == str(root / "report.pdf") and root.is_dir()
+    assert tk._host_path(".") == str(root)
+    (root / "escape").symlink_to("/etc")
+    for bad in ("/etc/passwd", "../secret", "~/.ssh/id_rsa", "escape/passwd"):
+        with pytest.raises(ToolError):
+            tk._host_path(bad)
+
+
+def test_http_toolkits_get_a_files_root(tmp_path, monkeypatch):
+    from minion import server
+
+    monkeypatch.setenv("MINION_HOME", str(tmp_path))
+    monkeypatch.delenv("MINION_FILES_ROOT", raising=False)
+    monkeypatch.setattr(server, "_toolkits", {})
+    monkeypatch.setattr("minion.tools._backend", lambda b: FakeBackend())
+    assert server._toolkit("agent-1").files_root == (tmp_path / "data" / "files").resolve()

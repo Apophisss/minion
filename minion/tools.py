@@ -378,7 +378,8 @@ class ToolResult:
 
     def to_openai(self, tool_call_id: str) -> list[dict]:
         """Chat Completions messages: the tool message, plus a user message carrying any images
-        (tool messages there cannot hold images)."""
+        (tool messages there cannot hold images). For several calls in one turn, use
+        Toolkit.run_calls(), which puts every tool message before the images as the API requires."""
         msgs = [{"role": "tool", "tool_call_id": tool_call_id, "content": self.text or "(no text)"}]
         if self.images:
             msgs.append(
@@ -437,13 +438,22 @@ def _get(obj, key: str):
 class Toolkit:
     """The tools, bound to a backend and a notion of "the current desktop"."""
 
-    def __init__(self, backend: Backend | str | None = None, *, in_process_viewer: bool | None = None):
+    def __init__(
+        self,
+        backend: Backend | str | None = None,
+        *,
+        in_process_viewer: bool | None = None,
+        files_root: str | os.PathLike | None = None,
+    ):
         self.backend = _backend(backend)
         self.current: str | None = None
         self.desktops: dict[str, Desktop] = {}
         self._pending: dict[str, Future] = {}
         self._lock = threading.Lock()
         self.in_process_viewer = in_process_viewer
+        # `files` upload/download touch this machine's disk: confine them to files_root when set
+        root = files_root if files_root is not None else os.environ.get("MINION_FILES_ROOT")
+        self.files_root = Path(root).expanduser().resolve() if root else None
 
     # -- definitions ----------------------------------------------------
     def definitions(self, format: str = "mcp", *, compact: bool = False) -> list[dict]:
@@ -470,8 +480,14 @@ class Toolkit:
                     }
                 )
             elif fmt in ("openai-responses", "responses"):
-                out.append(
-                    {"type": "function", "name": t["name"], "description": t["description"], "parameters": schema}
+                out.append(  # strict: false, or Responses tries strict mode, which makes every optional field required
+                    {
+                        "type": "function",
+                        "name": t["name"],
+                        "description": t["description"],
+                        "parameters": schema,
+                        "strict": False,
+                    }
                 )
             elif fmt in ("anthropic", "claude"):
                 out.append({"name": t["name"], "description": t["description"], "input_schema": schema})
@@ -833,17 +849,30 @@ class Toolkit:
             raise ToolError(text)
         return [_text(text)]
 
+    def _host_path(self, path: str) -> str:
+        """A path on this machine for upload/download, kept inside files_root when one is set."""
+        raw = os.path.expanduser(path)
+        if self.files_root is None:
+            return raw
+        self.files_root.mkdir(parents=True, exist_ok=True)
+        full = (self.files_root / raw).resolve()
+        if full != self.files_root and self.files_root not in full.parents:
+            raise ToolError(f"local_path must be inside {self.files_root} (relative paths start there)")
+        return str(full)
+
     def t_files(self, args: dict, progress) -> list:
         d = self.desk(args)
         action, path = args.get("action"), args.get("path") or ""
         if action == "upload":
-            local = os.path.expanduser(args.get("local_path") or "")
-            if not local or not os.path.exists(local):
+            if not args.get("local_path"):
+                raise ToolError("upload needs local_path: a file on this machine")
+            local = self._host_path(args["local_path"])
+            if not os.path.exists(local):
                 raise ToolError(f"local_path {local!r} does not exist on this machine")
             d.upload(local, path or "~/")
             return [_text(f"Uploaded {local} → {d.name}:{path or '~/'}")]
         if action == "download":
-            local = os.path.expanduser(args.get("local_path") or ".")
+            local = self._host_path(args.get("local_path") or ".")
             return [_text(f"Downloaded {d.name}:{path} → {d.download(path, local)}")]
         if action == "read":
             text = d.read_text(path)

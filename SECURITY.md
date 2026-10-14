@@ -28,7 +28,16 @@ automation, but it is not isolation.
 **The HTTP server**
 
 `minion serve` binds to `127.0.0.1` and requires a random token by default. `--host 0.0.0.0` exposes desktops to
-your network: anyone with the token controls them. Never use `--no-auth` on a shared network.
+your network: anyone with the token controls them. Never use `--no-auth` on a shared network. It also refuses
+cross-site requests (CSRF) and, on loopback binds, foreign `Host` names (DNS rebinding).
+
+**Files on your machine**
+
+The `files` tool's `upload` and `download` read and write files on the machine that runs Minion. Over HTTP they
+are confined to one folder, `MINION_FILES_ROOT` (default: `files/` in Minion's data directory, e.g.
+`~/.local/share/minion/files`). The MCP server and the Python `Toolkit` run as your own user, like any local agent
+tool, so they are unrestricted unless you set `MINION_FILES_ROOT` (or `Toolkit(files_root=...)`). Set it when a
+prompt-injected agent must not be able to copy your files into a desktop.
 
 **Prompt injection**
 

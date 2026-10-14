@@ -57,8 +57,9 @@ def _toolkit(session: str):
 
     with _desk_lock:
         tk = _toolkits.get(session)
-        if tk is None:
-            tk = Toolkit(in_process_viewer=True)
+        if tk is None:  # over HTTP, `files` may only touch the server's disk inside one folder
+            root = os.environ.get("MINION_FILES_ROOT") or str(config.data_dir() / "files")
+            tk = Toolkit(in_process_viewer=True, files_root=root)
             _toolkits[session] = tk
         return tk
 
