@@ -529,18 +529,32 @@ def cmd_replay(args) -> int:
 
 
 def cmd_view(args) -> int:
-    from .server import ensure_server
+    from .server import ensure_server, handoff_wait
 
-    d = desktop(args) if (getattr(args, "desktop", None) or Desktop.list()) else None
+    ask = getattr(args, "ask", None)
+    if getattr(args, "name", None):
+        args.desktop = args.name
+    d = desktop(args) if (ask or getattr(args, "desktop", None) or Desktop.list()) else None
     base, token = ensure_server()
     url = f"{base}/view/{d.name}?token={token}" if d else f"{base}/?token={token}"
-    if args.json:
-        emit_json({"url": url})
-        return 0
-    ok(f"live view: {url}")
+    if not args.json:
+        ok(f"live view: {url}")
     if not getattr(args, "no_open", False):
         webbrowser.open(url)
-    return 0
+    if not ask:
+        if args.json:
+            emit_json({"url": url})
+        return 0
+    if not args.json:
+        info(f"waiting up to {args.timeout:.0f}s for the human to press Done…")
+    note = handoff_wait(d.name, ask, args.timeout)
+    if args.json:
+        emit_json({"url": url, "done": note is not None, "note": note})
+    elif note is None:
+        err(f"the human did not finish within {args.timeout:.0f}s")
+    else:
+        ok("the human is done" + (f': "{note}"' if note else ""))
+    return 0 if note is not None else 1
 
 
 def cmd_serve(args) -> int:
@@ -603,6 +617,20 @@ def cmd_tools(args) -> int:
     return 0
 
 
+def cmd_skill(args) -> int:
+    from importlib.resources import files
+
+    text = files("minion").joinpath("skill/SKILL.md").read_text(encoding="utf-8")
+    if args.install is None:
+        sys.stdout.write(text)
+        return 0
+    dest = Path(os.path.expanduser(args.install or "~/.claude/skills")) / "minion" / "SKILL.md"
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_text(text, encoding="utf-8")
+    ok(f"skill installed: {dest}")
+    return 0
+
+
 def cmd_logs(args) -> int:
     d = desktop(args)
     print(d.logs(args.tail))
@@ -629,6 +657,7 @@ Look:      see · shot · windows
 Act:       click · type · key · scroll · drag · fill · open · run · act (batch) · wait-for
 Manage:    ls · rm · stop · start · freeze · thaw · fork · snapshot · restore · use · cp · clip
 Connect:   mcp (Claude Code, Claude Desktop, Cursor...) · serve (HTTP API + dashboard) · view (live)
+           tools (definitions for any LLM API) · skill (SKILL.md for agents with a shell)
 
 Targets for click/move/fill: @12 (an id from `minion see`), "Sign in" (visible text), or 640,400.
 Docs: https://github.com/apophisss/minion
@@ -805,7 +834,10 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--action", default="focus", choices=["focus", "close", "maximize", "restore", "minimize"])
 
     sp = add("view", cmd_view, "open the live view in your browser (watch and take over)")
+    sp.add_argument("name", nargs="?", help="desktop (default: the current one)")
     sp.add_argument("--no-open", action="store_true", help="just print the URL")
+    sp.add_argument("--ask", metavar="MESSAGE", help="hand off to the human with this message; wait for Done")
+    sp.add_argument("--timeout", "-t", type=float, default=600.0, help="seconds to wait with --ask (default 600)")
 
     sp = add("replay", cmd_replay, "export the flight recorder: HTML timeline, GIF, or a replayable .py script")
     sp.add_argument("-o", "--output", help="file.html (default), file.gif, or file.py (replay with `minion script`)")
@@ -822,6 +854,15 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--compact", action="store_true", help="the single `computer` tool")
     sp.add_argument("--call", metavar="NAME", help="call a tool, e.g. --call see")
     sp.add_argument("arguments", nargs="?", help="JSON arguments for --call")
+
+    sp = add("skill", cmd_skill, "print the Agent Skill (SKILL.md) that teaches agents this CLI, or install it")
+    sp.add_argument(
+        "--install",
+        nargs="?",
+        const="",
+        metavar="DIR",
+        help="write DIR/minion/SKILL.md (default DIR: ~/.claude/skills)",
+    )
 
     sp = add("logs", cmd_logs, "show the desktop's session log")
     sp.add_argument("--tail", type=int, default=200)

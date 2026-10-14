@@ -6,10 +6,10 @@ and exported in the function-calling formats of every major model API:
     from minion.tools import Toolkit
 
     tk = Toolkit()
-    tools = tk.definitions("openai")     # or "anthropic", "gemini", "openai-responses", "mcp"
-    ...                                   # give `tools` to your model; when it calls one:
-    result = tk.call(name, arguments)     # -> ToolResult(.text, .images, .is_error)
-    messages += result.to_openai(tool_call_id)
+    tools = tk.definitions("openai")         # or "anthropic", "gemini", "openai-responses", "mcp"
+    ...                                       # give `tools` to your model; when it calls some:
+    messages += tk.run_calls(msg.tool_calls)  # run them all, get the reply messages in that API's shape
+    result = tk.call(name, arguments)         # or one at a time -> ToolResult(.text, .images, .is_error)
 
 Only the standard library is used. Results carry text and (for screenshots) images; helpers
 convert them to each API's message shapes.
@@ -424,6 +424,15 @@ def _image(data_b64: str, mime: str = "image/png") -> dict:
     return {"type": "image", "data": data_b64, "mimeType": mime}
 
 
+def _get(obj, key: str):
+    """A field from an SDK object or a plain dict (None when missing)."""
+    if obj is None:
+        return None
+    if isinstance(obj, dict):
+        return obj.get(key)
+    return getattr(obj, key, None)
+
+
 # ---------------------------------------------------------------------------
 class Toolkit:
     """The tools, bound to a backend and a notion of "the current desktop"."""
@@ -494,6 +503,65 @@ class Toolkit:
             return ToolResult([_text(str(e))], True)
         except Exception as e:  # report instead of crashing the caller's agent loop
             return ToolResult([_text(f"{type(e).__name__}: {e}")], True)
+
+    def run_calls(self, calls, format: str = "openai"):
+        """Run a model's tool calls and return what to send back, in that API's shape.
+
+        openai:           Chat Completions messages to append (tool messages first, then one user
+                          message with any screenshots, so parallel calls stay valid)
+        openai-responses: input items to append
+        anthropic:        one user message holding a tool_result per tool_use block
+        gemini:           a list of parts (function responses, then images) for one user turn
+
+        `calls` may be SDK objects or plain dicts: Chat Completions `message.tool_calls`, Responses
+        `function_call` items, Anthropic `content` blocks (non-tool blocks are skipped), or Gemini
+        function calls.
+        """
+        fmt = format.lower()
+        out: list[dict] = []
+        images: list[dict] = []
+        tool_results: list[dict] = []
+        for c in calls or []:
+            if fmt in ("anthropic", "claude"):
+                if _get(c, "type") != "tool_use":
+                    continue
+                tool_results.append(self.call(_get(c, "name"), _get(c, "input")).to_anthropic(_get(c, "id")))
+            elif fmt in ("openai", "openai-chat", "chat"):
+                fn = _get(c, "function")
+                msgs = self.call(_get(fn, "name"), _get(fn, "arguments")).to_openai(_get(c, "id"))
+                out.append(msgs[0])
+                images += msgs[1]["content"][1:] if len(msgs) > 1 else []
+            elif fmt in ("openai-responses", "responses"):
+                if _get(c, "type") not in (None, "function_call"):
+                    continue
+                items = self.call(_get(c, "name"), _get(c, "arguments")).to_openai_responses(_get(c, "call_id"))
+                out.append(items[0])
+                images += items[1]["content"] if len(items) > 1 else []
+            elif fmt in ("gemini", "google"):
+                fc = _get(c, "function_call") or c
+                name = _get(fc, "name")
+                if not name:  # a text or thought part
+                    continue
+                args = _get(fc, "args")
+                if args is not None and not isinstance(args, (dict, str)):
+                    args = dict(args)
+                parts = self.call(name, args).to_gemini(name)
+                if _get(fc, "id"):
+                    parts[0]["function_response"]["id"] = _get(fc, "id")
+                out.append(parts[0])
+                images += parts[1:]
+            else:
+                raise MinionError(f"unknown format {format!r}: openai, openai-responses, anthropic, gemini")
+        if fmt in ("anthropic", "claude"):
+            return [{"role": "user", "content": tool_results}] if tool_results else []
+        if images and fmt in ("openai", "openai-chat", "chat"):
+            out.append({"role": "user", "content": [{"type": "text", "text": "Screenshots from the tool calls:"}]})
+            out[-1]["content"] += images
+        elif images and fmt in ("openai-responses", "responses"):
+            out.append({"role": "user", "content": images})
+        else:
+            out += images
+        return out
 
     def functions(self) -> dict:
         """Plain Python callables (text in, text out) for frameworks that wrap functions as tools."""

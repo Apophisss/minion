@@ -38,7 +38,7 @@ use `uvx --from git+https://github.com/apophisss/minion minion mcp`.
 
 | Tool | What it does |
 |---|---|
-| `desktop` | `create` (profile, name, size, `count` for several in parallel), `list`, `profiles`, `remove`, `freeze`, `thaw`, `fork`, `snapshot`, `restore`, `replay` (HTML timeline) |
+| `desktop` | `create` (profile, name, size, `count` for several in parallel), `list`, `profiles`, `remove`, `freeze`, `thaw`, `fork`, `snapshot`, `restore`, `replay` (HTML timeline), `macro` (everything done so far as a Python script that replays it without a model) |
 | `see` | The screen as text: windows, then the focused window's controls with **stable** `@ids`, roles, names, values, states and centers. `changes=true` returns only what changed since the last look. Use `ocr=true` for canvases and images, and `full_text=true` to read long text |
 | `screenshot` | A PNG. Use `marks=true` to draw `@ids`, `detail="low"` for half size (4× fewer tokens), `region=[x,y,w,h]` with `zoom=true` to magnify, and `grid=true` for a coordinate grid |
 | `act` | A batch of mouse and keyboard actions: `click`, `double_click`, `right_click`, `move`, `drag`, `type`, `paste`, `fill`, `key`, `scroll`, `wait`, `wait_for`, `focus`, and more. It stops at the first failure, waits for the screen to settle, and reports what changed. `observe`: `summary` (default), `changes` (+ the changed UI as text), `see`, `screenshot` or `crop` (only the changed region) |
@@ -53,6 +53,97 @@ The default target of every tool is the desktop the agent created or used last. 
 **Compact mode** (`minion mcp --compact`) exposes a single `computer` tool that takes CLI-style commands
 (`see`, `click @12`, `type 'hi'`, `run ls`, `create office -n 2`). It cuts the tool definitions sent with every
 request from about 2,100 tokens to about 230, and works well for small and local models.
+
+## Shell agents and Agent Skills
+
+An agent that can run shell commands needs no MCP at all: the `minion` CLI does everything the tools do
+([cli.md](cli.md)). To teach it the CLI, install the bundled [Agent Skill](https://agentskills.io):
+
+```bash
+minion skill --install                       # ~/.claude/skills/minion/SKILL.md (Claude Code)
+minion skill --install ~/.codex/skills       # or any agent's skills directory
+minion skill >> AGENTS.md                    # or append it to an AGENTS.md / system prompt
+```
+
+A skill costs about 100 tokens (its description) until the agent decides it needs a desktop. Only then does
+it read the rest, about 950 tokens. MCP tool definitions, by contrast, are sent with every request. For
+Claude Code there is also a plugin that bundles the MCP server and the skill:
+
+```bash
+claude plugin marketplace add apophisss/minion
+claude plugin install minion@minion
+```
+
+## Without MCP: function calling with any model
+
+The same tools work in any agent loop you write yourself. `Toolkit.definitions(format)` gives the
+definitions in your API's shape, and `Toolkit.run_calls(calls, format)` runs the model's tool calls (SDK
+objects or plain dicts) and returns exactly what to send back, with screenshots placed where that API
+accepts images. `INSTRUCTIONS` is a short system prompt that teaches the tools.
+
+**OpenAI Chat Completions** (also Ollama, vLLM, LM Studio, Mistral, Groq, OpenRouter and other compatible APIs):
+
+```python
+from openai import OpenAI
+from minion.tools import INSTRUCTIONS, Toolkit
+
+tk, client = Toolkit(), OpenAI()
+messages = [{"role": "system", "content": INSTRUCTIONS}, {"role": "user", "content": "Book-keep these receipts in Calc: ..."}]
+while True:
+    msg = client.chat.completions.create(model="YOUR-MODEL", messages=messages,
+                                         tools=tk.definitions("openai")).choices[0].message
+    messages.append(msg)
+    if not msg.tool_calls:
+        break
+    messages += tk.run_calls(msg.tool_calls)
+```
+
+**Anthropic Messages API:**
+
+```python
+import anthropic
+from minion.tools import INSTRUCTIONS, Toolkit
+
+tk, client = Toolkit(), anthropic.Anthropic()
+messages = [{"role": "user", "content": "Make a 3-slide deck about otters in Impress."}]
+while True:
+    reply = client.messages.create(model="claude-opus-5-5", max_tokens=16000, system=INSTRUCTIONS,
+                                   thinking={"type": "adaptive"}, tools=tk.definitions("anthropic"),
+                                   messages=messages)
+    messages.append({"role": "assistant", "content": reply.content})
+    if reply.stop_reason != "tool_use":
+        break
+    messages += tk.run_calls(reply.content, "anthropic")
+```
+
+**Gemini** (`google-genai`):
+
+```python
+from google import genai
+from google.genai import types
+from minion.tools import INSTRUCTIONS, Toolkit
+
+tk, client = Toolkit(), genai.Client()
+config = types.GenerateContentConfig(system_instruction=INSTRUCTIONS,
+                                     tools=[types.Tool(function_declarations=tk.definitions("gemini"))])
+contents = [types.Content(role="user", parts=[types.Part(text="Find three papers on RLHF and save the PDFs.")])]
+while True:
+    response = client.models.generate_content(model="YOUR-GEMINI-MODEL", contents=contents, config=config)
+    contents.append(response.candidates[0].content)
+    if not response.function_calls:
+        break
+    contents.append(types.Content(role="user", parts=tk.run_calls(response.function_calls, "gemini")))
+```
+
+**OpenAI Responses API:** `tools=tk.definitions("openai-responses")`, then
+`items += response.output` and `items += tk.run_calls(response.output, "openai-responses")` (non-call items
+are skipped).
+
+Pass `compact=True` to `definitions()` for the single `computer` tool. Frameworks that wrap plain Python
+functions can use `tk.functions()`, a dict of text-in, text-out callables. For recipes for LangChain, CrewAI,
+LlamaIndex, smolagents, Pydantic AI, Google ADK, AutoGen and the OpenAI Agents SDK, see
+[integrations.md](integrations.md). Other languages can call the same tools over HTTP
+([http-api.md](http-api.md)).
 
 ## Tips for agents (paste into a system prompt if you like)
 

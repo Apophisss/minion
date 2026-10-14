@@ -117,3 +117,54 @@ def test_functions_for_frameworks(tk):
     assert set(fns) == {t["name"] for t in TOOLS}
     assert "accessibility" in fns["see"].__doc__
     assert "No desktop yet" in fns["see"]()
+
+
+def _shot_toolkit():
+    t = _toolkit()
+    t.t_see = lambda a, p: [{"type": "text", "text": f"saw {a.get('window', 'all')}"}]
+    t.t_screenshot = lambda a, p: [{"type": "image", "data": "QUJD", "mimeType": "image/png"}]
+    return t
+
+
+def test_run_calls_openai_keeps_tool_messages_together():
+    class Fn:  # SDK-style objects work as well as dicts
+        name, arguments = "see", '{"window": "Editor"}'
+
+    class Call:
+        id, function = "c1", Fn()
+
+    tk = _shot_toolkit()
+    msgs = tk.run_calls([{"id": "c0", "function": {"name": "screenshot", "arguments": "{}"}}, Call()])
+    assert [m["role"] for m in msgs] == ["tool", "tool", "user"]  # images after *all* tool messages
+    assert msgs[1] == {"role": "tool", "tool_call_id": "c1", "content": "saw Editor"}
+    assert msgs[2]["content"][1]["image_url"]["url"] == "data:image/png;base64,QUJD"
+    assert tk.run_calls([]) == []
+
+
+def test_run_calls_anthropic_responses_gemini():
+    tk = _shot_toolkit()
+    blocks = [
+        {"type": "text", "text": "Let me look."},
+        {"type": "tool_use", "id": "t1", "name": "see", "input": {}},
+        {"type": "tool_use", "id": "t2", "name": "screenshot", "input": {}},
+    ]
+    (msg,) = tk.run_calls(blocks, "anthropic")
+    assert msg["role"] == "user" and [b["tool_use_id"] for b in msg["content"]] == ["t1", "t2"]
+    assert msg["content"][1]["content"][0]["type"] == "image"
+    assert tk.run_calls([{"type": "text", "text": "done"}], "anthropic") == []
+
+    items = tk.run_calls(
+        [{"type": "reasoning"}, {"type": "function_call", "call_id": "r1", "name": "screenshot", "arguments": "{}"}],
+        "openai-responses",
+    )
+    assert items[0]["type"] == "function_call_output" and items[0]["call_id"] == "r1"
+    assert items[1]["content"][0]["type"] == "input_image"
+
+    parts = tk.run_calls(
+        [{"text": "thinking"}, {"function_call": {"name": "see", "args": {"window": "x"}, "id": "g1"}}], "gemini"
+    )
+    assert parts == [
+        {"function_response": {"name": "see", "response": {"result": "saw x", "error": False}, "id": "g1"}}
+    ]
+    with pytest.raises(MinionError):
+        tk.run_calls([{}], "cobol")

@@ -55,7 +55,7 @@ version = { attr = "minion.agent.VERSION" }
 include = ["minion*"]
 
 [tool.setuptools.package-data]
-minion = ["profiles/*.toml", "images/*", "web/*", "py.typed"]
+minion = ["profiles/*.toml", "images/*", "web/*", "skill/*", "py.typed"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

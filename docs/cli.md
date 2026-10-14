@@ -65,10 +65,11 @@ command's own exit code (`124` on timeout).
 
 | Command | |
 |---|---|
-| `minion view [NAME]` | Open the live view in your browser. It starts a background server if needed. `--no-open` prints the URL |
+| `minion view [NAME]` | Open the live view in your browser. It starts a background server if needed. `--no-open` prints the URL. `--ask "Please sign in, then press Done"` hands off to the human and waits (up to `--timeout 600` s) until they press Done, then prints their note. The exit code is 1 if they did not finish |
 | `minion replay [-o FILE.html\|FILE.gif] [--open]` | Export the flight recorder |
 | `minion serve` | The HTTP API, dashboard and live view. Options: `--host`, `--port 4747`, `--token`, `--no-auth`, `--idle-freeze 600` |
 | `minion mcp` | The MCP server on stdio. Options: `--compact` (one `computer` tool), `--preload office,dev`, `--idle-freeze 600` |
 | `minion tools [-f openai\|anthropic\|gemini\|openai-responses\|mcp] [--compact]` | Print tool definitions for any LLM API. `minion tools --call see` runs one |
+| `minion skill [--install [DIR]]` | Print the Agent Skill (`SKILL.md`) that teaches an agent this CLI, or install it as `DIR/minion/SKILL.md` (default `~/.claude/skills`) |
 
 Quote `~` paths so your own shell doesn't expand them: `minion open '~/Documents/report.docx'`.

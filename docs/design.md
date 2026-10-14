@@ -54,7 +54,7 @@ The tools are defined once (`minion/tools.py`) and served everywhere:
 ```
                  ┌─ MCP (stdio)  ── Claude Code/Desktop, Cursor, VS Code, Codex, Gemini CLI, OpenAI Agents SDK,
                  │                   LangChain, LlamaIndex, CrewAI, smolagents, Pydantic AI, ADK, AutoGen …
- minion/tools ───┼─ Function calling ── Toolkit.definitions("openai" | "anthropic" | "gemini" | …) + Toolkit.call()
+ minion/tools ───┼─ Function calling ── Toolkit.definitions("openai" | "anthropic" | "gemini" | …) + Toolkit.run_calls()
                  │                      (any model API, local models via Ollama/vLLM)
                  ├─ HTTP ── /api/tools/* + /openapi.json (GPT Actions, n8n, Dify, any language)
                  ├─ TypeScript client (clients/typescript)

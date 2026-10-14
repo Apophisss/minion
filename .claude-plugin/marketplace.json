@@ -1,0 +1,14 @@
+{
+  "name": "minion",
+  "description": "Minion: instant desktops for AI agents",
+  "owner": {
+    "name": "Minion contributors"
+  },
+  "plugins": [
+    {
+      "name": "minion",
+      "source": "./plugins/minion",
+      "description": "Real Linux desktops that Claude can see as text and control: MCP tools plus a skill for using them efficiently."
+    }
+  ]
+}

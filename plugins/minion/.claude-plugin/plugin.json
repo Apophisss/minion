@@ -1,0 +1,20 @@
+{
+  "name": "minion",
+  "displayName": "Minion desktops",
+  "version": "0.1.0",
+  "description": "Real Linux desktops (office, browser, dev, research, data, Windows apps) that Claude can see as text and control: MCP tools plus a skill for using them efficiently.",
+  "author": {
+    "name": "Minion contributors",
+    "url": "https://github.com/apophisss/minion"
+  },
+  "homepage": "https://github.com/apophisss/minion",
+  "repository": "https://github.com/apophisss/minion",
+  "license": "MIT",
+  "keywords": ["computer-use", "desktop", "automation", "mcp", "agents", "libreoffice", "browser"],
+  "mcpServers": {
+    "minion": {
+      "command": "uvx",
+      "args": ["minion-desktop", "mcp"]
+    }
+  }
+}
