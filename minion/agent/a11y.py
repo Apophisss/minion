@@ -309,8 +309,9 @@ def _cell_rc(table, cell) -> tuple[int, int] | None:
         return None
 
 
-def _visible_cells(table, x: int, y: int, w: int, h: int, deadline: float, max_rows: int = 60,
-                   max_cols: int = 26, max_cells: int = 150):
+def _visible_cells(
+    table, x: int, y: int, w: int, h: int, deadline: float, max_rows: int = 60, max_cols: int = 26, max_cells: int = 150
+):
     """The non-empty cells currently on screen in a huge table (a spreadsheet), with their A1 refs."""
     try:
         tl = Atspi.Component.get_accessible_at_point(table, x + 3, y + 3, Atspi.CoordType.SCREEN)
@@ -584,8 +585,17 @@ def snapshot(
                 for ref, content, cell, (cx0, cy0, cw, ch) in found:
                     elements.append(
                         Element(
-                            id=len(elements) + 1, role="cell", name=ref, depth=child_shown_depth + 1,
-                            x=cx0, y=cy0, w=cw, h=ch, text=content, node=cell, in_doc=in_doc,
+                            id=len(elements) + 1,
+                            role="cell",
+                            name=ref,
+                            depth=child_shown_depth + 1,
+                            x=cx0,
+                            y=cy0,
+                            w=cw,
+                            h=ch,
+                            text=content,
+                            node=cell,
+                            in_doc=in_doc,
                         )
                     )
                 return

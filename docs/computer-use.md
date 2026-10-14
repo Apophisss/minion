@@ -53,12 +53,12 @@ from minion import Desktop
 from minion.integrations.anthropic import ComputerUse
 
 desk = Desktop.create("browser")
-cu = ComputerUse(desk)                  # version="computer_20251124" for the earlier tool
-tools = [cu.tool()]                     # {"type": "computer_toolset_20260801"}
+cu = ComputerUse(desk)  # version="computer_20251124" for the earlier tool
+tools = [cu.tool()]  # {"type": "computer_toolset_20260801"}
 headers = {"anthropic-beta": cu.beta_header} if cu.beta_header else {}
 
 # after each response:
-tool_results = cu.run(response.content)    # one tool_result per computer call, toolset_name echoed
+tool_results = cu.run(response.content)  # one tool_result per computer call, toolset_name echoed
 messages.append({"role": "assistant", "content": response.content})
 messages.append({"role": "user", "content": tool_results})
 ```

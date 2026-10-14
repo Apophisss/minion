@@ -106,14 +106,14 @@ minion cp :~/Documents/notes.md .       # copy files out (and in)
 ```python
 from minion import Desktop
 
-with Desktop.create("office", keep=False) as desk:          # removed when the block ends
+with Desktop.create("office", keep=False) as desk:  # removed when the block ends
     desk.open("calc")
     desk.act("type 'Revenue'", "key Tab", "type 1200", "key Return")
-    print(desk.see())                                         # the sheet and the UI as text
+    print(desk.see())  # the sheet and the UI as text
     desk.key("ctrl+s")
     desk.fill("Name", "q3.xlsx")
     desk.key("Return")
-    desk.wait_for("q3.xlsx")                                  # the title changes once it's saved
+    desk.wait_for("q3.xlsx")  # the title changes once it's saved
     desk.download("~/Documents/q3.xlsx", ".")
 ```
 
@@ -129,9 +129,11 @@ from minion import Desktop
 from minion.integrations.anthropic import MinionComputer, allow_all
 
 desk = Desktop.create("office")
-with MinionComputer(desk, confirm=allow_all) as computer:   # the desktop is the sandbox
+with MinionComputer(desk, confirm=allow_all) as computer:  # the desktop is the sandbox
     runner = anthropic.Anthropic().beta.messages.tool_runner(
-        model="claude-opus-5-5", max_tokens=4096, tools=[computer],
+        model="claude-opus-5-5",
+        max_tokens=4096,
+        tools=[computer],
         messages=[{"role": "user", "content": "Make a 3-slide deck about otters in Impress."}],
     )
     for message in runner:

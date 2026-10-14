@@ -1,6 +1,6 @@
 """Render docs/assets/hero.png (README banner / social preview) from real desktop screenshots.
 
-    python scripts/make_hero.py office.png research.png dev.png
+python scripts/make_hero.py office.png research.png dev.png
 """
 
 import sys
@@ -66,7 +66,11 @@ def logo(size):
 
 def main(office, research, dev, out="docs/assets/hero.png"):
     img = background().convert("RGBA")
-    for path, width, angle, x, y in ((dev, 470, -6, 600, 318), (research, 520, 4, 590, 18), (office, 520, -3, 800, 200)):
+    for path, width, angle, x, y in (
+        (dev, 470, -6, 600, 318),
+        (research, 520, 4, 590, 18),
+        (office, 520, -3, 800, 200),
+    ):
         c = card(path, width, angle)
         img.alpha_composite(c, (x, y))
     d = ImageDraw.Draw(img)
@@ -75,7 +79,11 @@ def main(office, research, dev, out="docs/assets/hero.png"):
     d.text((72, 262), "Instant desktops", font=font("Inter-SemiBold.otf", 46), fill=(224, 231, 255))
     d.text((72, 316), "for AI agents.", font=font("Inter-SemiBold.otf", 46), fill=(165, 180, 252))
     body = font("Inter-Regular.otf", 21)
-    lines = ["Office · Dev · Research · Browser · Data", "Ready in ~1.5 s · 0% CPU when frozen", "MCP · CLI · Python · HTTP · Claude computer use"]
+    lines = [
+        "Office · Dev · Research · Browser · Data",
+        "Ready in ~1.5 s · 0% CPU when frozen",
+        "MCP · CLI · Python · HTTP · Claude computer use",
+    ]
     for i, line in enumerate(lines):
         d.text((74, 400 + i * 34), line, font=body, fill=(199, 210, 254))
     img.convert("RGB").save(out, optimize=True)

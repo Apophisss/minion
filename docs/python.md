@@ -7,9 +7,9 @@ pip install minion-desktop     # pure standard library: nothing else is installe
 ```python
 from minion import Desktop
 
-desk = Desktop.create("office")              # or Desktop.attach("office-1") / Desktop.attach()
+desk = Desktop.create("office")  # or Desktop.attach("office-1") / Desktop.attach()
 desk.open("writer")
-print(desk.see())                            # Observation: .text, .elements, .windows, .focused, .ocr
+print(desk.see())  # Observation: .text, .elements, .windows, .focused, .ocr
 desk.type("Hello!\n")
 desk.screenshot("hello.png")
 desk.remove()
@@ -43,13 +43,13 @@ All actions return an `ActResult` (`.ok`, `.summary`, `.steps`, `.change`, `.ope
 By default a failed action raises `AgentError`. Pass `check=False` to inspect the failure instead.
 
 ```python
-desk.click("@12")                     # an id from the latest see()
-desk.click("Sign in")                 # visible text
+desk.click("@12")  # an id from the latest see()
+desk.click("Sign in")  # visible text
 desk.click([640, 400], button="right")
 desk.double_click("report.docx")
-desk.type("hello\n")                  # \n = Return, \t = Tab
-desk.paste(long_text)                 # through the clipboard
-desk.fill("Email", "ada@example.com") # finds the field by its label
+desk.type("hello\n")  # \n = Return, \t = Tab
+desk.paste(long_text)  # through the clipboard
+desk.fill("Email", "ada@example.com")  # finds the field by its label
 desk.key("ctrl+s")
 desk.scroll("down", 5, target="@30")
 desk.drag("@4", "@9")
@@ -64,26 +64,29 @@ The batch API accepts Claude computer-use shapes too (`{"action": "left_click", 
 ## Apps, shell and files
 
 ```python
-desk.open("calc")                             # profile app, URL, file in the desktop, or a command
-r = desk.run("python3 -c 'print(6*7)'")       # RunResult(.code, .stdout, .stderr, .ok, .check())
+desk.open("calc")  # profile app, URL, file in the desktop, or a command
+r = desk.run("python3 -c 'print(6*7)'")  # RunResult(.code, .stdout, .stderr, .ok, .check())
 desk.run("python3 -m http.server 8000", background=True)
 desk.upload("data.csv", "~/Documents/")
 desk.download("~/Documents/report.pdf", ".")
 desk.write_text("~/notes.md", "# Notes")
 desk.read_text("~/notes.md")
-desk.clipboard = "copied"; print(desk.clipboard)
+desk.clipboard = "copied"
+print(desk.clipboard)
 desk.window("maximize", "Firefox")
 ```
 
 ## Lifecycle
 
 ```python
-desk.freeze(); desk.thaw()            # 0% CPU while frozen; any call thaws automatically
-desk.stop(); desk.start()
+desk.freeze()
+desk.thaw()  # 0% CPU while frozen; any call thaws automatically
+desk.stop()
+desk.start()
 tag = desk.snapshot("before-import")  # disk state
 desk.restore(tag)
 twin = desk.fork("try-other-approach")
-desk.recording("html", "session.html") # flight recorder (also "gif")
+desk.recording("html", "session.html")  # flight recorder (also "gif")
 desk.remove()
 ```
 

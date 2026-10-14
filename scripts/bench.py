@@ -14,13 +14,20 @@ import time
 sys.path.insert(0, ".")
 from minion import Desktop, profiles  # noqa: E402
 
-MAIN_APP = {"browser": "https://en.wikipedia.org/wiki/Computer", "office": "writer", "dev": "terminal",
-            "research": "https://arxiv.org/list/cs.AI/recent", "data": "calc", "base": "terminal"}
+MAIN_APP = {
+    "browser": "https://en.wikipedia.org/wiki/Computer",
+    "office": "writer",
+    "dev": "terminal",
+    "research": "https://arxiv.org/list/cs.AI/recent",
+    "data": "calc",
+    "base": "terminal",
+}
 
 
 def mem_mb(name: str) -> float:
-    out = subprocess.run(["docker", "stats", "--no-stream", "--format", "{{json .}}", f"minion-{name}"],
-                         capture_output=True, text=True).stdout
+    out = subprocess.run(
+        ["docker", "stats", "--no-stream", "--format", "{{json .}}", f"minion-{name}"], capture_output=True, text=True
+    ).stdout
     used = json.loads(out)["MemUsage"].split("/")[0].strip()
     num = float("".join(c for c in used if c.isdigit() or c == "."))
     return num * (1024 if used.endswith("GiB") else 1 / 1024 if used.endswith("KiB") else 1)
@@ -54,17 +61,30 @@ for profile in sys.argv[1:] or ["base", "browser", "office"]:
     w, h = desk.size
     desk.freeze()
     time.sleep(1)
-    frozen_cpu = subprocess.run(["docker", "stats", "--no-stream", "--format", "{{.CPUPerc}}", f"minion-{name}"],
-                                capture_output=True, text=True).stdout.strip()
-    rows.append({"profile": profile, "download_mb": round(image_mb(profile)), "ready_s": round(ready, 1),
-                 "idle_mb": round(idle), "app": MAIN_APP[profile], "app_open_s": round(open_s, 1),
-                 "with_app_mb": round(busy), "see_tokens": see_tokens, "screenshot_tokens": tokens(w, h),
-                 "frozen_cpu": frozen_cpu})
+    frozen_cpu = subprocess.run(
+        ["docker", "stats", "--no-stream", "--format", "{{.CPUPerc}}", f"minion-{name}"], capture_output=True, text=True
+    ).stdout.strip()
+    rows.append(
+        {
+            "profile": profile,
+            "download_mb": round(image_mb(profile)),
+            "ready_s": round(ready, 1),
+            "idle_mb": round(idle),
+            "app": MAIN_APP[profile],
+            "app_open_s": round(open_s, 1),
+            "with_app_mb": round(busy),
+            "see_tokens": see_tokens,
+            "screenshot_tokens": tokens(w, h),
+            "frozen_cpu": frozen_cpu,
+        }
+    )
     desk.remove()
     print(json.dumps(rows[-1]), flush=True)
 
 print("\n| Profile | Download | Ready in | Idle RAM | RAM with app | `see` tokens | Screenshot tokens |")
 print("|---|---|---|---|---|---|---|")
 for r in rows:
-    print(f"| {r['profile']} | {r['download_mb']} MB | {r['ready_s']} s | {r['idle_mb']} MB | "
-          f"{r['with_app_mb']} MB ({r['app']}) | ~{r['see_tokens']} | ~{r['screenshot_tokens']} |")
+    print(
+        f"| {r['profile']} | {r['download_mb']} MB | {r['ready_s']} s | {r['idle_mb']} MB | "
+        f"{r['with_app_mb']} MB ({r['app']}) | ~{r['see_tokens']} | ~{r['screenshot_tokens']} |"
+    )

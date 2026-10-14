@@ -1,6 +1,6 @@
 """Write a build context (Dockerfile + files) for every built-in profile, for CI image builds.
 
-    python scripts/gen_dockerfiles.py --registry ghcr.io/owner --tag 0.1 --out build/
+python scripts/gen_dockerfiles.py --registry ghcr.io/owner --tag 0.1 --out build/
 """
 
 import argparse
@@ -39,6 +39,12 @@ for name in profiles.names(reg):
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_text(content.lstrip("\n"))
     (ctx / "Dockerfile").write_text(df)
-    plan.append({"profile": name, "parent": p.extends, "context": str(ctx),
-                 "image": f"{args.registry}/minion-{name}:{args.tag}"})
+    plan.append(
+        {
+            "profile": name,
+            "parent": p.extends,
+            "context": str(ctx),
+            "image": f"{args.registry}/minion-{name}:{args.tag}",
+        }
+    )
 print(json.dumps(plan, indent=2))

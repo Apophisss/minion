@@ -702,11 +702,39 @@ class Agent:
             return self._file_opener(path), "file"
         return t, "command"
 
-    OFFICE_EXT = {".docx", ".doc", ".odt", ".rtf", ".xlsx", ".xls", ".ods", ".csv", ".tsv", ".pptx", ".ppt",
-                  ".odp", ".odg"}
+    OFFICE_EXT = {
+        ".docx",
+        ".doc",
+        ".odt",
+        ".rtf",
+        ".xlsx",
+        ".xls",
+        ".ods",
+        ".csv",
+        ".tsv",
+        ".pptx",
+        ".ppt",
+        ".odp",
+        ".odg",
+    }
     WEB_EXT = {".pdf", ".html", ".htm", ".svg", ".png", ".jpg", ".jpeg", ".gif", ".webp"}
-    TEXT_EXT = {".txt", ".md", ".py", ".js", ".ts", ".json", ".yaml", ".yml", ".toml", ".sh", ".css", ".xml",
-                ".log", ".ini", ".cfg"}
+    TEXT_EXT = {
+        ".txt",
+        ".md",
+        ".py",
+        ".js",
+        ".ts",
+        ".json",
+        ".yaml",
+        ".yml",
+        ".toml",
+        ".sh",
+        ".css",
+        ".xml",
+        ".log",
+        ".ini",
+        ".cfg",
+    }
 
     def _file_opener(self, path: str) -> str:
         """Pick the app for a file by extension (deterministic), falling back to xdg-open."""
