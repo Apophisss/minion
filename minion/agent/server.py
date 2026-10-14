@@ -153,6 +153,8 @@ ACTIONS = {
     "type": ("type", {}),
     "paste": ("paste", {}),
     "fill": ("fill", {}),
+    "select": ("select", {}),
+    "choose": ("select", {}),
     "key": ("key", {}),
     "press": ("key", {}),
     "hotkey": ("key", {}),
@@ -189,6 +191,29 @@ MAIN_PARAM = {
 }
 
 
+# Runs a `script`: the GUI API preloaded, and errors reported as the lines of *your* script that failed
+# (not the bootstrap's or the API's internals).
+SCRIPT_BOOTSTRAP = """\
+import sys, traceback
+from minion_agent.client import *
+__path = sys.argv[1]
+try:
+    exec(compile(open(__path, encoding="utf-8").read(), "script.py", "exec"))
+except SystemExit:
+    raise
+except BaseException as __e:
+    sys.stdout.flush()
+    __lines = open(__path, encoding="utf-8").read().splitlines()
+    __frames = [f for f in traceback.extract_tb(__e.__traceback__) if f.filename == "script.py"]
+    print("Error in the script:", file=sys.stderr)
+    for __f in __frames[-3:]:
+        __src = __lines[__f.lineno - 1].strip() if 0 < __f.lineno <= len(__lines) else ""
+        print(f"  line {__f.lineno}: {__src}", file=sys.stderr)
+    print(f"{type(__e).__name__}: {__e}", file=sys.stderr)
+    sys.exit(1)
+"""
+
+
 def split_words(text: str) -> list[str]:
     """Split like a shell (quotes group words) but keep backslashes, so `type C:\\Users\\agent` types a
     Windows path instead of `C:Usersagent`."""
@@ -199,26 +224,66 @@ def split_words(text: str) -> list[str]:
     return list(lex)
 
 
+def _unquote(text: str) -> str:
+    """Strip one pair of matching outer quotes: "type 'hello world'" types hello world."""
+    if len(text) >= 2 and text[0] == text[-1] and text[0] in "'\"":
+        return text[1:-1]
+    return text
+
+
+def _escapes(text: str) -> str:
+    """\\n is Return, \\t is Tab and \\\\ is a backslash, as in write() in scripts."""
+    return text.replace("\\\\", "\0").replace("\\n", "\n").replace("\\t", "\t").replace("\0", "\\")
+
+
+def _first_word(rest: str) -> tuple[str, str]:
+    """('"Customer name"', ' Ada') -> ('Customer name', 'Ada'): a target, then the verbatim rest."""
+    rest = rest.lstrip()
+    if rest[:1] in ("'", '"'):
+        end = rest.find(rest[0], 1)
+        if end > 0:
+            return rest[1:end], rest[end + 1 :].lstrip()
+    word, _, tail = rest.partition(" ")
+    return word, tail.lstrip()
+
+
 def parse_step(step) -> tuple[str, dict]:
     """Normalize one action from any of the accepted shapes into (action, params)."""
     if isinstance(step, str):
-        parts = split_words(step)
-        if not parts:
+        m = re.match(r"\s*(\S+)(?:\s(.*))?$", step, re.S)
+        if not m:
             raise RpcError("empty action")
-        verb, args = parts[0].lower(), parts[1:]
+        verb, rest = m.group(1).lower(), (m.group(2) or "")
         if verb not in ACTIONS:
-            raise RpcError(f"unknown action {verb!r}")
+            raise RpcError(
+                f"unknown action {verb!r}; actions: {', '.join(sorted(set(a for a, _ in ACTIONS.values())))}"
+            )
         canon = ACTIONS[verb][0]
+        if canon in ("type", "paste"):  # the rest of the step, verbatim: quotes and spacing are kept
+            return canon, {**ACTIONS[verb][1], "text": _escapes(_unquote(rest.strip()))}
+        if canon == "wait_for":
+            return canon, {**ACTIONS[verb][1], "text": _unquote(rest.strip())}
+        if canon == "fill":
+            target, text = _first_word(rest)
+            if not target:
+                raise RpcError("fill needs a target and text: fill @3 'hello'")
+            return canon, {**ACTIONS[verb][1], "target": target, "text": _escapes(_unquote(text))}
+        if canon == "select":
+            target, option = _first_word(rest)
+            if not target or not option:
+                raise RpcError("select needs a dropdown and an option: select @12 'Title'")
+            return canon, {"target": target, "option": _unquote(option)}
+        args = split_words(rest)
         params: dict = {}
         if canon in ("click", "move"):
             if args:
                 params["target"] = " ".join(args)
-        elif canon in ("type", "paste", "wait_for"):
-            params["text"] = " ".join(args)
         elif canon in ("key", "hold_key"):
             params["keys"] = args[0] if args else ""
-            if canon == "key" and len(args) > 1:
+            if canon == "key" and len(args) == 2 and args[1].isdigit():  # "key Down 3": a repeat count
                 params["repeat"] = int(args[1])
+            elif canon == "key" and len(args) > 1:  # "key BackSpace BackSpace Return": a sequence
+                params["keys"] = " ".join(args)
             if canon == "hold_key" and len(args) > 1:
                 params["seconds"] = float(args[1])
         elif canon == "scroll":
@@ -233,10 +298,6 @@ def parse_step(step) -> tuple[str, dict]:
             if len(args) != 2:
                 raise RpcError("drag needs two targets: drag FROM TO")
             params["from"], params["to"] = args
-        elif canon == "fill":
-            if len(args) < 2:
-                raise RpcError("fill needs a target and text: fill @3 'hello'")
-            params["target"], params["text"] = args[0], " ".join(args[1:])
         elif canon in ("focus", "open"):
             params["window" if canon == "focus" else "target"] = " ".join(args)
         verb_defaults = ACTIONS[verb][1]
@@ -300,6 +361,7 @@ class Agent:
         self.xi = XInput(display)
         self.windows = Windows(display)
         self.perception = Perception(self.screen, self.windows, size)
+        self.perception.xi = self.xi  # for the LibreOffice coordinate nudge
         self.recorder = Recorder(enabled=os.environ.get("MINION_RECORD", "1") != "0")
         self.input_lock = threading.RLock()
         self.started = time.time()
@@ -535,6 +597,8 @@ class Agent:
 
     def _do(self, action: str, p: dict) -> str:
         r = self.perception.resolve
+        if action in ("type", "paste", "key", "hold_key") and not self.windows.list(with_states=False):
+            raise RpcError("no window is open, so keyboard input would go nowhere: open an app first (open firefox)")
         if action == "click":
             button = (p.get("button") or "left").lower()
             count = max(1, min(int(p.get("count") or 1), 3))
@@ -582,19 +646,42 @@ class Agent:
             text = str(text)
             if len(text) > 20000:
                 raise RpcError("text is too long to type (max 20000 characters); use paste or a file")
-            self.xi.type(text, int(p.get("delay_ms") or 8))
+            focused = self.windows.focused()
+            if not text.isascii() and focused is not None and re.search(r"libreoffice|soffice", focused.app, re.I):
+                self._type_via_clipboard(text)
+            else:
+                self.xi.type(text, int(p.get("delay_ms") or 8))
             return f"typed {len(text)} chars"
         if action == "paste":
             text = str(p.get("text") or "")
-            self._clip_set(text)
             focused = self.windows.focused()
-            term = focused is not None and re.search(r"term|konsole|kitty|alacritty", focused.app, re.I)
-            self.xi.key("ctrl+shift+v" if term else "ctrl+v")
+            app = focused.app if focused is not None else ""
+            if re.fullmatch(r"(u?xterm|u?rxvt.*)", app, re.I):  # xterm has no paste shortcut for CLIPBOARD
+                self._clip_set(text, primary=True)
+                self.xi.key("shift+Insert")
+            else:
+                self._clip_set(text)
+                term = re.search(r"term|konsole|kitty|alacritty|tilix|terminator", app, re.I)
+                self.xi.key("ctrl+shift+v" if term else "ctrl+v")
             return f"pasted {len(text)} chars"
         if action == "fill":
             text = str(p.get("text") if p.get("text") is not None else "")
             t = r(p.get("target"), prefer_input=True)
             el = t.element
+            if isinstance(el, a11y.Element) and not a11y.is_editable(el) and el.role != "panel":
+                # (a named panel may hold an editor the app doesn't expose, e.g. LibreOffice's style box:
+                # clicking it focuses that editor)
+                inner = a11y.editable_descendant(el)
+                if inner is None:
+                    raise RpcError(
+                        f"{t.desc} is not a text field, so fill would type into the wrong place. Use the "
+                        "field's @id from `see` (or click it, then type)"
+                    )
+                box = a11y.refresh(inner)
+                if box:
+                    x, y, w, h = box
+                    t = type(t)(x + w // 2, y + h // 2, f"{t.desc} → its {inner.role}", inner)
+                el = inner
             # Native apps: set the text directly (instant, exact). Web pages: really type it, so the
             # page's own input handlers (React, Vue, autocomplete...) see every keystroke.
             native = isinstance(el, a11y.Element) and not el.in_doc
@@ -608,6 +695,29 @@ class Agent:
             else:
                 self.xi.key("BackSpace")
             return f"filled {t.desc} with {len(text)} chars"
+        if action == "select":
+            option = str(p.get("option") or p.get("text") or p.get("value") or "")
+            if not option:
+                raise RpcError("select needs an option (its visible text)")
+            t = r(p.get("target"))
+            el = t.element
+            if isinstance(el, a11y.Element):
+                try:
+                    chosen = a11y.select_option(el, option)
+                except ValueError as e:
+                    raise RpcError(str(e)) from e
+                if chosen is not None:
+                    time.sleep(0.2)
+                    now, _ = a11y.combo_value(el.node)
+                    if not now or now == chosen:
+                        return f'selected "{chosen}" in {t.desc}'
+            # The keyboard way: open it, type the option's text (type-ahead finds it), confirm.
+            self.xi.click(t.x, t.y)
+            time.sleep(0.3)
+            self.xi.type(option)
+            time.sleep(0.15)
+            self.xi.key("Return")
+            return f'selected "{option}" in {t.desc} (by typing it)'
         if action == "key":
             keys = p.get("keys")
             if not keys:
@@ -634,11 +744,13 @@ class Agent:
                 raise RpcError("wait_for needs text")
             timeout = max(0.5, min(float(p.get("timeout") or 10.0), 120.0))
             gone = bool(p.get("gone"))
-            ok, elapsed = self.perception.wait_for(str(text), timeout=timeout, gone=gone)
+            ok, elapsed, where = self.perception.wait_for(str(text), timeout=timeout, gone=gone)
             what = f'"{text}" {"to disappear" if gone else "to appear"}'
             if not ok:
                 raise RpcError(f"timed out after {timeout:g}s waiting for {what}")
-            return f"waited {elapsed:.1f}s for {what}"
+            if gone:
+                return f'"{text}" is gone (after {elapsed:.1f}s)'
+            return f'"{text}" appeared after {elapsed:.1f}s' + (f": {where}" if where else "")
         if action == "focus":
             win = self.windows.find(p.get("window"))
             self.windows.activate(win.id)
@@ -659,7 +771,9 @@ class Agent:
                 el = self.perception.registry.get(int(v.strip()[1:]))
                 if el is None:
                     continue
-                label = getattr(el, "text", "") if not hasattr(el, "label") else el.label()
+                # A control's name ("Save", "File name:") is stable; its content (a document's text, a
+                # cell's value) changes, so elements without a name are recorded by position.
+                label = getattr(el, "name", "") if hasattr(el, "label") else getattr(el, "text", "")
                 if label and len(label) <= 80:
                     out[key] = label
                 else:
@@ -709,12 +823,15 @@ class Agent:
                     self.recorder.add_macro(action, portable)
                     if i < len(parsed) - 1:
                         # Let the app process the event before the next one, like a person would.
-                        time.sleep(0.2 if action in ("fill", "open", "focus") else 0.06)
+                        time.sleep(0.3 if action == "paste" else 0.2 if action in ("fill", "open", "focus") else 0.06)
                 except (RpcError, TargetError, InputError, WindowError, ValueError, TypeError) as e:
                     error = str(e)
                     results.append({"action": action, "ok": False, "detail": error})
             if p.get("settle", True) is not False:
                 settled, _, frame = settle(self.screen, timeout=float(p.get("settle_timeout") or 2.5))
+                if any(a in ("click", "double_click", "key", "fill", "type") for a, _ in parsed[: len(results)]):
+                    if self._wait_page_loaded(timeout=8.0):  # a click or Return may have started a navigation
+                        settled, _, frame = settle(self.screen, timeout=1.5)
             else:
                 settled, frame = False, self.screen.grab()
             frac, bbox = diff(before, thumb(frame))
@@ -808,12 +925,13 @@ class Agent:
         if skipped:
             parts.append(f"{skipped} later action{'s' if skipped > 1 else ''} not executed")
         tail = []
+        waits_only = all(r.get("action") in ("wait", "wait_for") for r in results)
         if change.get("changed"):
             x, y, w, h = change["region"]
             pct = change["fraction"] * 100
             amount = f"{pct:.0f}%" if pct >= 1 else "<1%"
             tail.append(f"screen changed {amount} (region {x},{y} {w}x{h})")
-        else:
+        elif not waits_only:  # after a wait, "no visible change" reads like a failure
             tail.append("no visible change")
         for w in opened[:3]:
             tail.append(f'opened "{w["title"]}"')
@@ -823,7 +941,7 @@ class Agent:
             prev = next((w for w in wins_before.values() if w.focused), None)
             if prev is None or prev.id != focused.id or prev.title != focused.title:
                 tail.append(f'focused "{focused.title}"')
-        return "\n".join(parts) + "\n→ " + " · ".join(tail)
+        return "\n".join(parts) + ("\n→ " + " · ".join(tail) if tail else "")
 
     # -- apps, shell, clipboard ---------------------------------------
     def _browser(self) -> str:
@@ -841,12 +959,18 @@ class Agent:
         for app in self.apps:
             if low in (str(app.get("name", "")).lower(), str(app.get("id", "")).lower()):
                 return app["command"], "app"
-        if URL_RE.match(t) or (DOMAIN_RE.match(t) and not os.path.exists(os.path.expanduser(t))):
-            url = t if "://" in t else "https://" + t
+        if (
+            URL_RE.match(t)
+            or low.startswith(("about:", "file:", "data:"))
+            or (DOMAIN_RE.match(t) and not os.path.exists(os.path.expanduser(t)))
+        ):
+            url = t if ("://" in t or ":" in t.split("/")[0]) else "https://" + t
             return f"{self._browser()} {shlex.quote(url)}", "url"
         path = os.path.expanduser(t)
         if os.path.exists(path):
             return self._file_opener(path), "file"
+        if t.startswith(("~", "/", "./", "../")) and " " not in t.split("/")[0]:
+            raise RpcError(f"no such file in the desktop: {t} (list the folder with run('ls'))")
         return t, "command"
 
     OFFICE_EXT = {
@@ -913,16 +1037,16 @@ class Agent:
         except WindowError:
             before = {}
         prev_focus = next((w for w in before.values() if w.focused), None)
-        log = open(os.path.join(os.environ.get("MINION_RUNTIME_DIR", "/tmp"), "apps.log"), "ab")
-        proc = subprocess.Popen(
-            ["bash", "-lc", cmd],
-            cwd=self.home,
-            stdin=subprocess.DEVNULL,
-            stdout=log,
-            stderr=log,
-            start_new_session=True,
-        )
-        log.close()
+        log_path = os.path.join(os.environ.get("MINION_RUNTIME_DIR", "/tmp"), f"open-{time.time_ns() // 1000000}.log")
+        with open(log_path, "ab") as log:
+            proc = subprocess.Popen(
+                ["bash", "-lc", cmd],
+                cwd=self.home,
+                stdin=subprocess.DEVNULL,
+                stdout=log,
+                stderr=log,
+                start_new_session=True,
+            )
         t0 = time.monotonic()
         found = None
         while time.monotonic() - t0 < wait:
@@ -945,6 +1069,13 @@ class Agent:
             found = self._until_ready(found, before, deadline=t0 + wait + 6)
             self.windows.refine(found)
             settle(self.screen, timeout=4.0, quiet=0.5)
+            if kind == "url" or self.BROWSER_APPS.search(found.app or ""):
+                if self._wait_page_loaded(timeout=10.0):
+                    settle(self.screen, timeout=2.0, quiet=0.4)
+                try:  # the title changes as the page loads
+                    found = next((w for w in self.windows.list(with_states=False) if w.id == found.id), found)
+                except WindowError:
+                    pass
         code = proc.poll()
         res = {
             "command": cmd,
@@ -953,9 +1084,56 @@ class Agent:
             "window": found.to_dict() if found else None,
             "elapsed": round(time.monotonic() - t0, 2),
         }
+        try:
+            also = [
+                w for w in self.windows.list(with_states=False) if w.id not in before and found and w.id != found.id
+            ]
+            if also:
+                res["also"] = [w.title for w in also if not self._splash(w)]
+        except WindowError:
+            pass
         if found is None and code not in (None, 0):
-            res["error"] = f"exited with code {code}; see $MINION_RUNTIME_DIR/apps.log"
+            try:
+                with open(log_path, "rb") as f:
+                    tail = f.read()[-400:].decode("utf-8", "replace").strip().splitlines()[-1:]
+            except OSError:
+                tail = []
+            if code == 127:
+                apps = ", ".join(str(a.get("id") or a.get("name", "")).lower() for a in self.apps)
+                res["error"] = (
+                    f"{target!r} is not an app, URL or file here, and no such command exists. "
+                    f"Apps: {apps}. URLs need a dot (example.com) or a scheme (https://)."
+                )
+            else:
+                res["error"] = f"exited with code {code}" + (f": {tail[0]}" if tail else "")
         return res
+
+    BROWSER_APPS = re.compile(r"firefox|chromium|chrome|navigator|brave|vivaldi|opera|epiphany", re.I)
+
+    def _wait_page_loaded(self, timeout: float = 10.0) -> bool:
+        """In a browser, wait while the page is loading. True if it had to wait."""
+        try:
+            focused = self.windows.focused()
+        except WindowError:
+            return False
+        if focused is None or not self.BROWSER_APPS.search(focused.app or ""):
+            return False
+        aw = a11y.find_window(title=focused.title, pid=focused.pid) if a11y.AVAILABLE else None
+        if aw is None:
+            return False
+        deadline = time.monotonic() + timeout
+        waited = False
+        time.sleep(0.15)  # a navigation starts a moment after the click
+        while time.monotonic() < deadline and a11y.page_busy(aw):
+            waited = True
+            time.sleep(0.2)
+            aw = a11y.find_window(title=None, pid=focused.pid) or aw  # the title changes as pages load
+        return waited
+
+    @staticmethod
+    def _splash(w) -> bool:
+        """A splash screen (LibreOffice's logo window) is not the app's window yet."""
+        return w.title in ("LibreOffice", "") and w.w <= 800 and w.h <= 400
 
     def _until_ready(self, found, before: dict, deadline: float):
         """Apps often map a window before they are ready (a splash, a generic title that changes when
@@ -971,9 +1149,10 @@ class Agent:
             if sig != last:
                 last = sig
                 stable_since = time.monotonic()
-                if now:
-                    found = next((w for w in now if w.focused), now[-1])
-            elif time.monotonic() - stable_since >= 0.8:
+                real = [w for w in now if not self._splash(w)]
+                if real:
+                    found = next((w for w in real if w.focused), real[-1])
+            elif time.monotonic() - stable_since >= 0.8 and not (now and all(self._splash(w) for w in now)):
                 break
             time.sleep(0.15)
         return found
@@ -981,7 +1160,8 @@ class Agent:
     def m_open(self, p: dict) -> dict:
         with self.input_lock:
             res = self._open(p.get("target"), wait=float(p.get("wait") or 12.0))
-        self.recorder.add_macro("open", {"target": p.get("target")})
+        if "error" not in res:
+            self.recorder.add_macro("open", {"target": p.get("target")})
         self.recorder.add("open", res["command"], self.screen.grab(), ok="error" not in res)
         return res
 
@@ -993,18 +1173,18 @@ class Agent:
             command = shlex.join(str(c) for c in command)
         cwd = os.path.expanduser(p.get("cwd") or self.home)
         if p.get("background"):
-            log = open(os.path.join(os.environ.get("MINION_RUNTIME_DIR", "/tmp"), "apps.log"), "ab")
-            proc = subprocess.Popen(
-                ["bash", "-lc", command],
-                cwd=cwd,
-                stdin=subprocess.DEVNULL,
-                stdout=log,
-                stderr=log,
-                start_new_session=True,
-            )
-            log.close()
+            log_path = os.path.join(os.environ.get("MINION_RUNTIME_DIR", "/tmp"), f"bg-{time.time_ns() // 1000000}.log")
+            with open(log_path, "ab") as log:
+                proc = subprocess.Popen(
+                    ["bash", "-lc", command],
+                    cwd=cwd,
+                    stdin=subprocess.DEVNULL,
+                    stdout=log,
+                    stderr=log,
+                    start_new_session=True,
+                )
             self.recorder.add("run", f"{command} (background)")
-            return {"pid": proc.pid, "background": True}
+            return {"pid": proc.pid, "background": True, "log": log_path}
         timeout = max(1.0, min(float(p.get("timeout") or 60.0), 3600.0))
         stdin = p.get("input")
         res = run_captured(["bash", "-lc", command], cwd, timeout, stdin.encode() if stdin is not None else None)
@@ -1024,12 +1204,8 @@ class Agent:
         path = os.path.join(folder, f"script-{int(time.time() * 1000)}.py")
         with open(path, "w", encoding="utf-8") as f:
             f.write(str(code))
-        bootstrap = (
-            "import sys; from minion_agent.client import *; "
-            "exec(compile(open(sys.argv[1], encoding='utf-8').read(), '<script>', 'exec'))"
-        )
         res = run_captured(
-            [sys.executable, "-u", "-c", bootstrap, path],
+            [sys.executable, "-u", "-c", SCRIPT_BOOTSTRAP, path],
             self.home,
             timeout,
             None,
@@ -1039,16 +1215,40 @@ class Agent:
         self.recorder.add("script", f"{len(str(code).splitlines())} lines → exit {res['code']}")
         return res
 
-    def _clip_set(self, text: str) -> None:
+    def _type_via_clipboard(self, text: str) -> None:
+        """Type ASCII runs with xdotool and paste the rest (LibreOffice loses keymap-remapped
+        characters such as ü or 你). Tab and Return stay key presses. The clipboard is restored."""
+        try:
+            saved = subprocess.run(["xclip", "-selection", "clipboard", "-o"], capture_output=True, timeout=3)
+            previous = saved.stdout if saved.returncode == 0 else None
+        except (OSError, subprocess.TimeoutExpired):
+            previous = None
+        for token in re.split(r"(\n|\t)", text.replace("\r\n", "\n")):
+            if token in ("\n", "\t"):
+                self.xi.type(token)
+                continue
+            for run in re.findall(r"[\x00-\x7f]+|[^\x00-\x7f]+", token):
+                if run.isascii():
+                    self.xi.type(run)
+                else:
+                    self._clip_set(run)
+                    time.sleep(0.05)
+                    self.xi.key("ctrl+v")
+                    time.sleep(0.25)
+        if previous is not None:
+            subprocess.run(["xclip", "-selection", "clipboard", "-i"], input=previous, timeout=5)
+
+    def _clip_set(self, text: str, primary: bool = False) -> None:
         if not shutil.which("xclip"):
             raise RpcError("xclip is not installed in this desktop")
-        subprocess.run(
-            ["xclip", "-selection", "clipboard", "-i"],
-            input=text.encode(),
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            timeout=5,
-        )
+        for selection in ("clipboard", "primary") if primary else ("clipboard",):
+            subprocess.run(
+                ["xclip", "-selection", selection, "-i"],
+                input=text.encode(),
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=5,
+            )
 
     def m_clipboard(self, p: dict) -> dict:
         if "text" in p and p["text"] is not None:

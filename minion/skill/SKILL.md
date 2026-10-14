@@ -21,12 +21,17 @@ you can use them instead. The ideas are the same (`desktop`, `see`, `act`, `scri
 - `minion shot -o /tmp/s.png --marks` takes a screenshot with the @ids drawn on it. Read the file to view it.
   Use it only when layout or images matter. `--region x,y,w,h` crops it.
 
-## Act: a target is @12, visible text ("Save") or x,y
+## Act: a target is @12 (best), exact visible text ("Save"), or x,y
 - `minion click @12` · `minion type "hello" --enter` · `minion key ctrl+s` · `minion fill "Name" "q3.xlsx"`
+- `minion select @14 "Title"` picks a dropdown option (`see` lists each dropdown's value and options).
 - `minion scroll down 5` · `minion drag @3 @9` · `minion wait-for "Saved"` (wait for text, not for time)
-- Batch steps into one call: `minion act "click @3" "type hello" "key Return" --observe changes`
+- Batch steps into one call: `minion act "click @3" "type hello\n" "key Tab Tab Return" --observe changes`.
+  In act steps, `\n` is Return and `\t` is Tab (write `\\` for a backslash).
 - Each action reports what changed (new windows, focus, the changed region), so you often don't need another look.
+- A text target must really be on screen: if it isn't, the action fails and suggests close matches. Use the @id then.
 - Keyboard shortcuts are the most reliable: `ctrl+l` (address bar), `ctrl+s`, `alt+Left`, `ctrl+Tab`, `F5`.
+- In a terminal, `wait-for` also sees the command you typed. Wait for something only the result prints:
+  `type "make; echo DONE-$((1+1))\n"` then `wait-for DONE-2`. For plain commands, `minion run` is simpler.
 
 ## Code mode for anything repetitive
 The script runs as Python inside the desktop, with `see() cells() elements() find() click() write() key() fill()

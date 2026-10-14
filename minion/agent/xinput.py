@@ -225,6 +225,12 @@ class XInput:
         if out.returncode != 0:
             msg = (out.stderr or out.stdout).strip() or f"exit code {out.returncode}"
             raise InputError(f"xdotool {args[0]} failed: {msg}")
+        if args[0] in ("key", "keydown", "keyup") and "No such key name" in out.stderr:
+            bad = re.search(r"No such key name '([^']*)'", out.stderr)
+            raise InputError(
+                f"unknown key {bad.group(1) if bad else ''!r}: use names like Return, Tab, Escape, BackSpace, "
+                "Delete, Home, End, Page_Up, Left, F5, or a single character (combos: ctrl+s)"
+            )
         return out.stdout
 
     # -- pointer -------------------------------------------------------
@@ -310,9 +316,10 @@ class XInput:
 
     # -- keyboard ------------------------------------------------------
     def key(self, combo: str, repeat: int = 1) -> str:
-        keys = normalize_combo(combo)
-        self._xdo("key", "--clearmodifiers", "--repeat", str(max(1, int(repeat))), "--delay", "40", "--", keys)
-        return keys
+        """Press one combo ("ctrl+s") or a space-separated sequence ("BackSpace BackSpace Return")."""
+        keys = [normalize_combo(c) for c in combo.split()] or [normalize_combo(combo)]
+        self._xdo("key", "--clearmodifiers", "--repeat", str(max(1, int(repeat))), "--delay", "40", "--", *keys)
+        return " ".join(keys)
 
     def key_down(self, combo: str) -> str:
         keys = normalize_combo(combo)

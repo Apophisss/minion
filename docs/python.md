@@ -76,8 +76,27 @@ print(cells()["B3"])
 print(result.stdout)  # 5.75
 ```
 
-The script runs inside the desktop with the API in `minion/agent/client.py` preloaded. Calls cost no model
-round trips, and only what it prints comes back.
+The script runs inside the desktop with this API preloaded. Calls cost no model round trips, and only what
+it prints comes back. If it fails, the error names the line of your script that failed.
+
+| Function | |
+|---|---|
+| `see(ocr="auto", window=None, full_text=False, changes=False) -> str` | The screen as text, like `see` |
+| `look(...) -> dict` | The same as data: `text`, `elements`, `windows`, `focused`, `ocr` |
+| `elements(role=None, name=None) -> list[dict]` | Elements of the focused window. Each has `id` ("@12"), `role`, `name`, `x` and `y` (its center), `box` ([x, y, w, h]), and `text`, `value` and `states` when set |
+| `find(text) -> list[dict]` | On-screen matches for a text, best first (`score`, `desc`, `x`, `y`) |
+| `cells() -> dict[str, str]` | Visible spreadsheet cells: `{"A1": "Item", "B1": "Price", ...}` |
+| `click(target, button="left", count=1, modifiers=None)` · `double_click` · `right_click` · `move` · `drag(a, b)` | Targets: `"@12"`, exact visible text, `"x,y"` or `[x, y]` |
+| `write(text)` · `paste(text)` · `key(keys, repeat=1)` · `hold_key(keys, seconds)` | `write("a\tb\n")`: Tab and Return are key presses |
+| `fill(target, text)` · `select(target, option)` · `scroll(direction, amount, target)` | |
+| `wait(seconds)` · `wait_for(text, timeout=10, gone=False) -> bool` | |
+| `launch(target, wait=12) -> dict` | An app, URL or file; waits for its window (and for a web page to load) |
+| `run(command, timeout=60) -> dict` | A shell command: `code`, `stdout`, `stderr` |
+| `screenshot(path="/tmp/screenshot.png", region=None, marks=False) -> str` | Saved inside the desktop |
+| `windows()` · `focus(window)` · `clipboard(text=None)` | |
+| `act(*steps, check=True) -> str` | Several steps at once (strings like `"click @3"` or dicts) |
+
+Actions that fail raise `MinionScriptError`, so a script stops at the first problem instead of carrying on.
 
 ## Many desktops
 

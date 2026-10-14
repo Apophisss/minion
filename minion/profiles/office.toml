@@ -14,6 +14,8 @@ packages = [
   "fonts-crosextra-caladea",
   "mousepad",
   "pcmanfm",
+  "poppler-utils",
+  "unzip",
 ]
 env = { SAL_USE_VCLPLUGIN = "gtk3" }
 apps = [
@@ -27,8 +29,9 @@ tips = """
 Launch apps with `open writer`, `open calc`, `open impress`, or open a file: `open ~/Documents/report.docx`.
 Documents save as .docx/.xlsx/.pptx by default. Move files in and out with `files` (or `minion cp`).
 For bulk or exact data work, `run` is faster than the GUI: e.g. `soffice --headless --convert-to pdf ~/Documents/report.docx --outdir ~/Documents`.
-Keys: ctrl+s save, ctrl+shift+s save as, ctrl+1/2/3 heading styles, ctrl+b/i/u. In Calc type "value\\tvalue\\n" to fill a row
+Keys: ctrl+s save, ctrl+shift+s save as, ctrl+1/2/3 heading styles, ctrl+b/i/u. In Calc, act "type value\\tvalue\\n" fills a row
 (Tab moves right, Return goes to the next row); `see` lists visible cells as A1: value; use `script` for many rows.
+Typing is exact: AutoCorrect, smart quotes and AutoInput are off. PDFs: pdftotext, pdfinfo.
 """
 
 [files]
@@ -46,6 +49,40 @@ Keys: ctrl+s save, ctrl+shift+s save as, ctrl+1/2/3 heading styles, ctrl+b/i/u. 
     <node oor:name="Save">
       <node oor:name="Document">
         <prop oor:name="WarnAlienFormat" oor:op="fuse"><value>false</value></prop>
+      </node>
+    </node>
+    <!-- Type exactly what the agent sends: no smart quotes, dashes, capitalization or replacements. -->
+    <node oor:name="AutoCorrect">
+      <prop oor:name="UseReplacementTable" oor:op="fuse"><value>false</value></prop>
+      <prop oor:name="TwoCapitalsAtStart" oor:op="fuse"><value>false</value></prop>
+      <prop oor:name="CapitalAtStartSentence" oor:op="fuse"><value>false</value></prop>
+      <prop oor:name="ChangeUnderlineWeight" oor:op="fuse"><value>false</value></prop>
+      <prop oor:name="ChangeOrdinalNumber" oor:op="fuse"><value>false</value></prop>
+      <prop oor:name="ChangeDash" oor:op="fuse"><value>false</value></prop>
+      <prop oor:name="AddNonBreakingSpace" oor:op="fuse"><value>false</value></prop>
+      <prop oor:name="ReplaceSingleQuote" oor:op="fuse"><value>false</value></prop>
+      <prop oor:name="ReplaceDoubleQuote" oor:op="fuse"><value>false</value></prop>
+    </node>
+  </oor:component-data>
+  <oor:component-data oor:name="Writer" oor:package="org.openoffice.Office">
+    <node oor:name="AutoFunction">
+      <node oor:name="Format">
+        <node oor:name="ByInput">
+          <prop oor:name="Enable" oor:op="fuse"><value>false</value></prop>
+        </node>
+      </node>
+    </node>
+  </oor:component-data>
+  <oor:component-data oor:name="Calc" oor:package="org.openoffice.Office">
+    <node oor:name="Input">
+      <!-- No AutoInput: typing "Co" in a column that has "Coffee" must not become "Coffee". -->
+      <prop oor:name="AutoInput" oor:op="fuse"><value>false</value></prop>
+    </node>
+  </oor:component-data>
+  <oor:component-data oor:name="Impress" oor:package="org.openoffice.Office">
+    <node oor:name="Misc">
+      <node oor:name="NewDoc">
+        <prop oor:name="AutoPilot" oor:op="fuse"><value>false</value></prop>
       </node>
     </node>
   </oor:component-data>

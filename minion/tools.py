@@ -48,6 +48,30 @@ open() launches apps/URLs/files. files() moves files. view() gives a human a liv
 (logins, CAPTCHAs) until they press Done.
 """
 
+COMPACT_INSTRUCTIONS = """\
+Minion gives you real Linux computers (isolated desktops with GUI apps; any program can be installed).
+Use the `computer` tool, one command per call:
+  create [office|browser|dev|research|data|windows|base] [--name NAME] [--count N]
+  see [--changes] [--full] [--ocr]  -> the screen as text; act on the @ids it lists
+  click|dclick|rclick TARGET · type TEXT · key KEYS · fill TARGET TEXT · scroll up|down [N] · drag A B
+  wait-for TEXT · open APP|URL|FILE · run SHELL · script PYTHON · screenshot [--marks] [--low]
+  list · use NAME · remove NAME · fork · freeze · view [MESSAGE]
+TARGET is @12 (from see), exact visible text ("Save"), or x,y. Prefer see to screenshots, and
+see --changes after acting. For loops or data entry, one script call beats many clicks.
+"""
+
+
+def instructions(compact: bool = False, images: bool = True) -> str:
+    """The usage notes for an MCP server's `initialize` reply (or a system prompt)."""
+    if compact:
+        text = COMPACT_INSTRUCTIONS
+        return text if images else text.replace(" · screenshot [--marks] [--low]", "")
+    if images:
+        return INSTRUCTIONS
+    lines = [line for line in INSTRUCTIONS.splitlines() if not line.startswith("4. screenshot()")]
+    return "\n".join(line.replace("5. script(", "4. script(", 1) for line in lines)
+
+
 DESKTOP_PROP = {"type": "string", "description": "Desktop name (default: the one you created or used last)."}
 
 TOOLS: list[dict] = [
@@ -141,12 +165,14 @@ TOOLS: list[dict] = [
         "description": (
             "Mouse and keyboard. Runs the actions in order, stops at the first failure, waits for the screen to "
             "settle and reports what changed. Actions (objects with an `action` field): click | double_click | "
-            'right_click (target; modifiers "ctrl"), move (target), drag (from, to), type (text; \\n = Enter, '
-            '\\t = Tab), paste (text), fill (target, text: replace a field), key (keys like "ctrl+s", "Return", '
-            '"alt+Tab"; repeat), scroll (direction up|down|left|right, amount, target), wait (seconds), '
-            'wait_for (text, timeout; gone=true), focus (window). Targets: "@12" (from see), visible text '
-            '("Save"), or "x,y". observe: summary (default) | changes (+ the changed UI as text) | see | '
-            "screenshot | crop (image of just the changed region)."
+            'triple_click (select a line) | right_click | middle_click (target; modifiers "ctrl"), move (target), '
+            "drag (from, to), type (text; \\n = Enter, \\t = Tab), paste (text), fill (target, text: replace a "
+            "field's content), select (target, option: pick a dropdown option by its text), key (keys: "
+            '"ctrl+s", "Return", or a sequence "Tab Tab Return"; repeat), scroll '
+            "(direction, amount, target), wait (seconds), wait_for (text, timeout; gone=true), focus (window), "
+            "mouse_down/mouse_up (target: press/release for custom drags), hold_key (keys, seconds). Targets: "
+            '"@12" from your latest see (best), exact visible text ("Save"; fails if not on screen), or "x,y". '
+            "Web pages may still load after a click: add wait_for on text you expect."
         ),
         "input_schema": {
             "type": "object",
@@ -169,6 +195,7 @@ TOOLS: list[dict] = [
                                     "type",
                                     "paste",
                                     "fill",
+                                    "select",
                                     "key",
                                     "scroll",
                                     "wait",
@@ -179,25 +206,37 @@ TOOLS: list[dict] = [
                                     "hold_key",
                                 ],
                             },
-                            "target": {"type": "string", "description": '@id, visible text, or "x,y".'},
-                            "text": {"type": "string"},
-                            "keys": {"type": "string"},
-                            "repeat": {"type": "integer"},
-                            "modifiers": {"type": "string"},
-                            "from": {"type": "string"},
-                            "to": {"type": "string"},
+                            "target": {
+                                "type": "string",
+                                "description": 'Required for clicks, move and fill: "@12", exact visible text, or "x,y".',
+                            },
+                            "text": {"type": "string", "description": "type/paste/fill/wait_for: the text."},
+                            "option": {"type": "string", "description": "select: the option's visible text."},
+                            "keys": {
+                                "type": "string",
+                                "description": 'key/hold_key: "ctrl+s", "Return", or a sequence "Tab Tab Return".',
+                            },
+                            "repeat": {"type": "integer", "description": "key: press it this many times."},
+                            "modifiers": {"type": "string", "description": 'clicks: keys to hold, e.g. "ctrl".'},
+                            "from": {"type": "string", "description": "drag: start target."},
+                            "to": {"type": "string", "description": "drag: end target."},
                             "direction": {"type": "string", "enum": ["up", "down", "left", "right"]},
-                            "amount": {"type": "integer"},
-                            "seconds": {"type": "number"},
-                            "timeout": {"type": "number"},
-                            "gone": {"type": "boolean"},
-                            "window": {"type": "string"},
+                            "amount": {"type": "integer", "description": "scroll: wheel clicks (default 3)."},
+                            "seconds": {"type": "number", "description": "wait/hold_key: seconds."},
+                            "timeout": {"type": "number", "description": "wait_for: seconds (default 10)."},
+                            "gone": {"type": "boolean", "description": "wait_for: wait until the text disappears."},
+                            "window": {"type": "string", "description": "focus: a window title or app name."},
                         },
                         "required": ["action"],
                     },
                 },
                 "desktop": DESKTOP_PROP,
-                "observe": {"type": "string", "enum": ["summary", "changes", "see", "screenshot", "crop"]},
+                "observe": {
+                    "type": "string",
+                    "enum": ["summary", "changes", "see", "screenshot", "crop"],
+                    "description": "What to return after acting: summary (default), changes (+ the changed UI as "
+                    "text), see (the whole screen as text), screenshot, crop (an image of just the changed region).",
+                },
             },
             "required": ["actions"],
         },
@@ -260,22 +299,27 @@ TOOLS: list[dict] = [
     {
         "name": "files",
         "description": (
-            "Move files between this machine and a desktop, or read/write text files in it. upload: local_path "
-            "-> path; download: path -> local_path; read: path -> text; write: text -> path. Desktop paths may "
-            "start with ~."
+            "Files in a desktop. read: a UTF-8 text file -> its text (download binaries instead). write: text -> "
+            "path (replaces the file; creates folders). upload: local_path (on the machine running Minion) -> "
+            "path. download: path -> local_path (never overwrites unless overwrite=true). local_path is limited "
+            "to Minion's files folder (relative paths start there). Desktop paths may start with ~."
         ),
         "input_schema": {
             "type": "object",
             "properties": {
                 "action": {"type": "string", "enum": ["upload", "download", "read", "write"]},
-                "path": {"type": "string", "description": "Path inside the desktop."},
-                "local_path": {"type": "string", "description": "Path on this machine."},
-                "text": {"type": "string", "description": "Content for write."},
+                "path": {"type": "string", "description": "Path inside the desktop, e.g. ~/Documents/report.docx."},
+                "local_path": {
+                    "type": "string",
+                    "description": "upload/download: path on the machine running Minion (download default: .).",
+                },
+                "text": {"type": "string", "description": "write: the whole new content."},
+                "overwrite": {"type": "boolean", "description": "download: replace an existing local file."},
                 "desktop": DESKTOP_PROP,
             },
             "required": ["action", "path"],
         },
-        "annotations": {"title": "Files"},
+        "annotations": {"title": "Files", "destructiveHint": True},
     },
     {
         "name": "view",
@@ -299,12 +343,13 @@ TOOLS: list[dict] = [
 COMPUTER_TOOL = {
     "name": "computer",
     "description": (
-        "Use Linux computers through one command per call (CLI syntax). Commands: create [profile] [-n N] · "
+        "Use Linux computers through one command per call (CLI syntax). Commands: "
+        "create [profile] [--name NAME] [--count N] · "
         "list · use NAME · remove [NAME] · see [--changes] [--ocr] [--full] · screenshot [--marks] [--low] "
         "[--zoom x,y,w,h] · click TARGET · dclick TARGET · rclick TARGET · type TEXT · key KEYS · "
         "scroll up|down [N] · fill TARGET TEXT · drag FROM TO · wait-for TEXT · open TARGET · run SHELL... · "
         "script PYTHON... · view [MESSAGE]. Targets: @id from see, visible text (quote it), or x,y. "
-        "Profiles: browser, office, dev, research, data, base. Example: create office · open calc · see · "
+        "Profiles: browser, office, dev, research, data, windows, base. Example: create office · open calc · see · "
         "click @12 · type 'Total' · key Return."
     ),
     "input_schema": {
@@ -426,6 +471,59 @@ def _image(data_b64: str, mime: str = "image/png") -> dict:
     return {"type": "image", "data": data_b64, "mimeType": mime}
 
 
+_NEEDS = {
+    "click": ("target",),
+    "double_click": ("target",),
+    "triple_click": ("target",),
+    "right_click": ("target",),
+    "middle_click": ("target",),
+    "move": ("target",),
+    "fill": ("target", "text"),
+    "select": ("target", "option"),
+    "drag": ("from", "to"),
+    "type": ("text",),
+    "paste": ("text",),
+    "key": ("keys",),
+    "hold_key": ("keys",),
+    "wait_for": ("text",),
+    "focus": ("window",),
+}
+
+
+def _check_step(i: int, step: dict) -> None:
+    """Refuse an action that is missing what it acts on, instead of clicking wherever the mouse is."""
+    action = str(step.get("action") or "")
+    if not action:
+        return  # shorthand forms like {"click": "@3"} are checked by the desktop
+    missing = [k for k in _NEEDS.get(action, ()) if step.get(k) in (None, "")]
+    if action == "fill" and step.get("text") == "":
+        missing = [k for k in missing if k != "text"]  # fill with "" clears the field
+    if missing:
+        raise ToolError(f"action {i} ({action}) needs {' and '.join(missing)}")
+
+
+# The same act-string grammar as the desktop agent (minion/agent/server.py), which the host can't import.
+def _unquote(text: str) -> str:
+    text = text.strip()
+    if len(text) >= 2 and text[0] == text[-1] and text[0] in "'\"":
+        return text[1:-1]
+    return text
+
+
+def _escapes(text: str) -> str:
+    return text.replace("\\\\", "\0").replace("\\n", "\n").replace("\\t", "\t").replace("\0", "\\")
+
+
+def _first_word(rest: str) -> tuple[str, str]:
+    rest = rest.lstrip()
+    if rest[:1] in ("'", '"'):
+        end = rest.find(rest[0], 1)
+        if end > 0:
+            return rest[1:end], rest[end + 1 :].lstrip()
+    word, _, tail = rest.partition(" ")
+    return word, tail.lstrip()
+
+
 def _split_words(text: str) -> list[str]:
     """Split like a shell (quotes group words) but keep backslashes: Windows paths survive."""
     lex = shlex.shlex(text, posix=True)
@@ -433,6 +531,16 @@ def _split_words(text: str) -> list[str]:
     lex.commenters = ""
     lex.escape = ""
     return list(lex)
+
+
+def default_files_root() -> Path:
+    """Where `files` may read and write on this machine by default: the working directory (a project
+    folder for coding agents), or ~/Minion when that is the filesystem root or the home folder itself
+    (GUI apps start MCP servers there)."""
+    cwd, home = Path.cwd().resolve(), Path.home().resolve()
+    if cwd == Path(cwd.anchor) or cwd == home:
+        return home / "Minion"
+    return cwd
 
 
 def _get(obj, key: str):
@@ -464,8 +572,10 @@ class Toolkit:
         self._pending: dict[str, Future] = {}
         self._lock = threading.Lock()
         self.in_process_viewer = in_process_viewer
-        # `files` upload/download touch this machine's disk: confine them to files_root when set
-        root = files_root if files_root is not None else os.environ.get("MINION_FILES_ROOT")
+        # `files` upload/download touch this machine's disk: a prompt-injected agent must not be able to
+        # copy ~/.ssh into an internet-connected desktop. They stay inside one folder (MINION_FILES_ROOT=/
+        # allows everything).
+        root = files_root if files_root is not None else os.environ.get("MINION_FILES_ROOT") or default_files_root()
         self.files_root = Path(root).expanduser().resolve() if root else None
 
     # -- definitions ----------------------------------------------------
@@ -669,16 +779,21 @@ class Toolkit:
             return [_text("Desktops:\n" + "\n".join(lines))]
         if action == "create":
             return self._create(args, progress)
+        if action not in ("fork",) and args.get("name") and not args.get("desktop"):
+            args = {**args, "desktop": args["name"]}  # desktop(action="remove", name="x") means desktop x
+        if action in ("remove", "restore") and not (args.get("desktop") or self.current):
+            raise ToolError(f"{action} needs desktop=NAME (which desktop to {action})")
         d = self.desk(args)
         if action == "info":
             hello = d.hello()
-            return [
-                _text(
-                    json.dumps(
-                        {**d.info().to_dict(), "apps": hello.get("apps"), "features": hello.get("features")}, indent=2
-                    )
-                )
+            info = d.info()
+            lines = [
+                f"{d.name}: {info.profile} profile, {info.size}, "
+                f"{'frozen' if info.state == 'paused' else info.state}, backend {info.backend}",
+                f"Apps you can open: {', '.join(a.lower() for a in hello.get('apps', [])) or 'none'}",
+                f"Windows open: {int(hello.get('windows') or 0)}",
             ]
+            return [_text("\n".join(lines))]
         if action == "remove":
             d.remove()
             self.desktops.pop(d.name, None)
@@ -700,15 +815,18 @@ class Toolkit:
             tag = d.snapshot(args.get("tag"))
             return [_text(f'Saved snapshot {tag!r} of {d.name}. Restore: action="restore", tag="{tag}".')]
         if action == "restore":
-            if not args.get("tag"):
-                snaps = be.snapshots(d.name)
-                raise ToolError("restore needs a tag. Snapshots: " + (", ".join(s.tag for s in snaps) or "none"))
+            snaps = [s.tag for s in be.snapshots(d.name)]
+            if not args.get("tag") or args["tag"] not in snaps:
+                what = "needs a tag" if not args.get("tag") else f"has no snapshot {args['tag']!r}"
+                raise ToolError(f"restore {what}. Snapshots of {d.name}: " + (", ".join(snaps) or "none"))
             d.restore(args["tag"])
             return [_text(f"{d.name} restored to {args['tag']!r} (apps start fresh).")]
         if action == "replay":
             path = Path(tempfile.gettempdir()) / f"minion-{d.name}-replay.html"
             d.recording("html", path)
-            return [_text(f"Timeline of everything done on {d.name}: {path}")]
+            url = self.view_url(d.name)
+            link = f"\nOpen it in a browser: {url.split('/view/')[0]}/api/desktops/{d.name}/replay" if url else ""
+            return [_text(f"Timeline of everything done on {d.name}: {path}{link}")]
         if action == "macro":
             code = d.recording("script")
             return [_text("Replayable script (run it with the script tool on a desktop of this profile):\n\n" + code)]
@@ -780,7 +898,8 @@ class Toolkit:
         lines = [
             f"Ready: {names} ({profile}, {w}x{h}). Current desktop: {made[0].name}"
             + (" (pass desktop=NAME to use the others)." if len(made) > 1 else "."),
-            f"Apps (open): {', '.join(a.lower() for a in hello.get('apps', []))}",
+            f"Apps you can open: {', '.join(a.lower() for a in hello.get('apps', []))}"
+            + ("" if hello.get("windows") else " (no window is open yet: open one first)"),
         ]
         if prof.merged("tips"):
             lines.append("Tips: " + prof.merged("tips"))
@@ -808,6 +927,7 @@ class Toolkit:
         zoom = bool(args.get("zoom")) and region
         low = args.get("detail") == "low" and not zoom
         shot = d.screenshot(
+            cursor=not region,  # a crop is for reading details: no pointer on top
             region=region,
             width=1024 if zoom else None,
             scale=0.5 if low else None,
@@ -827,11 +947,18 @@ class Toolkit:
         return [_image(shot.base64(), shot.mime), _text(note)]
 
     def t_act(self, args: dict, progress) -> list:
-        d = self.desk(args)
         actions = args.get("actions")
+        if isinstance(actions, (dict, str)):
+            actions = [actions]
         if not actions:
             raise ToolError('act needs actions, e.g. [{"action": "click", "target": "@3"}]')
+        for i, step in enumerate(actions, 1):
+            if isinstance(step, dict):
+                _check_step(i, {k: v for k, v in step.items() if v is not None})
+        d = self.desk(args)
         observe = args.get("observe") or "summary"
+        if not self.images and observe in ("screenshot", "crop"):
+            observe = "changes"  # this client gets text only
         res = d.act(actions, observe=observe, check=False)
         out = [_text(res.summary)]
         if res.observation is not None:
@@ -853,9 +980,10 @@ class Toolkit:
         res = d.open(args["target"])
         w = res.get("window")
         if w:
-            return [_text(f'Opened {res["command"]} → window "{w["title"]}" ({w["app"]}). Use see() to read it.')]
+            also = f" Also opened: {', '.join(repr(t) for t in res['also'])}." if res.get("also") else ""
+            return [_text(f'Opened {res["command"]} → window "{w["title"]}" ({w["app"]}).{also} Use see() to read it.')]
         if "error" in res:
-            raise ToolError(f"{res['command']}: {res['error']}")
+            raise ToolError(res["error"])
         return [_text(f"Launched {res['command']}; no new window yet (it may still be loading — check see()).")]
 
     def t_run(self, args: dict, progress) -> list:
@@ -864,7 +992,8 @@ class Toolkit:
             raise ToolError("run needs a command")
         res = d.run(args["command"], timeout=float(args.get("timeout") or 120), background=bool(args.get("background")))
         if args.get("background"):
-            return [_text(f"Started in the background (pid {res.pid}).")]
+            log = f" Output goes to {res.log} (read it with run('tail -n 50 {res.log}'))." if res.log else ""
+            return [_text(f"Started in the background (pid {res.pid}).{log} Stop it with run('kill {res.pid}').")]
         return [_text(_run_text(res.code, res.stdout, res.stderr, res.timed_out))]
 
     def t_script(self, args: dict, progress) -> list:
@@ -872,10 +1001,16 @@ class Toolkit:
         if not args.get("code"):
             raise ToolError("script needs code")
         res = d.script(args["code"], timeout=float(args.get("timeout") or 120))
-        text = _run_text(res.code, res.stdout, res.stderr, res.timed_out)
-        if res.code != 0:
-            raise ToolError(text)
-        return [_text(text)]
+        if res.ok and not res.stdout and not res.stderr:
+            return [_text(f"The script finished in {res.elapsed:.1f}s and printed nothing (print() what you need).")]
+        if res.ok:  # only what the script printed: the point of code mode is a small result
+            return [
+                _text(
+                    _clip_output(res.stdout, RUN_TEXT_LIMIT)
+                    + (f"\n(stderr: {res.stderr.strip()})" if res.stderr else "")
+                )
+            ]
+        raise ToolError(_run_text(res.code, res.stdout, res.stderr, res.timed_out))
 
     def _host_path(self, path: str) -> str:
         """A path on this machine for upload/download, kept inside files_root when one is set."""
@@ -885,7 +1020,10 @@ class Toolkit:
         self.files_root.mkdir(parents=True, exist_ok=True)
         full = (self.files_root / raw).resolve()
         if full != self.files_root and self.files_root not in full.parents:
-            raise ToolError(f"local_path must be inside {self.files_root} (relative paths start there)")
+            raise ToolError(
+                f"local_path must be inside {self.files_root} (relative paths start there; MINION_FILES_ROOT "
+                "changes the folder)"
+            )
         return str(full)
 
     def t_files(self, args: dict, progress) -> list:
@@ -896,20 +1034,28 @@ class Toolkit:
                 raise ToolError("upload needs local_path: a file on this machine")
             local = self._host_path(args["local_path"])
             if not os.path.exists(local):
-                raise ToolError(f"local_path {local!r} does not exist on this machine")
+                raise ToolError(f"local_path {local!r} does not exist (relative paths start in {self.files_root})")
             d.upload(local, path or "~/")
             return [_text(f"Uploaded {local} → {d.name}:{path or '~/'}")]
+        if not path and action in ("download", "read", "write"):
+            raise ToolError(f"{action} needs path: the file in the desktop, e.g. ~/Documents/report.docx")
         if action == "download":
-            local = self._host_path(args.get("local_path") or ".")
-            return [_text(f"Downloaded {d.name}:{path} → {d.download(path, local)}")]
+            local = Path(self._host_path(args.get("local_path") or ".")).absolute()
+            dest = local / Path(path).name if local.is_dir() else local
+            if dest.exists() and not args.get("overwrite"):
+                raise ToolError(f"{dest} already exists on this machine; pass overwrite=true to replace it")
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            return [_text(f"Downloaded {d.name}:{path} → {d.download(path, dest)}")]
         if action == "read":
             text = d.read_text(path)
             if len(text) > 100_000:
                 text = text[:100_000] + f"\n… [{len(text) - 100_000} more characters]"
             return [_text(text)]
         if action == "write":
-            d.write_text(path, args.get("text") or "")
-            return [_text(f"Wrote {len(args.get('text') or '')} characters to {d.name}:{path}")]
+            if args.get("text") is None:
+                raise ToolError('write needs text (use text="" for an empty file); it replaces the whole file')
+            d.write_text(path, args["text"])
+            return [_text(f"Wrote {len(args['text'])} characters to {d.name}:{path}")]
         raise ToolError("action must be upload, download, read or write")
 
     def t_view(self, args: dict, progress) -> list:
@@ -951,14 +1097,33 @@ class Toolkit:
             return " ".join(ws)
 
         if verb in ("create", "up", "new"):
-            count = 1
-            if "-n" in plain:
-                i = plain.index("-n")
-                count = int(plain[i + 1]) if i + 1 < len(plain) else 1
-                plain = plain[:i] + plain[i + 2 :]
-            return self.t_desktop(
-                {"action": "create", "profile": plain[0] if plain else None, "count": count}, progress
-            )
+            # create [profile] [--name NAME | NAME] [--count N | -c N]; "-n X" is a count if X is a number
+            count, name, rest_words, it = 1, None, [], iter(words)
+            for w in it:
+                if w in ("--count", "-c"):
+                    count = int(next(it, "1"))
+                elif w.startswith("--count="):
+                    count = int(w.split("=", 1)[1])
+                elif w in ("--name", "-n"):
+                    value = next(it, "")
+                    if w == "-n" and value.isdigit():
+                        count = int(value)
+                    else:
+                        name = value or None
+                elif w.startswith("--name="):
+                    name = w.split("=", 1)[1] or None
+                elif w.startswith("-"):
+                    raise ToolError(f"unknown option {w!r}: use create [profile] [--name NAME] [--count N]")
+                else:
+                    rest_words.append(w)
+            if len(rest_words) > 2:
+                raise ToolError("use: create [profile] [--name NAME] [--count N]")
+            if len(rest_words) == 2 and name is None:
+                name = rest_words[1]
+            args_ = {"action": "create", "profile": rest_words[0] if rest_words else None, "count": count}
+            if name:
+                args_["name"] = name
+            return self.t_desktop(args_, progress)
         if verb in ("list", "ls"):
             return self.t_desktop({"action": "list"}, progress)
         if verb == "profiles":
@@ -990,8 +1155,8 @@ class Toolkit:
                 "target": target(plain),
             }
             return self.t_act({"actions": [step]}, progress)
-        if verb == "type":
-            return self.t_act({"actions": [{"action": "type", "text": " ".join(words) if words else rest}]}, progress)
+        if verb == "type":  # the rest of the command, verbatim (\n = Return, \t = Tab), as in act steps
+            return self.t_act({"actions": [{"action": "type", "text": _escapes(_unquote(rest))}]}, progress)
         if verb in ("key", "press"):
             return self.t_act({"actions": [{"action": "key", "keys": k} for k in plain]}, progress)
         if verb == "scroll":
@@ -1008,10 +1173,11 @@ class Toolkit:
                 progress,
             )
         if verb == "fill":
-            if len(plain) < 2:
+            target_, text_ = _first_word(rest)
+            if not target_:
                 raise ToolError("fill TARGET TEXT")
             return self.t_act(
-                {"actions": [{"action": "fill", "target": plain[0], "text": " ".join(plain[1:])}]}, progress
+                {"actions": [{"action": "fill", "target": target_, "text": _escapes(_unquote(text_))}]}, progress
             )
         if verb == "drag":
             if len(plain) != 2:
@@ -1030,12 +1196,25 @@ class Toolkit:
         raise ToolError(f"unknown command {verb!r}. Try: see · click @12 · type hello · open firefox · run ls")
 
 
+RUN_TEXT_LIMIT = 12_000  # characters of command output a tool result carries (head + tail)
+
+
+def _clip_output(text: str, limit: int) -> str:
+    if len(text) <= limit:
+        return text
+    head, tail = text[: limit // 4], text[-(limit - limit // 4) :]
+    return (
+        f"{head}\n… [{len(text) - len(head) - len(tail):,} characters left out; to keep everything, redirect it to a "
+        f"file (cmd > /tmp/out.txt) and read the parts you need] …\n{tail}"
+    )
+
+
 def _run_text(code, stdout: str, stderr: str, timed_out: bool) -> str:
     parts = [f"exit code: {code}" + (" (timed out)" if timed_out else "")]
     if stdout:
-        parts.append("stdout:\n" + stdout)
+        parts.append("stdout:\n" + _clip_output(stdout, RUN_TEXT_LIMIT))
     if stderr:
-        parts.append("stderr:\n" + stderr)
+        parts.append("stderr:\n" + _clip_output(stderr, RUN_TEXT_LIMIT // 3))
     return "\n".join(parts)
 
 

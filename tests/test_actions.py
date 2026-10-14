@@ -75,3 +75,14 @@ def test_window_app_names():
     assert app_name("Navigator.firefox-esr") == "firefox-esr"
     assert app_name("libreoffice.libreoffice-writer") == "libreoffice-writer"
     assert app_name("geany") == "geany"
+
+
+def test_text_steps_are_verbatim_with_escapes():
+    # Quotes and spacing inside the text are kept; \n is Return, \t is Tab, \\ is a backslash.
+    assert parse_step('type "quoted words" and more')[1]["text"] == '"quoted words" and more'
+    assert parse_step("type x=1; y='two'")[1]["text"] == "x=1; y='two'"
+    assert parse_step(r"type A\tB\nC")[1]["text"] == "A\tB\nC"
+    assert parse_step("type 'hello world'")[1]["text"] == "hello world"
+    assert parse_step(r"type C:\\temp\\new")[1]["text"] == "C:\\temp\\new"
+    assert parse_step('fill "Customer name" Ada Lovelace')[1] == {"target": "Customer name", "text": "Ada Lovelace"}
+    assert parse_step("key shift+Down 6")[1] == {"keys": "shift+Down", "repeat": 6}

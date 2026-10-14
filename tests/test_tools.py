@@ -110,6 +110,10 @@ def test_computer_command_parsing(tk):
     assert calls[7][1]["actions"][0] == {"action": "fill", "target": "@4", "text": "Ada Lovelace"}
     tk.call("computer", {"command": r"type C:\Users\agent"})
     assert calls[-1][1]["actions"][0]["text"] == r"C:\Users\agent"
+    tk.call("computer", {"command": r"type 'a\tb' then\n"})  # verbatim, with \n and \t escapes
+    assert calls[-1][1]["actions"][0]["text"] == "'a\tb' then\n"
+    tk.call("computer", {"command": r"type C:\\temp\\new"})  # \\ is a backslash
+    assert calls[-1][1]["actions"][0]["text"] == "C:\\temp\\new"
     assert tk.call("computer", {"command": "dance"}).is_error
 
 

@@ -12,9 +12,12 @@ packages = [
   "fonts-noto-core",
   "fonts-noto-color-emoji",
   "fonts-wqy-microhei",
+  "lxterminal",
 ]
-env = { MINION_BROWSER = "firefox-esr", MOZ_ENABLE_WAYLAND = "0" }
+env = { MINION_BROWSER = "firefox-esr", MOZ_ENABLE_WAYLAND = "0", MINION_TERMINAL = "lxterminal" }
 apps = [
+  # A VTE terminal: `see` reads its text (base's xterm needs OCR). GTK is already here for Firefox.
+  { name = "Terminal", id = "terminal", command = "lxterminal" },
   { name = "Firefox", id = "firefox", command = "firefox-esr" },
 ]
 tips = """

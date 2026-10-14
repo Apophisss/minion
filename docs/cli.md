@@ -20,6 +20,7 @@ created or `use`d last, otherwise the most recent running one.
 | `minion pull PROFILE…` · `minion build PROFILE… [--all] [--push]` | Prepare images ahead of time, or build them locally |
 | `minion logs` | The desktop's session log |
 | `minion doctor` | Check the setup |
+| `minion setup` | The first-run wizard, and safe to run again. It checks that Docker or Podman is installed and running (and says how to fix it if not), prepares the profiles you pick (`--profiles office,dev`, default `browser`, `none` to skip), and connects your agent apps. `--yes` takes the defaults without asking. Without a terminal it never waits: it uses the defaults and prints what it would have asked |
 
 ## Look
 
@@ -31,24 +32,33 @@ created or `use`d last, otherwise the most recent running one.
 
 ## Act
 
-Targets are `@12`, visible text (`"Sign in"`), or coordinates (`640,400` or `640 400`).
+Targets are `@12` (from your latest `see`; the most reliable), exact visible text (`"Sign in"`), or coordinates
+(`640,400` or `640 400`). Text targets must really be on screen: a click or `wait-for` never settles for a
+fragment of what you asked for, and a miss fails with the closest candidates.
 
 | Command | |
 |---|---|
 | `minion click TARGET` | `--double`, `--triple`, `--right`, `--middle`, `--mod ctrl`. Shortcuts: `dclick`, `rclick` |
 | `minion type TEXT` | `--enter` presses Return afterwards. `--paste` pastes through the clipboard, which is fast for long text. `-` reads stdin |
-| `minion key KEYS` | `ctrl+s`, `Return`, `alt+Tab`, `ctrl+shift+t`, `F5`… `-n 3` repeats |
+| `minion key KEYS…` | `ctrl+s`, `Return`, `alt+Tab`, `ctrl+shift+t`, `F5`, or several in order (`minion key Tab Tab Return`). `-n 3` repeats. Unknown key names are errors |
 | `minion scroll [up\|down\|left\|right] [N] [--at TARGET]` | |
 | `minion drag FROM TO` · `minion move TARGET` | |
-| `minion fill TARGET TEXT` | Replace a field's content (a label like `"Name"` finds its field) |
-| `minion wait-for TEXT [--timeout 15] [--gone]` | Wait until text appears (or disappears) |
-| `minion act STEP…` | Several actions in one round trip: `minion act "click @3" "type hello" "key Return"`. Also accepts JSON objects or lists, or `-` for JSON on stdin. `--observe changes` prints the changed UI |
+| `minion fill TARGET TEXT` | Replace a field's content (a label like `"Name"` finds its field). Refuses targets that aren't text fields |
+| `minion select TARGET OPTION` | Pick a dropdown option by its text. `see` lists each dropdown's value and options |
+| `minion wait-for TEXT [--timeout 15] [--gone]` | Wait until the text is visible on screen (or gone), and say where it was seen |
+| `minion act STEP…` | Several actions in one round trip: `minion act "click @3" "fill @4 Ada" "type hi\n" "key ctrl+s"`. Also accepts JSON objects or lists, or `-` for JSON on stdin. `--observe changes` prints the changed UI, `--observe crop` saves an image of the changed region |
 | `minion script FILE\|-\|CODE` | Run Python inside the desktop with the GUI API preloaded (`click`, `write`, `key`, `see`, `cells`, `launch`, `run`, …) |
 | `minion open TARGET` | An app (`writer`, `calc`, `firefox`…), a URL, a file in the desktop, or a command |
 | `minion run CMD…` | A shell command in the desktop. It returns the command's exit code. `-t 60` sets a timeout, `-b` runs in the background |
 | `minion cp SRC DST` | Copy files: `minion cp report.pdf :~/Documents/` · `minion cp office-1:~/out.png .` |
 | `minion clip [TEXT]` | Read or set the clipboard |
 | `minion focus WINDOW [--action close\|maximize\|minimize\|restore]` | |
+
+**Step strings** for `act`: `click|dclick|rclick|move TARGET` · `type TEXT` · `paste TEXT` · `fill TARGET TEXT` ·
+`select TARGET OPTION` · `key KEYS [N]` · `scroll DIR [N] [TARGET]` · `drag FROM TO` · `wait SECONDS` ·
+`wait_for TEXT` · `focus WINDOW`. The text of `type`, `paste` and `fill` is taken verbatim (quotes and spacing
+included; one pair of outer quotes is removed), and `\n` is Return, `\t` is Tab and `\\` is a backslash, as
+in `write()` in scripts. `minion type` itself types its argument exactly as your shell passes it.
 
 Every action prints what happened and what changed. With `--shot FILE` it also saves a screenshot:
 
@@ -69,6 +79,8 @@ command's own exit code (`124` on timeout).
 | `minion replay [-o FILE.html\|FILE.gif] [--open]` | Export the flight recorder |
 | `minion serve` | The HTTP API, dashboard and live view. Options: `--host`, `--port 4747`, `--token`, `--no-auth`, `--idle-freeze 600` |
 | `minion mcp` | The MCP server on stdio. Options: `--compact` (one `computer` tool), `--no-images` (text only, for clients that would send images to the model as base64 text), `--preload office,dev`, `--idle-freeze 600` |
+| `minion share` | A public HTTPS MCP URL (`https://….trycloudflare.com/mcp?token=…`) to paste into ChatGPT, Claude.ai or Le Chat, through a Cloudflare quick tunnel (`cloudflared` if installed, else Docker). Each run has a fresh token, and Ctrl+C stops it. `files` upload/download stay off unless you pass `--files`. Also `--token`, `--port 4748`, `--tailscale` (Funnel instead), `--compact`, `--no-images`. See [remote.md](remote.md) |
+| `minion connect [APP…]` | Add the MCP server to your agent apps' configs: Claude Desktop, Claude Code, Cursor, VS Code, Devin Desktop/Windsurf, Gemini CLI, Codex, LM Studio, Cline, Kiro, Zed. With no APP it finds them and asks which (`--all` or `--yes`: every one found). It merges one entry and keeps everything else, backs the file up first, and changes nothing when run again. `--list` shows each app's config and status, `--dry-run` the diff, `--remove` takes Minion out again, and `--compact` connects `minion mcp --compact`. See [connect.md](connect.md) |
 | `minion tools [-f openai\|anthropic\|gemini\|openai-responses\|mcp] [--compact]` | Print tool definitions for any LLM API. `minion tools --call see` runs one |
 | `minion skill [--install [DIR]]` | Print the Agent Skill (`SKILL.md`) that teaches an agent this CLI, or install it as `DIR/minion/SKILL.md` (default `~/.claude/skills`) |
 

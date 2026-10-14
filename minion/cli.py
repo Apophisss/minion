@@ -7,6 +7,7 @@ import json
 import os
 import re
 import sys
+import tempfile
 import time
 import webbrowser
 from pathlib import Path
@@ -66,7 +67,13 @@ def human_age(seconds: float) -> str:
 
 
 def emit_json(obj) -> None:
-    print(json.dumps(obj, indent=2, ensure_ascii=False, default=str))
+    # Pretty for people; compact (often 5x smaller) when an agent or a pipe reads it.
+    tty = sys.stdout.isatty()
+    print(
+        json.dumps(
+            obj, indent=2 if tty else None, separators=None if tty else (",", ":"), ensure_ascii=False, default=str
+        )
+    )
 
 
 # -- desktop resolution --------------------------------------------------------
@@ -91,6 +98,10 @@ def act_and_print(args, *actions, **kw) -> int:
         path = args.shot
         res.screenshot.save(path)
         info(f"screenshot → {path}")
+    if getattr(res, "crop", None) is not None:  # --observe crop: just the region that changed
+        path = getattr(args, "shot", None) or f"{d.name}-change-{time.strftime('%H%M%S')}.png"
+        res.crop.save(path)
+        info(f"changed region → {path}")
     return 0 if res.ok else 1
 
 
@@ -129,7 +140,7 @@ def cmd_up(args) -> int:
         return 0
     d = Desktop.create(
         profile,
-        name=args.name,
+        name=args.name or getattr(args, "desktop", None),  # `minion up office -d NAME` names it too
         size=args.size,
         memory=args.memory or "",
         cpus=args.cpus or "",
@@ -142,6 +153,9 @@ def cmd_up(args) -> int:
     hello = d.hello()
     if args.json:
         emit_json({**d.to_dict(), "apps": hello.get("apps", []), "ready_in": round(time.time() - t0, 2)})
+        return 0
+    if args.quiet:  # just the name, for scripts: NAME=$(minion up -q office)
+        print(d.name)
         return 0
     ok(f"{c(d.name, '1')} is ready  ({profile} · {'x'.join(map(str, hello['screen']))} · {time.time() - t0:.1f}s)")
     if hello.get("apps"):
@@ -182,6 +196,13 @@ def cmd_ls(args) -> int:
 def cmd_rm(args) -> int:
     be = get_backend()
     names = [d.name for d in be.list()] if args.all else args.names
+    if args.all and names and not args.yes:
+        # Every desktop on this machine, possibly other agents' too: confirm first.
+        listing = ", ".join(names)
+        if not sys.stdin.isatty():
+            raise MinionError(f"rm --all would remove {len(names)} desktops ({listing}); add --yes to confirm")
+        if input(f"Remove {len(names)} desktops ({listing})? [y/N] ").strip().lower() not in ("y", "yes"):
+            return 1
     if not names:
         name = getattr(args, "desktop", None)
         names = [name] if name else [Desktop.attach().name]
@@ -190,9 +211,12 @@ def cmd_rm(args) -> int:
         try:
             Desktop(n, be).remove()
             ok(f"removed {n}")
+        except NotFound as e:
+            err(str(e))
+            code = max(code, 2)
         except MinionError as e:
             err(str(e))
-            code = 1
+            code = max(code, 1)
     return code
 
 
@@ -326,7 +350,13 @@ def cmd_shot(args) -> int:
         else ("webp" if (args.output or "").lower().endswith(".webp") else "png")
     )
     shot = d.screenshot(
-        region=region, max_width=args.max_width, format=fmt, marks=args.marks, grid=args.grid, cursor=not args.no_cursor
+        region=region,
+        max_width=args.max_width,
+        width=1024 if getattr(args, "zoom", False) and region else None,
+        format=fmt,
+        marks=args.marks,
+        grid=args.grid,
+        cursor=not args.no_cursor and not region,  # crops are for reading details: no pointer on top
     )
     if args.output == "-":
         sys.stdout.buffer.write(shot.data)
@@ -372,9 +402,12 @@ def cmd_type(args) -> int:
     text = " ".join(args.text)
     if text == "-":
         text = sys.stdin.read()
+    if args.paste:  # a pasted trailing newline is often dropped: press Return as its own step
+        steps = [{"action": "paste", "text": text}] + ([{"action": "key", "keys": "Return"}] if args.enter else [])
+        return act_and_print(args, *steps)
     if args.enter:
         text += "\n"
-    return act_and_print(args, {"action": "paste" if args.paste else "type", "text": text})
+    return act_and_print(args, {"action": "type", "text": text})
 
 
 def cmd_key(args) -> int:
@@ -399,6 +432,10 @@ def cmd_drag(args) -> int:
 
 def cmd_fill(args) -> int:
     return act_and_print(args, {"action": "fill", "target": args.target, "text": " ".join(args.text)})
+
+
+def cmd_select(args) -> int:
+    return act_and_print(args, {"action": "select", "target": args.target, "option": " ".join(args.option)})
 
 
 def cmd_wait_for(args) -> int:
@@ -433,19 +470,46 @@ def cmd_open(args) -> int:
     w = res.get("window")
     if w:
         ok(f'opened {res["command"]} → "{w["title"]}"')
+        if res.get("also"):
+            info(f"  also opened: {', '.join(repr(t) for t in res['also'])}")
     elif "error" in res:
-        err(f"{res['command']}: {res['error']}")
+        err(res["error"])
         return 1
     else:
         ok(f"launched {res['command']} (no new window yet)")
     return 0
 
 
+def piped_stdin(force: bool = False) -> str | None:
+    """Text piped or redirected into this command (`echo hi | minion run cat`, heredocs), else None.
+
+    A terminal, /dev/null, or a pipe that a harness keeps open without writing is never waited on."""
+    import stat
+
+    try:
+        if force:
+            return sys.stdin.read()
+        if sys.stdin is None or sys.stdin.isatty():
+            return None
+        mode = os.fstat(sys.stdin.fileno()).st_mode
+        if stat.S_ISREG(mode):
+            return sys.stdin.read()
+        if stat.S_ISFIFO(mode) and os.name != "nt":
+            import select
+
+            ready, _, _ = select.select([sys.stdin], [], [], 0.05)  # data (or EOF) already waiting
+            return sys.stdin.read() if ready else None
+    except (OSError, ValueError, AttributeError):
+        pass
+    return None
+
+
 def cmd_run(args) -> int:
     d = desktop(args)
     cmd = args.command
     command = cmd[0] if len(cmd) == 1 else " ".join(cmd)
-    res = d.run(command, timeout=args.timeout, background=args.background)
+    stdin = None if args.background else piped_stdin(force=getattr(args, "stdin", False))
+    res = d.run(command, timeout=args.timeout, background=args.background, input=stdin or None)
     if args.json:
         emit_json(res.__dict__)
         return 0
@@ -502,7 +566,8 @@ def cmd_windows(args) -> int:
         info("No windows open.")
     for i, w in enumerate(wins, 1):
         flags = ", ".join(([c("focused", "32")] if w["focused"] else []) + w.get("states", []))
-        print(f"[{i}] {w['title']!r:50} {w['app']:16} {w['x']},{w['y']} {w['w']}x{w['h']}  {flags}")
+        title = '"' + w["title"] + '"'
+        print(f"[{i}] {title:50} {w['app']:16} {w['x']},{w['y']} {w['w']}x{w['h']}  {flags}")
     return 0
 
 
@@ -577,6 +642,12 @@ def cmd_mcp(args) -> int:
     return 0
 
 
+def cmd_share(args) -> int:
+    from .share import run
+
+    return run(args)
+
+
 def cmd_script(args) -> int:
     d = desktop(args)
     src = args.code
@@ -592,9 +663,15 @@ def cmd_script(args) -> int:
         return 0 if res.ok else 1
     if res.stdout:
         sys.stdout.write(res.stdout if res.stdout.endswith("\n") else res.stdout + "\n")
+        sys.stdout.flush()  # its output first, then any error
     if res.stderr:
         sys.stderr.write(res.stderr if res.stderr.endswith("\n") else res.stderr + "\n")
-    return 124 if res.timed_out else (res.code or 0)
+    if res.timed_out:
+        err(f"timed out after {args.timeout:g}s")
+        return 124
+    if res.ok and not res.stdout and not res.stderr:
+        ok(f"script finished in {res.elapsed:.1f}s (it printed nothing; print() what you want back)")
+    return res.code or 0
 
 
 def cmd_tools(args) -> int:
@@ -603,13 +680,20 @@ def cmd_tools(args) -> int:
     tk = Toolkit()
     if args.call:
         arguments = json.loads(args.arguments) if args.arguments else {}
+        # Each `tools --call` is a new process: carry "the current desktop" between calls like the CLI does.
+        tk.current = getattr(args, "desktop", None) or config.load_state().get("current")
         res = tk.call(args.call, arguments)
+        if tk.current != config.load_state().get("current"):
+            config.update_state(current=tk.current)
         if args.json:
             emit_json(res.to_mcp())
         else:
             print(res.text)
             for i, (mime, data) in enumerate(res.images, 1):
-                path = Path(f"tool-image-{i}.{mime.split('/')[-1]}")
+                path = (
+                    Path(tempfile.gettempdir())
+                    / f"minion-tool-image-{time.strftime('%H%M%S')}-{i}.{mime.split('/')[-1]}"
+                )
                 path.write_bytes(__import__("base64").b64decode(data))
                 info(f"image → {path}")
         return 1 if res.is_error else 0
@@ -637,6 +721,28 @@ def cmd_logs(args) -> int:
     return 0
 
 
+def cmd_setup(args) -> int:
+    from .onboard import setup
+
+    names = [n for n in re.split(r"[,\s]+", args.profiles or "") if n] if args.profiles is not None else None
+    return setup(names, yes=args.yes, compact=args.compact)
+
+
+def cmd_connect(args) -> int:
+    from .connect import main as connect_main
+
+    return connect_main(
+        args.apps,
+        every=args.all,
+        list_only=args.list,
+        dry_run=args.dry_run,
+        remove=args.remove,
+        compact=args.compact,
+        yes=args.yes,
+        json_out=args.json,
+    )
+
+
 def cmd_doctor(args) -> int:
     from .doctor import run_checks
 
@@ -652,11 +758,13 @@ def cmd_version(args) -> int:
 HELP = """\
 minion — instant, featherweight Linux desktops for AI agents.
 
+First run: minion setup (checks Docker, prepares a desktop, connects your agent apps)
 Start:     minion up [office|dev|research|browser|data|windows|base]    then: minion see · minion view
 Look:      see · shot · windows
 Act:       click · type · key · scroll · drag · fill · open · run · act (batch) · wait-for
 Manage:    ls · rm · stop · start · freeze · thaw · fork · snapshot · restore · use · cp · clip
-Connect:   mcp (Claude Code, Claude Desktop, Cursor...) · serve (HTTP API + dashboard) · view (live)
+Connect:   connect (add Minion to Claude, Cursor, VS Code, Codex...) · mcp (the MCP server itself)
+           serve (HTTP API + dashboard) · view (live) · share (a URL for ChatGPT, Claude.ai, Le Chat)
            tools (definitions for any LLM API) · skill (SKILL.md for agents with a shell)
 
 Targets for click/move/fill: @12 (an id from `minion see`), "Sign in" (visible text), or 640,400.
@@ -693,14 +801,15 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--port", "-p", action="append", help="publish a desktop port on 127.0.0.1 (repeatable)")
     sp.add_argument("--view", action="store_true", help="open the live view when ready")
     sp.add_argument("--count", "-c", type=int, default=1, help="create N desktops in parallel")
-    sp.add_argument("--quiet", "-q", action="store_true", help="no progress output")
+    sp.add_argument("--quiet", "-q", action="store_true", help="print only the new desktop's name")
 
     sp = add("ls", cmd_ls, "list desktops", aliases=["list", "ps"])
     sp.add_argument("--fast", action="store_true", help="skip live memory/CPU stats")
 
     sp = add("rm", cmd_rm, "remove desktops", aliases=["remove", "delete"])
     sp.add_argument("names", nargs="*")
-    sp.add_argument("--all", action="store_true", help="remove every desktop")
+    sp.add_argument("--all", action="store_true", help="remove every desktop on this machine (asks first)")
+    sp.add_argument("--yes", "-y", action="store_true", help="don't ask (needed for --all without a terminal)")
 
     for name, method, verb, help in (
         ("stop", "stop", "stopped", "stop a desktop (keeps its files)"),
@@ -749,8 +858,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     sp = add("shot", cmd_shot, "take a screenshot", aliases=["screenshot"])
     sp.add_argument("-o", "--output", help="file (.png/.jpg/.webp) or - for stdout")
-    sp.add_argument("--region", help="x,y,w,h")
-    sp.add_argument("--max-width", type=int)
+    sp.add_argument("--region", help="only this part of the screen: x,y,w,h")
+    sp.add_argument("--zoom", action="store_true", help="magnify --region to 1024 px wide (small text, icons)")
+    sp.add_argument("--max-width", type=int, help="scale down to at most this width (fewer image tokens)")
     sp.add_argument("--marks", action="store_true", help="label clickable elements with their @ids")
     sp.add_argument("--grid", action="store_true", help="overlay a coordinate grid")
     sp.add_argument("--no-cursor", action="store_true")
@@ -785,7 +895,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     sp = add("scroll", cmd_scroll, "scroll up/down/left/right")
     sp.add_argument("direction", nargs="?", default="down", choices=["up", "down", "left", "right"])
-    sp.add_argument("amount", nargs="?", type=int, default=3)
+    sp.add_argument("amount", nargs="?", type=int, default=3, help="wheel clicks (3)")
     sp.add_argument("--at", help="target to scroll at (@id, text or x,y)")
     sp.add_argument("--shot", metavar="FILE")
 
@@ -799,26 +909,48 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("text", nargs="+")
     sp.add_argument("--shot", metavar="FILE")
 
-    sp = add("wait-for", cmd_wait_for, "wait until text appears (or --gone)")
-    sp.add_argument("text", nargs="+")
-    sp.add_argument("--timeout", type=float, default=15)
-    sp.add_argument("--gone", action="store_true")
-
-    sp = add("act", cmd_act, 'run several actions: minion act "click @3" "type hello" "key Return"')
-    sp.add_argument("steps", nargs="+", help="action strings, JSON objects/lists, or - for JSON on stdin")
-    sp.add_argument(
-        "--observe", default="summary", choices=["summary", "changes", "see"], help="what to report after the actions"
-    )
+    sp = add("select", cmd_select, "pick a dropdown option by its text: minion select @12 Title")
+    sp.add_argument("target")
+    sp.add_argument("option", nargs="+")
     sp.add_argument("--shot", metavar="FILE")
+
+    sp = add("wait-for", cmd_wait_for, "wait until text is visible on screen (or --gone)")
+    sp.add_argument("text", nargs="+")
+    sp.add_argument("--timeout", type=float, default=15, help="seconds to wait (15)")
+    sp.add_argument("--gone", action="store_true", help="wait until the text is no longer visible")
+
+    sp = add(
+        "act",
+        cmd_act,
+        'run several actions in one call: minion act "click @3" "fill @4 Ada" "type hi\\n" "key ctrl+s Return"',
+    )
+    sp.add_argument(
+        "steps",
+        nargs="+",
+        help=(
+            "action strings: click|dclick|rclick|move TARGET · type TEXT (a trailing \\n presses Return) · "
+            "paste TEXT · key KEYS [N] (or a sequence: key Tab Tab Return) · fill TARGET TEXT · "
+            "scroll DIR [N] [TARGET] · drag FROM TO · wait SECONDS · wait_for TEXT · focus WINDOW. "
+            "Quote multi-word text: \"type 'hello world'\". Also JSON objects/lists, or - for JSON on stdin"
+        ),
+    )
+    sp.add_argument(
+        "--observe",
+        default="summary",
+        choices=["summary", "changes", "see", "crop"],
+        help="what to report after the actions (crop saves an image of the changed region)",
+    )
+    sp.add_argument("--shot", metavar="FILE", help="also save a screenshot (or the --observe crop image) here")
 
     sp = add("open", cmd_open, "open an app, URL, file or command")
     sp.add_argument("target", nargs="+")
     sp.add_argument("--wait", type=float, default=12.0, help="seconds to wait for a window")
 
-    sp = add("run", cmd_run, "run a shell command inside the desktop", aliases=["exec"])
+    sp = add("run", cmd_run, "run a shell command inside the desktop (piped stdin is passed on)", aliases=["exec"])
     sp.add_argument("command", nargs="+")
-    sp.add_argument("--timeout", "-t", type=float, default=120.0)
-    sp.add_argument("--background", "-b", action="store_true")
+    sp.add_argument("--timeout", "-t", type=float, default=120.0, help="seconds before the command is stopped (120)")
+    sp.add_argument("--background", "-b", action="store_true", help="start it and return at once (for GUI apps)")
+    sp.add_argument("--stdin", "-i", action="store_true", help="always read stdin and pass it to the command")
 
     sp = add("cp", cmd_cp, "copy files in/out: minion cp a.pdf :~/Documents/ · minion cp :~/b.png .")
     sp.add_argument("src")
@@ -890,6 +1022,35 @@ def build_parser() -> argparse.ArgumentParser:
         "that would pass images to the model as base64 text)",
     )
     sp.add_argument("--idle-freeze", type=float, default=config.env_float("MINION_IDLE_FREEZE", 600))
+
+    sp = add("share", cmd_share, "a public HTTPS MCP URL for ChatGPT, Claude.ai, Le Chat… (Ctrl+C stops sharing)")
+    sp.add_argument("--token", help="access token (default: a fresh random one each time)")
+    sp.add_argument("--port", type=int, default=int(os.environ.get("MINION_SHARE_PORT", "4748")), help="local port")
+    sp.add_argument("--bind", default="127.0.0.1", help="local address to listen on (default 127.0.0.1)")
+    sp.add_argument(
+        "--files",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="let `files` upload/download use this computer's disk, inside MINION_FILES_ROOT (default: no)",
+    )
+    sp.add_argument("--docker", action="store_true", help="run cloudflared in Docker even if it is installed")
+    sp.add_argument("--tailscale", action="store_true", help="publish with `tailscale funnel` instead of Cloudflare")
+    sp.add_argument("--compact", action="store_true", help="hand out the URL of the single `computer` tool")
+    sp.add_argument("--no-images", action="store_true", help="hand out a text-only URL (no screenshots)")
+
+    sp = add("connect", cmd_connect, "add Minion's MCP server to your agent apps (Claude, Cursor, VS Code, ...)")
+    sp.add_argument("apps", nargs="*", metavar="APP", help="apps to connect (default: the ones on this computer)")
+    sp.add_argument("--all", action="store_true", help="every app found on this computer, without asking")
+    sp.add_argument("--list", action="store_true", help="show the apps, their config and whether they're connected")
+    sp.add_argument("--dry-run", action="store_true", help="show the changes (a diff) without making them")
+    sp.add_argument("--remove", action="store_true", help="take Minion out of the apps' configs again")
+    sp.add_argument("--compact", action="store_true", help="use `minion mcp --compact` (one tool, smallest context)")
+    sp.add_argument("--yes", "-y", action="store_true", help="don't ask (connect every app found)")
+
+    sp = add("setup", cmd_setup, "first-run wizard: check Docker, prepare desktops, connect your agent apps")
+    sp.add_argument("--profiles", metavar="LIST", help="profiles to prepare, e.g. office,dev (default: browser; none)")
+    sp.add_argument("--yes", "-y", action="store_true", help="don't ask; use the defaults")
+    sp.add_argument("--compact", action="store_true", help="connect apps to `minion mcp --compact`")
 
     add("doctor", cmd_doctor, "check that everything is set up")
     add("version", cmd_version, "print the version")

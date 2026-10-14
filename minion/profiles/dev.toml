@@ -42,5 +42,5 @@ The Terminal exposes its text to `see`. Chromium runs with accessibility on, so 
 [files]
 "/etc/chromium.d/minion" = '''
 # Added by Minion: agent-friendly defaults (the container is the sandbox).
-export CHROMIUM_FLAGS="$CHROMIUM_FLAGS --no-sandbox --force-renderer-accessibility --no-first-run --no-default-browser-check --disable-dev-shm-usage --password-store=basic --disable-features=Translate,MediaRouter --disable-session-crashed-bubble --hide-crash-restore-bubble"
+export CHROMIUM_FLAGS="$CHROMIUM_FLAGS --no-sandbox --test-type --force-renderer-accessibility --no-first-run --no-default-browser-check --disable-dev-shm-usage --password-store=basic --disable-features=Translate,MediaRouter --disable-session-crashed-bubble --hide-crash-restore-bubble"
 '''

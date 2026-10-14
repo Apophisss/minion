@@ -71,9 +71,9 @@ Text on "Untitled - Notepad" (OCR):
   backslash note below.
 - **Read results with `run`, not with your eyes.** Check `ls ~/Documents` or `cat` the saved file. That's exact,
   while OCR text can contain small errors (`?-Zip` for *7-Zip*).
-- **Backslashes in `act` strings.** Steps like `act "type C:\Users"` are split like a shell command, so the
-  backslashes disappear. Use `minion type 'C:\Users\agent'`, single-quote the text inside the step
-  (`act "type 'C:\Users\agent'"`), or send JSON actions.
+- **Backslashes in `act` strings.** In act steps `\n` is Return and `\t` is Tab, so a path such as
+  `C:\temp\new` needs doubled backslashes there: `act "type C:\\temp\\new"`. `minion type 'C:\temp\new'` and
+  JSON actions type the text exactly as given.
 
 ## What the profile sets up
 

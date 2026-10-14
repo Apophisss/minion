@@ -16,7 +16,7 @@ packages = [
   "sqlite3",
 ]
 apps = [
-  { name = "Python", id = "python", command = "xterm -fa 'DejaVu Sans Mono' -fs 11 -bg '#0b1020' -fg '#e2e8f0' -e python3" },
+  { name = "Python", id = "python", command = "lxterminal -e python3" },
 ]
 tips = """
 Analyse with Python via `run` (pandas, numpy, matplotlib are installed), save charts to ~/Documents and open them

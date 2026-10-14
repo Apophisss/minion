@@ -1,7 +1,9 @@
 # Agents & MCP
 
 Minion ships an MCP server, so any MCP client can create and use desktops. The server has
-no dependencies and speaks MCP over stdio.
+no dependencies and speaks MCP over stdio. Web chat apps (ChatGPT, Claude.ai, Le Chat) connect by URL instead:
+see [remote.md](remote.md). To add Minion to every agent app on your computer at once, run `minion connect`
+([connect.md](connect.md)).
 
 ```bash
 uvx minion-desktop mcp          # without installing anything (needs uv)
@@ -35,7 +37,7 @@ use `uvx --from git+https://github.com/apophisss/minion minion mcp`.
 | `MINION_DEFAULT_PROFILE` | `browser` | profile for `desktop(action="create")` without a profile |
 | `MINION_MCP_CREATE_WAIT` | `240` | seconds `create` waits for a first-time image download before replying "still preparing" |
 | `MINION_BACKEND` | `auto` | `docker`, `podman` or `local` |
-| `MINION_FILES_ROOT` | none | confine the `files` tool's `upload`/`download` to this folder on your machine |
+| `MINION_FILES_ROOT` | the working directory, or `~/Minion` | the only folder on your machine that the `files` tool's `upload`/`download` may use (`/` allows any path) |
 
 ## The tools
 
@@ -69,7 +71,7 @@ minion skill >> AGENTS.md                    # or append it to an AGENTS.md / sy
 ```
 
 A skill costs about 100 tokens (its description) until the agent decides it needs a desktop. Only then does
-it read the rest, about 950 tokens. MCP tool definitions, by contrast, are sent with every request. For
+it read the rest, about 1,100 tokens. MCP tool definitions, by contrast, are sent with every request. For
 Claude Code there is also a plugin that bundles the MCP server and the skill:
 
 ```bash

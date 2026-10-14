@@ -35,6 +35,15 @@ def _backend(backend) -> Backend:
     return backend if backend is not None and not isinstance(backend, str) else get_backend(backend)
 
 
+def _desk_path(path: str) -> str:
+    """A desktop path for use inside double quotes in bash: ~ becomes $HOME, specials are escaped."""
+    path = str(path)
+    home = ""
+    if path == "~" or path.startswith("~/"):
+        home, path = "$HOME", path[1:]
+    return home + re.sub(r'(["\\$`])', r"\\\1", path)
+
+
 def normalize_size(size: str | tuple | None) -> str:
     if size is None or size == "":
         return config.DEFAULT_SIZE
@@ -131,6 +140,7 @@ class RunResult:
     timed_out: bool = False
     elapsed: float = 0.0
     pid: int | None = None
+    log: str | None = None  # background jobs: the file in the desktop that collects their output
 
     @property
     def ok(self) -> bool:
@@ -271,8 +281,14 @@ class Desktop:
             if d.name == current:
                 return cls(d.name, be)
         running = [d for d in desks if d.state in ("running", "paused")]
-        pick = (running or desks)[-1]
-        return cls(pick.name, be)
+        if len(running or desks) == 1:
+            return cls((running or desks)[0].name, be)
+        # Several desktops and none chosen: guessing could act on another agent's desktop.
+        names = ", ".join(d.name for d in (running or desks))
+        raise MinionError(
+            f"several desktops exist ({names}) and none is selected: pass -d NAME (CLI) or desktop=NAME "
+            "(tools), or run `minion use NAME`"
+        )
 
     @classmethod
     def list(cls, backend: Backend | str | None = None, stats: bool = False) -> list[DesktopInfo]:
@@ -536,7 +552,7 @@ class Desktop:
             timeout=timeout + 30,
         )
         if background:
-            return RunResult(code=None, pid=res.get("pid"))
+            return RunResult(code=None, pid=res.get("pid"), log=res.get("log"))
         return RunResult(res["code"], res["stdout"], res["stderr"], res["timed_out"], res.get("elapsed", 0.0))
 
     def script(self, code: str, timeout: float = 120.0) -> RunResult:
@@ -547,6 +563,9 @@ class Desktop:
 
     def upload(self, src: str | os.PathLike, dst: str = "~/") -> str:
         self._wake()
+        folder = dst if dst.endswith("/") else (os.path.dirname(dst) or "~")
+        if folder not in ("~", "~/", "/", "/tmp", "/tmp/"):  # make sure the destination folder exists
+            self.run(f'mkdir -p -- "{_desk_path(folder)}"', timeout=15)
         self.backend.copy_in(self.name, str(src), dst)
         return dst
 
@@ -557,15 +576,28 @@ class Desktop:
         return p / Path(src).name if p.is_dir() else p
 
     def write_text(self, path: str, text: str) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            local = Path(tmp) / Path(path).name
-            local.write_bytes(text.encode("utf-8"))  # no CRLF translation on Windows hosts
-            self.upload(local, path)
+        """Write a UTF-8 text file in the desktop (as the desktop's user), creating missing folders."""
+        target = _desk_path(path)
+        res = self.run(f'mkdir -p -- "$(dirname -- "{target}")" && cat > "{target}"', timeout=60, input=text)
+        if not res.ok:
+            raise MinionError(f"could not write {path}: {(res.stderr or res.stdout).strip()[-300:]}")
 
     def read_text(self, path: str) -> str:
+        """A text file from the desktop. Folders and binary files are errors (download those instead)."""
         with tempfile.TemporaryDirectory() as tmp:
-            self.backend.copy_out(self.name, path, tmp)
-            return (Path(tmp) / Path(path).name).read_text(encoding="utf-8", errors="replace")
+            try:
+                self.backend.copy_out(self.name, path, tmp)
+            except MinionError as e:
+                if re.search(r"could not find|no such file|not found", str(e), re.I):
+                    raise NotFound(f"no such file in the desktop: {path}") from None
+                raise
+            local = Path(tmp) / Path(path).name
+            if local.is_dir():
+                raise MinionError(f"{path} is a folder: list it with run('ls -la {path}')")
+            data = local.read_bytes()
+        if b"\x00" in data[:8192]:
+            raise MinionError(f"{path} is a binary file ({len(data):,} bytes): download it instead of reading it")
+        return data.decode("utf-8", errors="replace")
 
     @property
     def clipboard(self) -> str:

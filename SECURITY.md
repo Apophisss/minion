@@ -31,13 +31,25 @@ automation, but it is not isolation.
 your network: anyone with the token controls them. Never use `--no-auth` on a shared network. It also refuses
 cross-site requests (CSRF) and, on loopback binds, foreign `Host` names (DNS rebinding).
 
+**Remote MCP and `minion share`**
+
+`minion serve` also answers MCP at `/mcp` (Streamable HTTP), with the same token as a `Bearer` header or
+`?token=` in the URL. `minion share` publishes that endpoint over a Cloudflare quick tunnel, for web chat apps such as
+ChatGPT and Claude.ai. Anyone with a share URL controls every desktop on the computer until you press Ctrl+C. Each
+share has its own fresh 256-bit token that stops working with it, `files` upload/download of your computer's files
+is off unless you pass `--files`, and requests are logged in the terminal. See [docs/remote.md](docs/remote.md).
+
 **Files on your machine**
 
-The `files` tool's `upload` and `download` read and write files on the machine that runs Minion. Over HTTP they
-are confined to one folder, `MINION_FILES_ROOT` (default: `files/` in Minion's data directory, e.g.
-`~/.local/share/minion/files`). The MCP server and the Python `Toolkit` run as your own user, like any local agent
-tool, so they are unrestricted unless you set `MINION_FILES_ROOT` (or `Toolkit(files_root=...)`). Set it when a
-prompt-injected agent must not be able to copy your files into a desktop.
+The `files` tool's `upload` and `download` read and write files on the machine that runs Minion, so they stay
+inside one folder: a prompt-injected agent must not be able to copy `~/.ssh` into an internet-connected desktop.
+- **MCP server and Python `Toolkit`:** the working directory, which for coding agents is usually the project. When
+  the working directory is `/` or your home folder (GUI apps start servers there), it is `~/Minion` instead.
+- **HTTP (`minion serve`):** `files/` in Minion's data directory, e.g. `~/.local/share/minion/files`.
+- **Override:** set `MINION_FILES_ROOT` (or `Toolkit(files_root=...)`); `MINION_FILES_ROOT=/` allows any path.
+
+Downloads never overwrite an existing file unless the agent passes `overwrite=true`. The CLI (`minion cp`) is
+your own command, so it is not confined.
 
 **Prompt injection**
 

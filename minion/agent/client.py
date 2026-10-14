@@ -119,8 +119,14 @@ def find(text: str) -> list[dict]:
 
 
 def cells() -> dict[str, str]:
-    """Visible spreadsheet cells: {"A1": "Item", "B1": "Price", ...}."""
-    return {e["name"]: e.get("text", "") for e in look()["elements"] if e["role"] == "cell"}
+    """Visible spreadsheet cells: {"A1": "Item", "B1": "Price", ...}. Right after typing, a sheet can
+    take a moment to report its cells, so an empty result is retried briefly."""
+    for attempt in range(4):
+        found = {e["name"]: e.get("text", "") for e in look()["elements"] if e["role"] == "cell"}
+        if found or attempt == 3:
+            return found
+        time.sleep(0.4)
+    return {}
 
 
 # -- acting -----------------------------------------------------------------------
@@ -175,6 +181,11 @@ def scroll(direction: str = "down", amount: int = 3, target=None) -> str:
 
 def fill(target, text: str) -> str:
     return act({"action": "fill", "target": target, "text": text})
+
+
+def select(target, option: str) -> str:
+    """Pick an option of a dropdown (<select>, combo box) by its visible text."""
+    return act({"action": "select", "target": target, "option": option})
 
 
 def wait(seconds: float) -> None:
