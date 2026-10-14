@@ -5,7 +5,7 @@
 │ agent ── MCP / CLI / Python / HTTP ──► minion (pure stdlib)  │        │ tini → minion_agent.session                          │
 │                                          │                   │ docker │   ├─ Xvfb :0 (1280x800, no TCP, xauth cookie)        │
 │ browser ◄── live view / dashboard ───────┤ minion serve      │ exec   │   ├─ dbus-daemon + AT-SPI bus (accessibility on)     │
-│                                          └──────────────────►│───────►│   ├─ JWM (window manager + taskbar, ~2 MB RAM)       │
+│                                          └──────────────────►│───────►│   ├─ JWM (window manager + taskbar)                  │
 │                                                              │ stdin/ │   ├─ agent daemon: JSON-lines RPC on a UNIX socket   │
 │                                                              │ stdout │   │    screen · input · windows · a11y · OCR · recorder│
 └──────────────────────────────────────────────────────────────┘        │   └─ apps: Firefox, LibreOffice, terminals, …        │
@@ -58,11 +58,14 @@ in every profile, so "nothing changed" really means the UI is done.
 
 ## Resource budget
 
-| Piece | Idle RAM |
-|---|---|
-| Xvfb (1280×800×24) | ~15 MB |
-| JWM | ~2 MB |
-| dbus + AT-SPI | ~6 MB |
-| agent daemon (Python + Pillow) | ~25 MB |
+Measured in an idle `base` desktop (RSS includes shared libraries, so the sum is higher than the container's
+~60 MB memory use):
 
-Apps account for the rest. An idle frozen desktop uses no CPU.
+| Piece | RSS |
+|---|---|
+| agent daemon (Python + Pillow; AT-SPI loads on first `see`) | ~43 MB |
+| JWM (window manager + taskbar) | ~21 MB |
+| Xvfb (1280×800×24) | ~20 MB |
+| D-Bus + AT-SPI bus | ~22 MB |
+
+Apps account for the rest. A frozen desktop uses no CPU.

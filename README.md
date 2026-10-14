@@ -35,7 +35,7 @@ minion view                        # watch it live in your browser
 ## Why Minion
 
 - **🧠 Agents read the screen as text.** `see` turns any window into a numbered list of controls taken from the accessibility tree, with OCR as a fallback: `@12 button "Save" (210,62)`. The text is exact and every control is clickable by `@id`. A terminal comes out as about 50 tokens instead of a 1,365-token screenshot. Screenshots are still there when the agent needs to look, including a *marks* mode that draws the `@ids` onto the image.
-- **🪶 Featherweight.** Each desktop is a single container running Xvfb, a 1 MB window manager and a tiny agent. There is no desktop environment, VNC server or browser bundle. Desktops are ready in about 1.5 s and use 55–105 MB of RAM when idle. Desktops nobody is using are frozen automatically (0% CPU) and wake in about 0.2 s on the next call.
+- **🪶 Featherweight.** Each desktop is a single container running Xvfb, a minimal window manager (JWM) and a small agent. There is no desktop environment, VNC server or browser bundle. Desktops are ready in about 1.5 s and use 55–105 MB of RAM when idle. Desktops nobody is using are frozen automatically (0% CPU) and wake in about 0.2 s on the next call.
 - **🎯 Desktops tuned for agents.** First-run wizards, tips-of-the-day, donation bars and crash-recovery dialogs are all turned off. Cookie banners and ads are blocked. Downloads land in `~/Downloads` without a dialog, Office saves `.docx`/`.xlsx`/`.pptx` by default, and animations and blinking carets are off so screenshots are stable.
 - **🔌 Works with every agent stack.** Minion includes an MCP server for Claude Code, Claude Desktop, Cursor, VS Code, Codex, Gemini CLI and others. It also has a shell-friendly CLI, a Python SDK, an HTTP API, and a ready-made driver for **Claude's computer-use toolset**.
 - **🙋 Humans in the loop.** Every desktop has a live view in the browser with one-click *take control*. Agents can **hand off** to a person ("please sign in") and wait until they press *Done*.
@@ -221,7 +221,7 @@ Frozen desktops measured **0.00% CPU**. Opening an app takes 0.8–4 s (LibreOff
 flowchart LR
   subgraph host["Your machine"]
     A["Agent<br/>(Claude Code, Cursor, your code…)"] -->|MCP / CLI / Python / HTTP| M["minion<br/>(pure-stdlib Python)"]
-    M --> V["Live view &amp; dashboard<br/>(minion serve)"]
+    M --> V["Live view and dashboard<br/>(minion serve)"]
   end
   subgraph desk["Desktop (one container)"]
     S["minion agent<br/>RPC over docker exec"] --> X["Xvfb + JWM"]

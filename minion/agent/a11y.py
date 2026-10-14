@@ -8,20 +8,36 @@ Chromium/Electron (with accessibility enabled) and LibreOffice.
 
 from __future__ import annotations
 
+import importlib.util
 import threading
 import time
 from dataclasses import dataclass, field
 
-try:  # optional dependency: python3-gi + gir1.2-atspi-2.0
-    import gi
-
-    gi.require_version("Atspi", "2.0")
-    from gi.repository import Atspi  # type: ignore
-
-    AVAILABLE = True
-except Exception:  # pragma: no cover - depends on the desktop image
-    Atspi = None  # type: ignore
+# Optional dependency (python3-gi + gir1.2-atspi-2.0), loaded on first use so that idle
+# desktops never pay for it.
+Atspi = None  # type: ignore
+try:
+    AVAILABLE = importlib.util.find_spec("gi") is not None
+except (ImportError, ValueError):  # pragma: no cover
     AVAILABLE = False
+
+
+def _load() -> bool:
+    global Atspi, AVAILABLE
+    if Atspi is not None:
+        return True
+    try:
+        import gi
+
+        gi.require_version("Atspi", "2.0")
+        from gi.repository import Atspi as _atspi  # type: ignore
+
+        Atspi = _atspi
+        return True
+    except Exception:
+        AVAILABLE = False
+        return False
+
 
 LOCK = threading.RLock()
 _initialized = False
@@ -195,7 +211,7 @@ class Snapshot:
 
 def _init() -> bool:
     global _initialized
-    if not AVAILABLE:
+    if not AVAILABLE or not _load():
         return False
     if not _initialized:
         try:
