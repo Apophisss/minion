@@ -261,7 +261,8 @@ def test_each_session_has_its_own_current_desktop(http, monkeypatch):
     assert one.call("see", {"desktop": "a"})["content"][0]["text"] == "screen of a"
     assert one.call("see")["content"][0]["text"] == "screen of a"  # now this session's current desktop
     other = two.call("see")
-    assert other["isError"] and "No desktop yet" in other["content"][0]["text"]
+    # Another session never falls back to this session's desktop: it must create or name one.
+    assert other["isError"] and "No desktop is selected in this session" in other["content"][0]["text"]
     assert two.call("see", {"desktop": "b"})["content"][0]["text"] == "screen of b"
     assert one.call("see")["content"][0]["text"] == "screen of a"
 

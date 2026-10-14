@@ -86,8 +86,13 @@ def fit(
 
 
 def thumb(img: Image.Image) -> Image.Image:
-    """Small grayscale fingerprint used for change detection."""
-    return img.convert("L").reduce(4)
+    """Small grayscale fingerprint used for change detection. The taskbar clock (bottom right) is
+    blanked: it changes every minute, which is not something an action did."""
+    t = img.convert("L").reduce(4)
+    w, h = t.size
+    if w >= 160 and h >= 100:  # a full screen, not a crop
+        t.paste(0, (w - 22, h - 8, w, h))
+    return t
 
 
 def fingerprint(img: Image.Image) -> str:

@@ -173,6 +173,7 @@ test("acting: act and its helpers", async () => {
     [() => desk.scroll(), { action: "scroll", direction: "down" }],
     [() => desk.scroll("up", 5, "@30"), { action: "scroll", direction: "up", amount: 5, target: "@30" }],
     [() => desk.fill("Email", "ada@example.com"), { action: "fill", target: "Email", text: "ada@example.com" }],
+    [() => desk.select("@14", "Express"), { action: "select", target: "@14", option: "Express" }],
     [() => desk.drag("@4", { x: 5, y: 6 }), { action: "drag", from: "@4", to: { x: 5, y: 6 } }],
     [() => desk.waitFor("Saved", { timeout: 5 }), { action: "wait_for", text: "Saved", timeout: 5 }],
   ];

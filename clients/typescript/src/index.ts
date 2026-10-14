@@ -266,6 +266,7 @@ export type KnownAction =
   | { action: "type"; text: string; delay_ms?: number }
   | { action: "paste"; text: string }
   | { action: "fill"; target: Target; text: string }
+  | { action: "select"; target: Target; option: string }
   | { action: "key" | "press" | "hotkey"; keys: string; repeat?: number }
   | { action: "hold_key"; keys: string; seconds?: number }
   | { action: "wait" | "sleep"; seconds?: number }
@@ -871,6 +872,11 @@ export class Desktop {
   /** Replace the text of a field, found by `@id` or by its label. */
   fill(target: Target, text: string, options: ActOptions = {}): Promise<ActResult> {
     return this.act({ action: "fill", target, text }, options);
+  }
+
+  /** Pick an option of a dropdown (a `<select>`, a combo box) by its visible text. */
+  select(target: Target, option: string, options: ActOptions = {}): Promise<ActResult> {
+    return this.act({ action: "select", target, option }, options);
   }
 
   /** Drag from one target to another. */

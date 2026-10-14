@@ -67,6 +67,7 @@ ctrl+f (find), F5 (reload), space / shift+space (page down / up). Logged in some
       "browser.newtabpage.activity-stream.showSponsoredTopSites": { "Value": false, "Status": "default" },
       "browser.shell.checkDefaultBrowser": { "Value": false, "Status": "default" },
       "datareporting.policy.dataSubmissionPolicyBypassNotification": { "Value": true, "Status": "default" },
+      "devtools.jsonview.enabled": { "Value": false, "Status": "default" },
       "extensions.autoDisableScopes": { "Value": 0, "Status": "default" },
       "general.smoothScroll": { "Value": false, "Status": "default" },
       "media.autoplay.default": { "Value": 5, "Status": "default" },

@@ -85,6 +85,10 @@ TEXTUAL = {
     "list item",
     "table cell",
     "cell",
+    "column header",
+    "row header",
+    "table column header",
+    "table row header",
     "description term",
     "description value",
     "footer",
@@ -383,7 +387,7 @@ def _layout(node, max_lines: int, tail: bool = False) -> list | None:
     except Exception:
         return None
     raw = raw.replace("\ufffc", " ").translate(_INVISIBLE).replace("\t", "    ")
-    lines = [re.sub(r"([^\w\s])\1{7,}", r"\1\1\1…", ln.rstrip()) for ln in raw.splitlines()]
+    lines = [re.sub(r"([^\w\s]|_)\1{7,}", r"\1\1\1…", ln.rstrip()) for ln in raw.splitlines()]
     if len(lines) < 2:
         return None
     if tail:
@@ -462,7 +466,7 @@ def _visible_cells(
         return None
     r0, c0 = a
     r1, c1 = min(b[0], r0 + max_rows - 1), min(b[1], c0 + max_cols - 1)
-    found = []
+    found, empty = [], []
     for r in range(r0, r1 + 1):
         for c in range(c0, c1 + 1):
             if time.monotonic() > deadline or len(found) >= max_cells:
@@ -475,10 +479,34 @@ def _visible_cells(
                 continue
             content = _text(cell, 80) if "Text" in _interfaces(cell) else ""
             if not content:
+                empty.append((r, c, cell))
                 continue
             ext = _extents(cell) or (0, 0, 0, 0)
-            found.append((f"{_col(c)}{r + 1}", content, cell, ext))
-    return (r0, c0, r1, c1), found
+            found.append((f"{_col(c)}{r + 1}", content, cell, ext, _formula(cell), r, c))
+    if found:  # a formula that failed shows an error on screen but no text: look around the data
+        rows = [f[5] for f in found]
+        cols = [f[6] for f in found]
+        for r, c, cell in empty:
+            if min(rows) - 1 <= r <= max(rows) + 1 and min(cols) - 1 <= c <= max(cols) + 1:
+                if time.monotonic() > deadline:
+                    break
+                formula = _formula(cell)
+                if formula:
+                    found.append((f"{_col(c)}{r + 1}", "#ERROR", cell, _extents(cell) or (0, 0, 0, 0), formula, r, c))
+        found.sort(key=lambda f: (f[5], f[6]))
+    return (r0, c0, r1, c1), [f[:5] for f in found]
+
+
+def _formula(cell) -> str:
+    """A spreadsheet cell's formula ("=SUM(B2:B6)"), from LibreOffice's object attributes, or ""."""
+    try:
+        formula = (cell.get_attributes() or {}).get("Formula", "")
+    except Exception:
+        return ""
+    if formula.endswith("\\"):  # LibreOffice's attribute string loses everything after an escaped ":"
+        formula = formula[:-1] + "…"
+    formula = re.sub(r"\\(.)", r"\1", formula)  # and escapes "," and ";" in the rest: "=SUM(1\,2)"
+    return "=" + formula if formula and not formula.startswith("=") else formula
 
 
 def _value(node) -> str:
@@ -595,7 +623,7 @@ def snapshot(
     sw, sh = screen or (100000, 100000)
     elements: list[Element] = []
 
-    def walk(node, depth: int, shown_depth: int, in_doc: bool = False) -> None:
+    def walk(node, depth: int, shown_depth: int, in_doc: bool = False, view=None) -> None:
         if snap.truncated:
             return
         if len(elements) >= max_elements or time.monotonic() > deadline or snap.visited > 6000:
@@ -619,6 +647,14 @@ def snapshot(
                 # Partly visible: keep the visible part, so its center is a point you can click.
                 x0, y0, x1, y1 = max(x, 0), max(y, 0), min(x + w, sw), min(y + h, sh)
                 x, y, w, h = x0, y0, x1 - x0, y1 - y0
+            if boxed and in_doc and view is not None:
+                # The page's own viewport: content scrolled away, or under the browser's toolbar, is hidden.
+                vx, vy, vw, vh = view
+                if x >= vx + vw or y >= vy + vh or x + w <= vx or y + h <= vy:
+                    return
+                if x < vx or y < vy or x + w > vx + vw or y + h > vy + vh:
+                    x0, y0, x1, y1 = max(x, vx), max(y, vy), min(x + w, vx + vw), min(y + h, vy + vh)
+                    x, y, w, h = x0, y0, x1 - x0, y1 - y0
             if depth > 0 and role in ("menu bar", "tool bar") and (w > 0) != (h > 0):
                 return  # a collapsed bar (e.g. LibreOffice's hidden twin menu bar): its items are phantoms
         else:
@@ -653,6 +689,9 @@ def snapshot(
                 text = _text(node, text_limit)
                 if text == name:
                     text = ""
+                block = _layout(node, max_lines=200 if text_limit > 500 else 30)
+                if block and any(ln[:1] in (" ", "\t") for ln in block):
+                    lines = block  # preformatted text (<pre>, code): its layout matters
         elif text and role in CONTAINER_TEXT:
             own = _substantial(_own_text(node))
         if role in ("combo box", "list box") and not text and boxed:  # a <select>: its value and options
@@ -696,6 +735,8 @@ def snapshot(
 
         if name and text and role not in INTERACTIVE and role not in TEXT_INPUT and _overlap(name, text):
             name = ""  # a name computed from the content (plus hidden extras): show the visible text once
+        elif name and text and role in INTERACTIVE and _overlap(text, name) and len(text) <= len(name) + 3:
+            text = ""  # a radio button "Small" whose text is "Small" again
         emit = False
         if not boxed:
             pass  # no on-screen box: nothing to point at, but its children may have one
@@ -760,7 +801,7 @@ def snapshot(
                         in_doc=in_doc,
                     )
                 )
-                for ref, content, cell, (cx0, cy0, cw, ch) in found:
+                for ref, content, cell, (cx0, cy0, cw, ch), formula in found:
                     elements.append(
                         Element(
                             id=len(elements) + 1,
@@ -772,6 +813,7 @@ def snapshot(
                             w=cw,
                             h=ch,
                             text=content,
+                            value=formula,
                             node=cell,
                             in_doc=in_doc,
                         )
@@ -800,7 +842,13 @@ def snapshot(
             except Exception:
                 continue
             if child is not None:
-                walk(child, depth + 1, child_shown_depth, in_doc or role in WEB_DOCS)
+                walk(
+                    child,
+                    depth + 1,
+                    child_shown_depth,
+                    in_doc or role in WEB_DOCS,
+                    (x, y, w, h) if role in WEB_DOCS and boxed else view,
+                )
         if n > max_children:
             snap.truncated = True
 
@@ -1033,29 +1081,76 @@ def select_option(el: Element, wanted: str) -> str | None:
     return None
 
 
-def page_busy(window: dict, max_depth: int = 8) -> bool | None:
-    """Is the web page in this browser window still loading (its document has the BUSY state)?
-    None when there is no web document."""
+def page_state(window: dict, max_depth: int = 8, limit: int = 3000) -> tuple[bool | None, int]:
+    """(is the web page loading, how many accessible nodes it has so far). (None, 0) without a web page.
+    The node count shows whether the browser is still filling in the page's accessibility tree."""
     if not _init():
-        return None
-    queue = [(window["node"], 0)]
-    seen = 0
+        return None, 0
     with LOCK:
-        while queue and seen < 400:
+        doc, queue = None, [(window["node"], 0)]
+        while queue and doc is None:
             node, depth = queue.pop(0)
-            seen += 1
             if _role(node) == "document web":
+                doc = node
+                break
+            if depth < max_depth:
                 try:
-                    return node.get_state_set().contains(Atspi.StateType.BUSY)
+                    n = min(node.get_child_count(), 40)
+                    queue.extend((node.get_child_at_index(i), depth + 1) for i in range(n))
                 except Exception:
-                    return None
-            if depth >= max_depth:
-                continue
+                    continue
+        if doc is None:
+            return None, 0
+        try:
+            busy = doc.get_state_set().contains(Atspi.StateType.BUSY)
+        except Exception:
+            busy = None
+        count, queue = 0, [doc]
+        while queue and count < limit:
+            node = queue.pop()
+            count += 1
             try:
-                n = min(node.get_child_count(), 40)
-                queue.extend((node.get_child_at_index(i), depth + 1) for i in range(n))
+                n = min(node.get_child_count(), 200)
+                queue.extend(node.get_child_at_index(i) for i in range(n))
             except Exception:
                 continue
+        return busy, count
+
+
+def has_document(window: dict, max_depth: int = 6) -> bool:
+    """Has this window's document (an office document, a web page) been created yet?"""
+    if not _init():
+        return True
+    with LOCK:
+        queue = [(window["node"], 0)]
+        while queue:
+            node, depth = queue.pop(0)
+            if _role(node).startswith("document"):
+                return True
+            if depth < max_depth:
+                try:
+                    n = min(node.get_child_count(), 40)
+                    queue.extend((node.get_child_at_index(i), depth + 1) for i in range(n))
+                except Exception:
+                    continue
+    return False
+
+
+def doc_viewport(el: Element) -> tuple[int, int, int, int] | None:
+    """The visible area of the web page an element belongs to (below the browser's toolbar)."""
+    if el.node is None or not el.in_doc or not _init():
+        return None
+    with LOCK:
+        node = el.node
+        for _ in range(60):
+            try:
+                node = node.get_parent()
+            except Exception:
+                return None
+            if node is None:
+                return None
+            if _role(node) in WEB_DOCS:
+                return _extents(node)
     return None
 
 
@@ -1212,7 +1307,9 @@ def format_elements(elements: list[Element], max_depth: int = 6) -> list[str]:
         options = el.text if el.role in ("combo box", "list box") and el.text.startswith("options: ") else ""
         if el.text and not options and not el.lines:
             s += f" {_q(el.text)}" if not el.name else f": {el.text}"
-        if el.value:
+        if el.value and el.role == "cell" and el.value.startswith("="):
+            s += f"  ({el.value})"  # its formula
+        elif el.value:
             s += f" value={_q(el.value)}" if el.role in ("combo box", "list box") else f" value={el.value}"
         if el.states:
             s += " [" + ", ".join(el.states) + "]"

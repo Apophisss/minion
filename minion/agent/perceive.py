@@ -30,6 +30,7 @@ class Target:
     y: int
     desc: str
     element: object = None  # a11y.Element or ocr Line (only for references/text)
+    match: int = 0  # how well its text matched the query (100 = exactly)
 
 
 @dataclass
@@ -50,6 +51,29 @@ _CELL_REF = re.compile(r"^[A-Z]{1,3}[0-9]{1,7}$")
 _COORDS = re.compile(r" \(-?\d+,-?\d+\)$")
 
 
+def _changed_lines(old_block, new_block, limit: int = 15) -> list[str]:
+    """For a changed terminal: its new output. For a changed editor: the changed lines, numbered."""
+    if not new_block:
+        return []
+    role, new = new_block
+    old = old_block[1] if old_block else ()
+    if role == "terminal":
+        overlap = 0  # the longest end of the old screen that starts the new one (scrolled output)
+        for k in range(min(len(old), len(new)), 0, -1):
+            if tuple(old[-k:]) == tuple(new[:k]):
+                overlap = k
+                break
+        fresh = list(new[overlap:]) if overlap else list(new[-6:])
+        return fresh[-limit:]
+    import difflib
+
+    out = []
+    for tag, _, _, j1, j2 in difflib.SequenceMatcher(a=list(old), b=list(new), autojunk=False).get_opcodes():
+        if tag in ("replace", "insert"):
+            out.extend(f"{n:>4}  {new[n - 1]}" for n in range(j1 + 1, j2 + 1))
+    return out[:limit]
+
+
 def _same_content(a: tuple, b: tuple) -> bool:
     """Equal, ignoring how much of a long text was shown (a normal look vs. a full_text look)."""
     if a == b:
@@ -64,8 +88,11 @@ def _quote(s: str) -> str:
     return '"' + s.replace('"', '\\"') + '"'
 
 
+_TYPOGRAPHY = str.maketrans({"’": "'", "‘": "'", "“": '"', "”": '"', "–": "-", "—": "-", "\u00a0": " "})
+
+
 def _norm(s: str) -> str:
-    s = unicodedata.normalize("NFKC", s or "").casefold()
+    s = unicodedata.normalize("NFKC", s or "").translate(_TYPOGRAPHY).casefold()
     s = s.replace("…", "").replace("&", "").replace("_", "")
     s = " ".join(s.split())
     return s.strip(" :.*")
@@ -124,6 +151,7 @@ class Perception:
         self._next_id = 1
         self._look = 0
         self.last_view: dict | None = None  # for "changes" diffs
+        self.last_views: dict = {}  # per window: coming back to a window diffs against its own last look
         self.xi = None  # set by the server: used to nudge the pointer (see _sync_coords)
         self._synced: set = set()
 
@@ -281,8 +309,9 @@ class Perception:
         view = self._view(wins, target, elements, ocr_refs)
         text = full
         diff = None
-        if changes and register and self.last_view is not None:
-            diff = self._diff(self.last_view, view)
+        base = self.last_views.get(view["focused"]) if view["focused"] else self.last_view
+        if changes and register and base is not None:
+            diff = self._diff(base, view)
             if "full" not in diff and len(diff["text"]) >= 0.8 * len(full):
                 diff = {"full": "the changes are about as long as the whole view"}
             if "full" in diff:
@@ -292,6 +321,10 @@ class Perception:
                 text = diff["text"]
         if register:
             self.last_view = view
+            if view["focused"]:
+                self.last_views[view["focused"]] = view
+                if len(self.last_views) > 30:
+                    self.last_views.pop(next(iter(self.last_views)))
         return {
             "text": text,
             "screen": [sw, sh],
@@ -326,7 +359,7 @@ class Perception:
             out.extend(snap.header if snap else [])
             out.extend(a11y.format_elements(elements))
             if snap and snap.truncated:
-                out.append("  … truncated (large UI). Use `see` with window=..., OCR, or a screenshot for the rest.")
+                out.append("  … truncated: more elements than fit. Scroll for the rest, or take a screenshot.")
         if ocr_refs:
             out.append("")
             out.append(f"Text on {where} (OCR):")
@@ -347,10 +380,11 @@ class Perception:
         for el in elements:
             cx, cy = el.center
             line = a11y.format_elements([el])[0].strip()
-            items[el.id] = ((el.role, el.name, el.text, el.value, tuple(el.states)), (cx // 6, cy // 6), line)
+            block = (el.role, tuple(el.lines)) if el.lines else None
+            items[el.id] = ((el.role, el.name, el.text, el.value, tuple(el.states)), (cx // 6, cy // 6), line, block)
         for r in ocr_refs:
             cx, cy = r.center
-            items[r.id] = (("ocr", r.text), (cx // 6, cy // 6), f'@{r.id} text "{r.text}" ({cx},{cy}) [OCR]')
+            items[r.id] = (("ocr", r.text), (cx // 6, cy // 6), f'@{r.id} text "{r.text}" ({cx},{cy}) [OCR]', None)
         return {
             "time": time.time(),
             "windows": {w.id: (w.title, w.focused) for w in wins},
@@ -388,6 +422,7 @@ class Perception:
             lines.append("  + " + n[i][2])
         for i in changed:
             lines.append("  ~ " + n[i][2])
+            lines.extend("      " + ln for ln in _changed_lines(o[i][3], n[i][3]))
         for i in removed[:8]:
             lines.append("  - " + _COORDS.sub("", o[i][2]))
         if len(removed) > 8:
@@ -467,6 +502,22 @@ class Perception:
                 time.sleep(0.25)
                 box = a11y.refresh(el) or box
                 x, y, w, h = box
+        view = a11y.doc_viewport(el) if getattr(el, "in_doc", False) else None
+        if view is not None and w > 0 and h > 0:
+            vx, vy, vw, vh = view
+            if x >= vx + vw or y >= vy + vh or x + w <= vx or y + h <= vy:
+                # Scrolled away, or under the browser's toolbar: clicking its position would hit the toolbar.
+                if a11y.scroll_into_view(el):
+                    time.sleep(0.3)
+                    x, y, w, h = a11y.refresh(el) or (x, y, w, h)
+                if x >= vx + vw or y >= vy + vh or x + w <= vx or y + h <= vy:
+                    raise TargetError(
+                        f'@{rid} ({el.role} "{el.label()}") is outside the visible page (scrolled away or under the '
+                        "browser's toolbar): scroll it into view, then use the @id from a new see"
+                    )
+            sw, sh = min(sw, vx + vw), min(sh, vy + vh)
+            x0, y0 = max(x, vx), max(y, vy)
+            x, y, w, h = x0, y0, min(x + w, sw) - x0, min(y + h, sh) - y0
         if w > 0 and h > 0:  # aim at the visible part of a partly scrolled element
             x0, y0, x1, y1 = max(x, 0), max(y, 0), min(x + w, sw), min(y + h, sh)
             if x1 > x0 and y1 > y0:
@@ -490,11 +541,13 @@ class Perception:
             if aw is not None:
                 snap = a11y.snapshot(aw, max_elements=600, budget=2.5, screen=(sw, sh))
                 for el in snap.elements:
-                    best = max(
-                        match_score(query, el.name), match_score(query, el.text) - 5, match_score(query, el.value) - 10
-                    )
-                    if best < min_score:
+                    text = "" if el.role in ("combo box", "list box") and el.text.startswith("options: ") else el.text
+                    raw = max(match_score(query, el.name), match_score(query, text), match_score(query, el.value))
+                    if raw < min_score:
                         continue
+                    best = max(
+                        match_score(query, el.name), match_score(query, text) - 5, match_score(query, el.value) - 10
+                    )
                     if el.interactive:
                         best += 15
                     if prefer_input and el.role in a11y.TEXT_INPUT:
@@ -506,7 +559,9 @@ class Perception:
                     cx, cy = el.center
                     if not (0 <= cx < sw and 0 <= cy < sh):
                         continue
-                    found.append((best, Target(cx, cy, f'{el.role} "{el.label()}" ({cx},{cy})', el)))
+                    eid = self._ids.get(self._key(el))  # (a fresh snapshot: ids come from earlier looks)
+                    ref = f"@{eid} " if eid and self.registry.get(eid) is not None else ""
+                    found.append((best, Target(cx, cy, f'{ref}{el.role} "{el.label()}" ({cx},{cy})', el, raw)))
         if not found and use_ocr and ocr_mod.available():
             # The focused window first, as `see` reads it: OCR of the whole screen inverts mostly-dark
             # screens, which loses the text of a small light dialog in front of the dark wallpaper.
@@ -524,7 +579,8 @@ class Perception:
                     score = match_score(query, ln.text)
                     if score >= min_score:
                         cx, cy = ln.center
-                        # Narrow to the matching words inside a longer line.
+                        exact = score == 100
+                        # Narrow to the matching words inside a longer line (OCR merges neighbors: "View Help").
                         words = ln.words
                         for i in range(len(words)):
                             seg = words[i : i + len(qn)]
@@ -533,17 +589,40 @@ class Perception:
                                 x1 = seg[-1].x + seg[-1].w
                                 y1 = max(w.y + w.h for w in seg)
                                 cx, cy = (x0 + x1) // 2, (y0 + y1) // 2
-                                score = max(score, 90)
+                                score, exact = max(score, 90), True
                                 break
-                        found.append((score, Target(cx, cy, f'text "{ln.text}" ({cx},{cy}) via OCR', ln)))
+                        found.append(
+                            (
+                                score,
+                                Target(cx, cy, f'text "{ln.text}" ({cx},{cy}) via OCR', ln, 100 if exact else score),
+                            )
+                        )
                 if found:
                     break
         found.sort(key=lambda t: -t[0])
         return found
 
     def _text(self, query: str, prefer_input: bool = False) -> Target:
-        found = self.find_text(query, prefer_input=prefer_input)
+        """A text target: a control labeled exactly so, or (if the accessibility tree has nothing like it)
+        exactly that text on screen via OCR. Never a longer label: "Delete" must not click "Delete all"."""
+        found = self.find_text(query, prefer_input=prefer_input, use_ocr=False)
+        exact = [f for f in found if f[1].match >= 100]
+        if not exact:
+            near = [t for _, t in found if isinstance(t.element, a11y.Element) and t.element.interactive]
+            if near:
+                names = "; ".join(t.desc for t in near[:3])
+                raise TargetError(
+                    f'no control is labeled exactly "{query}". Did you mean {names}? Use its @id or its full label'
+                )
+            ocr = [f for f in self.find_text(query, prefer_input=prefer_input) if f[1].match >= 100]
+            exact = ocr or exact
+        found = exact
         if not found:
+            dropdown = self._option_of(query)
+            if dropdown:
+                raise TargetError(
+                    f'"{query}" is an option of {dropdown}: pick it with select {dropdown.split()[0]} "{query}"'
+                )
             hint = self._near_misses(query)
             raise TargetError(
                 f'no visible element or text matches "{query}"'
@@ -556,6 +635,34 @@ class Perception:
         if ties:
             t.desc += f" (first of {len(ties) + 1} matches; use @id to pick another)"
         return t
+
+    def _visible_text(self, query: str) -> str:
+        """Where the accessibility tree shows `query` as whole words (any element's name, text, value, or
+        its editor/terminal lines), or ""."""
+        if not a11y.AVAILABLE:
+            return ""
+        focused = self.windows.focused()
+        aw = a11y.find_window(title=focused.title if focused else None, pid=focused.pid if focused else None)
+        if aw is None:
+            return ""
+        sw, sh = self.size
+        q = _norm(query)
+        for el in a11y.snapshot(aw, max_elements=600, budget=2.5, screen=(sw, sh)).elements:
+            for hay in (el.name, el.text, el.value, "\n".join(el.lines or [])):
+                if hay and _bounded(_norm(hay), q):
+                    label = el.label()
+                    return f'{el.role} "{label[:60]}"' if label else el.role
+        return ""
+
+    def _option_of(self, query: str) -> str:
+        """A dropdown in the latest look that has `query` among its options ("@14 combo box"), or ""."""
+        q = _norm(query)
+        for eid, el in (self.registry or {}).items():
+            text = getattr(el, "text", "") or ""
+            if getattr(el, "role", "") in ("combo box", "list box") and text.startswith("options: "):
+                if q in (_norm(o) for o in text[len("options: ") :].split(" | ")):
+                    return f"@{eid} {el.role}"
+        return ""
 
     def _near_misses(self, query: str, limit: int = 3) -> str:
         """Names of focused-window elements that look like `query`, for error messages."""
@@ -587,11 +694,14 @@ class Perception:
                 "",
             )
             if not where:
+                where = self._visible_text(query)
+            if not where:
                 # OCR is slow: when waiting for text to appear, only every third poll uses it (and never
                 # past the deadline). When waiting for it to go, absence only counts if OCR looked too.
                 late = time.monotonic() - start > timeout - 1.0
-                found = self.find_text(query, use_ocr=gone or (tries % 3 == 1 and not late), min_score=WAIT_MIN)
-                where = found[0][1].desc if found else ""
+                if gone or (tries % 3 == 1 and not late):
+                    found = self.find_text(query, use_ocr=True, min_score=WAIT_MIN)
+                    where = found[0][1].desc if found else ""
             if bool(where) != gone:
                 return True, time.monotonic() - start, where
             if time.monotonic() - start >= timeout:

@@ -164,7 +164,8 @@ class Windows:
         for w in wins:
             if low in w.title.lower() or low == w.app.lower():
                 return w
-        raise WindowError(f"no window matches {query!r}")
+        titles = ", ".join(repr(w.title) for w in wins[:8]) if (wins := self.list(with_states=False)) else "none"
+        raise WindowError(f"no window matches {query!r}; open windows: {titles}")
 
     def activate(self, wid: str) -> None:
         self._run("wmctrl", "-i", "-a", wid)

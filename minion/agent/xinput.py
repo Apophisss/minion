@@ -24,8 +24,8 @@ MODIFIERS = {
     "option": "alt",
     "opt": "alt",
     "super": "super",
-    "cmd": "super",
-    "command": "super",
+    "cmd": "ctrl",  # macOS habits (cmd+c, cmd+l): on these Linux desktops that is ctrl
+    "command": "ctrl",
     "win": "super",
     "windows": "super",
     "meta": "super",
@@ -239,8 +239,21 @@ class XInput:
         vals = dict(line.split("=", 1) for line in out.split() if "=" in line)
         return int(vals.get("X", 0)), int(vals.get("Y", 0))
 
+    def _move_args(self, x: int, y: int) -> list[str]:
+        """xdotool arguments that put the pointer at (x, y) and wait until it is there. None when it is
+        there already: --sync would then wait ~15 s for a move that never happens."""
+        x, y = int(x), int(y)
+        try:
+            if self.position() == (x, y):
+                return []
+        except InputError:
+            return ["mousemove", str(x), str(y)]
+        return ["mousemove", "--sync", str(x), str(y)]
+
     def move(self, x: int, y: int) -> None:
-        self._xdo("mousemove", "--sync", str(int(x)), str(int(y)))
+        args = self._move_args(x, y)
+        if args:
+            self._xdo(*args)
 
     def click(
         self, x: int | None, y: int | None, button: str = "left", count: int = 1, modifiers: list[str] | None = None
@@ -250,7 +263,7 @@ class XInput:
             raise InputError(f"unknown mouse button {button!r}")
         args: list[str] = []
         if x is not None and y is not None:
-            args += ["mousemove", "--sync", str(int(x)), str(int(y))]
+            args += self._move_args(x, y)
         for m in modifiers or []:
             args += ["keydown", m]
         args += ["click", "--repeat", str(max(1, int(count))), "--delay", "70", str(b)]
@@ -278,13 +291,15 @@ class XInput:
         for m in modifiers or []:
             self._xdo("keydown", m)
         try:
-            self._xdo("mousemove", "--sync", str(int(x1)), str(int(y1)))
+            self.move(x1, y1)
             self._xdo("mousedown", b)
             time.sleep(0.05)
+            last = (int(x1), int(y1))
             for i in range(1, steps + 1):
-                xi = round(x1 + (x2 - x1) * i / steps)
-                yi = round(y1 + (y2 - y1) * i / steps)
-                self._xdo("mousemove", "--sync", str(xi), str(yi))
+                point = (round(x1 + (x2 - x1) * i / steps), round(y1 + (y2 - y1) * i / steps))
+                if point != last:  # short drags repeat points, and --sync waits for a real move
+                    self._xdo("mousemove", "--sync", str(point[0]), str(point[1]))
+                    last = point
                 time.sleep(0.012)
             time.sleep(0.05)
             self._xdo("mouseup", b)
@@ -306,7 +321,7 @@ class XInput:
         amount = max(1, int(amount))
         args: list[str] = []
         if x is not None and y is not None:
-            args += ["mousemove", "--sync", str(int(x)), str(int(y))]
+            args += self._move_args(x, y)
         for m in modifiers or []:
             args += ["keydown", m]
         args += ["click", "--repeat", str(amount), "--delay", "25", str(b)]

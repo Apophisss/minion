@@ -105,10 +105,10 @@ def install_pip(pkg: str) -> int:
     if code == 0:
         ensure_bin()
         for exe in (venv / "bin").iterdir():
-            if exe.name in ("python", "python3", "pip", "pip3") or exe.name.startswith(
+            if exe.name in ("python", "python3", "pip", "pip3") or exe.name.lower().startswith(
                 ("activate", "python3.", "pip3.")
             ):
-                continue
+                continue  # the venv's own tools (and Activate.ps1), not the package's commands
             link = BIN / exe.name
             if not link.exists():
                 link.symlink_to(exe)

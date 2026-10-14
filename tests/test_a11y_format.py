@@ -1,3 +1,4 @@
+from minion.agent import a11y
 from minion.agent.a11y import Element, compact, format_elements
 
 
@@ -33,3 +34,16 @@ def test_format_flags_and_text():
     )
     assert out[0] == '@1 check box "Remember me" [unchecked] (10,5)'
     assert out[1] == '@2 terminal "Terminal": $ ls ⏎ a b (10,5)'
+
+
+def test_spreadsheet_formulas_from_libreoffice_attributes():
+    class Cell:
+        def __init__(self, formula):
+            self.attrs = {"Formula": formula}
+
+        def get_attributes(self):
+            return self.attrs
+
+    assert a11y._formula(Cell("=SUM(1\\,2)")) == "=SUM(1,2)"  # its escapes are removed
+    assert a11y._formula(Cell("=SUM(B2\\")) == "=SUM(B2…"  # cut at an escaped ":" (marked, not wrong)
+    assert a11y._formula(Cell("")) == ""

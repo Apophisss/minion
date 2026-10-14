@@ -72,6 +72,8 @@ class Recorder:
                 lines.append(f"paste({r(p.get('text', ''))})")
             elif action == "fill":
                 lines.append(f"fill({r(t)}, {r(p.get('text', ''))})")
+            elif action == "select":
+                lines.append(f"select({r(t)}, {r(p.get('option', ''))})")
             elif action == "key":
                 rep = int(p.get("repeat") or 1)
                 lines.append(f"key({r(p.get('keys'))}{f', repeat={rep}' if rep > 1 else ''})")
@@ -93,7 +95,8 @@ class Recorder:
             elif action == "open":
                 lines.append(f"launch({r(p.get('target'))})")
             elif action == "run":
-                lines.append(f"run({r(p.get('command'))})")
+                stdin = f", input={r(p['input'])}" if p.get("input") is not None else ""
+                lines.append(f"run({r(p.get('command'))}{stdin})")
             elif action == "script":
                 lines.append("# --- script ---")
                 lines.extend(str(p.get("code", "")).splitlines())

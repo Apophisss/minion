@@ -44,3 +44,14 @@ def test_big_changes_fall_back_to_the_full_view():
     before = [el(i, f"A{i}", 20 * i) for i in range(1, 40)]
     after = [el(i + 100, f"B{i}", 20 * i) for i in range(1, 40)]
     assert Perception._diff(view(before), view(after, 1.0)) == {"full": "most of the screen changed"}
+
+
+def test_changed_terminals_and_editors_show_their_lines():
+    from minion.agent.perceive import _changed_lines
+
+    old = ("terminal", ("$ make", "building…", "$"))
+    new = ("terminal", ("building…", "$", "$ pytest -q", "2 passed in 0.01s", "$"))
+    assert _changed_lines(old, new) == ["$ pytest -q", "2 passed in 0.01s", "$"]  # only the new output
+    old = ("text", ("def f(x):", "    return x", ""))
+    new = ("text", ("def f(x):", "    return x + 1", ""))
+    assert _changed_lines(old, new) == ["   2      return x + 1"]  # the edited line, numbered

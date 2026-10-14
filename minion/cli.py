@@ -613,6 +613,7 @@ def cmd_view(args) -> int:
         return 0
     if not args.json:
         info(f"waiting up to {args.timeout:.0f}s for the human to press Done…")
+    sys.stdout.flush()  # agents read this through a pipe: the link must arrive before the wait
     note = handoff_wait(d.name, ask, args.timeout)
     if args.json:
         emit_json({"url": url, "done": note is not None, "note": note})
@@ -633,9 +634,14 @@ def _stop_server() -> int:
     if not pid:
         info("No background server is recorded.")
         return 0
+    if os.name == "nt":
+        query = f"(Get-CimInstance Win32_Process -Filter 'ProcessId={pid}').CommandLine"
+        ps = ["powershell", "-NoProfile", "-NonInteractive", "-Command", query]
+    else:
+        ps = ["ps", "-o", "command=", "-p", str(pid)]
     try:  # only ever stop a `minion serve`: the state can also point at an MCP server hosting the view
-        cmdline = subprocess.run(["ps", "-o", "command=", "-p", str(pid)], capture_output=True, text=True).stdout
-    except OSError:
+        cmdline = subprocess.run(ps, capture_output=True, text=True, timeout=30).stdout
+    except (OSError, subprocess.SubprocessError):
         cmdline = ""
     if not cmdline.strip():
         config.update_state(server=None)
@@ -945,7 +951,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     sp = add("wait-for", cmd_wait_for, "wait until text is visible on screen (or --gone)")
     sp.add_argument("text", nargs="+")
-    sp.add_argument("--timeout", type=float, default=15, help="seconds to wait (15)")
+    sp.add_argument("--timeout", "-t", type=float, default=15, help="seconds to wait (15)")
     sp.add_argument("--gone", action="store_true", help="wait until the text is no longer visible")
 
     sp = add(
@@ -957,10 +963,11 @@ def build_parser() -> argparse.ArgumentParser:
         "steps",
         nargs="+",
         help=(
-            "action strings: click|dclick|rclick|move TARGET · type TEXT (a trailing \\n presses Return) · "
-            "paste TEXT · key KEYS [N] (or a sequence: key Tab Tab Return) · fill TARGET TEXT · "
+            "action strings: click|dclick|rclick|move TARGET · type TEXT (\\n is Return, \\t is Tab) · "
+            "paste TEXT · key KEYS [N] (or a sequence: key Tab Tab Return) · fill TARGET TEXT · select TARGET OPTION · "
             "scroll DIR [N] [TARGET] · drag FROM TO · wait SECONDS · wait_for TEXT · focus WINDOW. "
-            "Quote multi-word text: \"type 'hello world'\". Also JSON objects/lists, or - for JSON on stdin"
+            "The text of type/paste/fill is taken as is (one pair of outer quotes is removed). "
+            "Also JSON objects/lists, or - for JSON on stdin"
         ),
     )
     sp.add_argument(

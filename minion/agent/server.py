@@ -694,6 +694,9 @@ class Agent:
                 self.xi.type(text)
             else:
                 self.xi.key("BackSpace")
+            if isinstance(el, a11y.Element) and el.role == "panel":
+                self.xi.key("Return")  # a toolbar box (LibreOffice's style, font, size) applies on Return
+                return f"filled {t.desc} with {len(text)} chars and pressed Return to apply it"
             return f"filled {t.desc} with {len(text)} chars"
         if action == "select":
             option = str(p.get("option") or p.get("text") or p.get("value") or "")
@@ -805,6 +808,11 @@ class Agent:
                 wins_before = {w.id: w for w in self.windows.list(with_states=False)}
             except WindowError:
                 wins_before = {}
+            focused_app = next((w.app for w in wins_before.values() if w.focused), None)
+            if focused_app and focused_app != getattr(self, "_macro_app", None):
+                # A replay must type into the same app: record the switch (apps, not titles: "Untitled 2")
+                self.recorder.add_macro("focus", {"window": focused_app})
+                self._macro_app = focused_app
             for i, (action, params) in enumerate(parsed):
                 if error is not None:
                     results.append(
@@ -840,6 +848,23 @@ class Agent:
                 wins_after = self.windows.list(with_states=False)
             except WindowError:
                 wins_after = []
+            acted = [a for a, _ in parsed[: len(results)] if a in ("click", "double_click", "key", "fill", "select")]
+            if (
+                acted
+                and p.get("settle", True) is not False
+                and not change.get("changed")
+                and {w.id for w in wins_after} == set(wins_before)
+            ):
+                # Dialogs often appear a moment after the key or click (ctrl+s, "Save changes?"): look again
+                # before reporting that nothing happened.
+                time.sleep(0.6)
+                settled, _, frame = settle(self.screen, timeout=1.5)
+                frac, bbox = diff(before, thumb(frame))
+                change = describe_change(frac, bbox)
+                try:
+                    wins_after = self.windows.list(with_states=False)
+                except WindowError:
+                    pass
         after_ids = {w.id for w in wins_after}
         for w in wins_after:
             if w.focused or w.id not in wins_before:
@@ -1070,12 +1095,21 @@ class Agent:
             self.windows.refine(found)
             settle(self.screen, timeout=4.0, quiet=0.5)
             if kind == "url" or self.BROWSER_APPS.search(found.app or ""):
-                if self._wait_page_loaded(timeout=10.0):
+                if self._wait_page_loaded(timeout=10.0, require_page=kind == "url"):
                     settle(self.screen, timeout=2.0, quiet=0.4)
-                try:  # the title changes as the page loads
-                    found = next((w for w in self.windows.list(with_states=False) if w.id == found.id), found)
-                except WindowError:
-                    pass
+            elif re.search(r"libreoffice|soffice", found.app or "", re.I) and a11y.AVAILABLE:
+                # The window shows before its document can take keystrokes: wait for the document.
+                end = time.monotonic() + 8.0
+                while time.monotonic() < end:
+                    aw = a11y.find_window(title=found.title, pid=found.pid)
+                    if aw is not None and a11y.has_document(aw):
+                        break
+                    time.sleep(0.25)
+                time.sleep(0.3)
+            try:  # the title changes as the page or document loads
+                found = next((w for w in self.windows.list(with_states=False) if w.id == found.id), found)
+            except WindowError:
+                pass
         code = proc.poll()
         res = {
             "command": cmd,
@@ -1110,24 +1144,31 @@ class Agent:
 
     BROWSER_APPS = re.compile(r"firefox|chromium|chrome|navigator|brave|vivaldi|opera|epiphany", re.I)
 
-    def _wait_page_loaded(self, timeout: float = 10.0) -> bool:
-        """In a browser, wait while the page is loading. True if it had to wait."""
+    def _wait_page_loaded(self, timeout: float = 10.0, require_page: bool = False) -> bool:
+        """In a browser, wait while the page loads and its accessibility tree fills in. With require_page
+        (a fresh `open`), also wait for the page to exist. True if it had to wait."""
         try:
             focused = self.windows.focused()
         except WindowError:
             return False
-        if focused is None or not self.BROWSER_APPS.search(focused.app or ""):
-            return False
-        aw = a11y.find_window(title=focused.title, pid=focused.pid) if a11y.AVAILABLE else None
-        if aw is None:
+        if focused is None or not self.BROWSER_APPS.search(focused.app or "") or not a11y.AVAILABLE:
             return False
         deadline = time.monotonic() + timeout
-        waited = False
+        waited, last = False, -1
         time.sleep(0.15)  # a navigation starts a moment after the click
-        while time.monotonic() < deadline and a11y.page_busy(aw):
-            waited = True
-            time.sleep(0.2)
-            aw = a11y.find_window(title=None, pid=focused.pid) or aw  # the title changes as pages load
+        while time.monotonic() < deadline:
+            aw = a11y.find_window(title=None, pid=focused.pid)  # the title changes as pages load
+            busy, size = a11y.page_state(aw) if aw else (None, 0)
+            if busy is None and not (require_page and size == 0):
+                return waited  # no web page here
+            if busy or (busy is None and require_page):
+                waited, last = True, -1
+                time.sleep(0.25)
+                continue
+            if not (waited or require_page) or size == last:
+                return waited  # loaded, and the tree stopped growing
+            last = size
+            time.sleep(0.3)
         return waited
 
     @staticmethod
@@ -1189,7 +1230,8 @@ class Agent:
         stdin = p.get("input")
         res = run_captured(["bash", "-lc", command], cwd, timeout, stdin.encode() if stdin is not None else None)
         self.recorder.add("run", f"$ {command[:200]} → exit {res['code']}")
-        self.recorder.add_macro("run", {"command": command})
+        if p.get("record", True):  # housekeeping (a folder made for a copy) is not part of the macro
+            self.recorder.add_macro("run", {"command": command, "input": stdin})
         return res
 
     def m_script(self, p: dict) -> dict:

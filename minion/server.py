@@ -76,6 +76,7 @@ class ServedToolkit(Toolkit):
 
     def __init__(self, *, files_root=None, images: bool = True, host_files: bool = True, wait_cap=None, token=None):
         super().__init__(in_process_viewer=True, files_root=files_root, images=images)
+        self.fallback = False  # each session (a chat, an agent) works on the desktops it created or names
         self.host_files = host_files
         self.wait_cap = wait_cap  # seconds, or None
         self.token = token

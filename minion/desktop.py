@@ -520,6 +520,10 @@ class Desktop:
     def fill(self, target, text: str, **kw) -> ActResult:
         return self.act({"action": "fill", "target": target, "text": text}, **kw)
 
+    def select(self, target, option: str, **kw) -> ActResult:
+        """Pick an option of a dropdown (a <select>, a combo box) by its visible text."""
+        return self.act({"action": "select", "target": target, "option": option}, **kw)
+
     def key(self, keys: str, repeat: int = 1, **kw) -> ActResult:
         return self.act({"action": "key", "keys": keys, "repeat": repeat}, **kw)
 
@@ -545,10 +549,18 @@ class Desktop:
         background: bool = False,
         cwd: str | None = None,
         input: str | None = None,
+        record: bool = True,
     ) -> RunResult:
         res = self.call(
             "run",
-            {"command": command, "timeout": timeout, "background": background, "cwd": cwd, "input": input},
+            {
+                "command": command,
+                "timeout": timeout,
+                "background": background,
+                "cwd": cwd,
+                "input": input,
+                "record": record,
+            },
             timeout=timeout + 30,
         )
         if background:
@@ -565,15 +577,21 @@ class Desktop:
         self._wake()
         folder = dst if dst.endswith("/") else (os.path.dirname(dst) or "~")
         if folder not in ("~", "~/", "/", "/tmp", "/tmp/"):  # make sure the destination folder exists
-            self.run(f'mkdir -p -- "{_desk_path(folder)}"', timeout=15)
+            self.run(f'mkdir -p -- "{_desk_path(folder)}"', timeout=15, record=False)
         self.backend.copy_in(self.name, str(src), dst)
         return dst
 
     def download(self, src: str, dst: str | os.PathLike = ".") -> Path:
         self._wake()
-        self.backend.copy_out(self.name, src, str(dst))
         p = Path(dst)
-        return p / Path(src).name if p.is_dir() else p
+        into = p.is_dir()  # an existing folder receives the item; otherwise `dst` becomes it
+        try:
+            self.backend.copy_out(self.name, src, str(dst))
+        except MinionError as e:
+            if re.search(r"could not find|no such file|not found", str(e), re.I):
+                raise NotFound(f"no such file in the desktop: {src}") from None
+            raise
+        return p / Path(src.rstrip("/")).name if into else p
 
     def write_text(self, path: str, text: str) -> None:
         """Write a UTF-8 text file in the desktop (as the desktop's user), creating missing folders."""

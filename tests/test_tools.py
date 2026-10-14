@@ -32,6 +32,7 @@ def _toolkit():
     t.files_root = None
     t.images = True
     t._local = threading.local()
+    t.fallback = True
     return t
 
 
@@ -225,3 +226,56 @@ def test_fallback_desktop_is_named_in_the_result(monkeypatch):
     r = tk.call("see", {})
     assert "Used desktop 'other-agent-1'" in r.text
     assert "Used desktop" not in tk.call("see", {}).text  # now it is this session's current desktop
+
+
+def test_remove_needs_an_explicit_desktop_and_no_conflicts():
+    tk = _toolkit()
+    tk.current = "a"
+    r = tk.call("desktop", {"action": "remove"})  # never the implied (current) desktop
+    assert r.is_error and "needs desktop=NAME" in r.text
+    r = tk.call("desktop", {"action": "remove", "name": "x", "desktop": "a"})
+    assert r.is_error and "disagree" in r.text
+
+
+def test_sessions_without_fallback_must_choose_a_desktop():
+    tk = _toolkit()
+    tk.fallback = False
+    r = tk.call("see", {})
+    assert r.is_error and "No desktop is selected in this session" in r.text
+
+
+def test_unknown_arguments_are_named():
+    tk = _shot_toolkit()
+    r = tk.call("see", {"full_txt": True})
+    assert not r.is_error and "Ignored unknown argument: full_txt (did you mean full_text?)" in r.text
+
+
+def test_compact_flags_select_and_focus():
+    calls = []
+    tk = _toolkit()
+    tk.t_act = lambda a, p: calls.append(a) or []
+    assert not tk.call("computer", {"command": "click @110 --double"}).is_error
+    assert calls[-1]["actions"][0] == {"action": "double_click", "target": "@110"}
+    assert tk.call("computer", {"command": "see --verbose"}).is_error  # unknown options are errors
+    tk.call("computer", {"command": "select @14 'Title'"})
+    assert calls[-1]["actions"][0] == {"action": "select", "target": "@14", "option": "Title"}
+    tk.call("computer", {"command": "wait-for --timeout 3 Saved file"})
+    assert calls[-1]["actions"][0] == {"action": "wait_for", "timeout": 3.0, "text": "Saved file"}
+    tk.call("computer", {"command": "focus Calc"})
+    assert calls[-1]["actions"][0] == {"action": "focus", "window": "Calc"}
+
+
+def test_compact_restore_grid_and_timeout():
+    calls = []
+    tk = _toolkit()
+    tk.t_desktop = lambda a, p: calls.append(a) or []
+    tk.t_screenshot = lambda a, p: calls.append(a) or []
+    r = tk.call("computer", {"command": "restore before-edit"})
+    assert r.is_error and "use NAME" in r.text  # no current desktop: never an implied one
+    tk.current = "office-1"
+    assert not tk.call("computer", {"command": "restore before-edit"}).is_error
+    assert calls[-1] == {"action": "restore", "tag": "before-edit", "desktop": "office-1"}
+    tk.call("computer", {"command": "screenshot --grid"})
+    assert calls[-1]["grid"] is True
+    r = tk.call("computer", {"command": "wait-for --timeout soon Saved"})
+    assert r.is_error and "takes seconds" in r.text

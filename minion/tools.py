@@ -53,7 +53,7 @@ Minion gives you real Linux computers (isolated desktops with GUI apps; any prog
 Use the `computer` tool, one command per call:
   create [office|browser|dev|research|data|windows|base] [--name NAME] [--count N]
   see [--changes] [--full] [--ocr]  -> the screen as text; act on the @ids it lists
-  click|dclick|rclick TARGET · type TEXT · key KEYS · fill TARGET TEXT · scroll up|down [N] · drag A B
+  click|dclick|rclick TARGET · type TEXT · key KEYS · fill TARGET TEXT · select TARGET OPTION · scroll up|down [N]
   wait-for TEXT · open APP|URL|FILE · run SHELL · script PYTHON · screenshot [--marks] [--low]
   list · use NAME · remove NAME · fork · freeze · view [MESSAGE]
 TARGET is @12 (from see), exact visible text ("Save"), or x,y. Prefer see to screenshots, and
@@ -347,7 +347,8 @@ COMPUTER_TOOL = {
         "create [profile] [--name NAME] [--count N] · "
         "list · use NAME · remove [NAME] · see [--changes] [--ocr] [--full] · screenshot [--marks] [--low] "
         "[--zoom x,y,w,h] · click TARGET · dclick TARGET · rclick TARGET · type TEXT · key KEYS · "
-        "scroll up|down [N] · fill TARGET TEXT · drag FROM TO · wait-for TEXT · open TARGET · run SHELL... · "
+        "scroll up|down [N] · fill TARGET TEXT · select TARGET OPTION · drag FROM TO · wait-for TEXT [--timeout N] · "
+        "focus WINDOW · windows · open TARGET · run SHELL... · "
         "script PYTHON... · view [MESSAGE]. Targets: @id from see, visible text (quote it), or x,y. "
         "Profiles: browser, office, dev, research, data, windows, base. Example: create office · open calc · see · "
         "click @12 · type 'Total' · key Return."
@@ -533,6 +534,24 @@ def _split_words(text: str) -> list[str]:
     return list(lex)
 
 
+def _unknown_args(tool: str, args: dict) -> str:
+    """A note about arguments the tool doesn't take (they are ignored), with the likely intended ones."""
+    import difflib
+
+    spec = next((t for t in [*TOOLS, COMPUTER_TOOL] if t["name"] == tool), None)
+    if spec is None:
+        return ""
+    known = set(spec["input_schema"].get("properties", {}))
+    extra = sorted(set(args) - known)
+    if not extra:
+        return ""
+    hints = []
+    for key in extra:
+        close = difflib.get_close_matches(key, sorted(known), n=1)
+        hints.append(f"{key} (did you mean {close[0]}?)" if close else key)
+    return f"(Ignored unknown argument{'s' if len(extra) > 1 else ''}: {', '.join(hints)}.)"
+
+
 def default_files_root() -> Path:
     """Where `files` may read and write on this machine by default: the working directory (a project
     folder for coding agents), or ~/Minion when that is the filesystem root or the home folder itself
@@ -567,6 +586,9 @@ class Toolkit:
         self.backend = _backend(backend)
         self.images = images  # False: text-only clients (no screenshot tool, images left out of results)
         self._local = threading.local()
+        # With no desktop chosen yet, may a call use "the" desktop (when exactly one exists)? Fine for one local
+        # agent; servers turn it off, so one session never acts on another session's desktop.
+        self.fallback = True
         self.current: str | None = None
         self.desktops: dict[str, Desktop] = {}
         self._pending: dict[str, Future] = {}
@@ -640,6 +662,7 @@ class Toolkit:
         if fn is None:
             return ToolResult([_text(f"unknown tool {name!r}; tools: {', '.join(self.names)}")], True)
         self._local.note = None
+        unknown = _unknown_args(name, args)
         try:
             result = ToolResult(fn(args, progress or (lambda _line: None)))
         except MinionError as e:
@@ -654,6 +677,8 @@ class Toolkit:
             )
         if self._local.note:
             result.content.append(_text(self._local.note))
+        if unknown:
+            result.content.append(_text(unknown))
         return result
 
     def run_calls(self, calls, format: str = "openai"):
@@ -731,6 +756,12 @@ class Toolkit:
     # -- helpers --------------------------------------------------------
     def desk(self, args: dict) -> Desktop:
         name = args.get("desktop") or self.current
+        if not name and not self.fallback:
+            names = ", ".join(d.name for d in self.backend.list()) or "none yet"
+            raise ToolError(
+                'No desktop is selected in this session: create one with desktop(action="create"), or pass '
+                f"desktop=NAME to use an existing one (desktops: {names})."
+            )
         if not name:
             try:
                 name = Desktop.attach(None, self.backend).name
@@ -779,10 +810,15 @@ class Toolkit:
             return [_text("Desktops:\n" + "\n".join(lines))]
         if action == "create":
             return self._create(args, progress)
-        if action not in ("fork",) and args.get("name") and not args.get("desktop"):
+        if action != "fork" and args.get("name"):
+            if args.get("desktop") and args["desktop"] != args["name"]:
+                raise ToolError(
+                    f"name={args['name']!r} and desktop={args['desktop']!r} disagree: pass the one desktop to {action}"
+                )
             args = {**args, "desktop": args["name"]}  # desktop(action="remove", name="x") means desktop x
-        if action in ("remove", "restore") and not (args.get("desktop") or self.current):
-            raise ToolError(f"{action} needs desktop=NAME (which desktop to {action})")
+        if action in ("remove", "restore") and not args.get("desktop"):
+            # Never on an implied desktop: removing or rewinding the wrong one loses work.
+            raise ToolError(f"{action} needs desktop=NAME: say which desktop to {action}")
         d = self.desk(args)
         if action == "info":
             hello = d.hello()
@@ -1090,6 +1126,12 @@ class Toolkit:
             words = rest.split()
         flags = {w for w in words if w.startswith("--")}
         plain = [w for w in words if not w.startswith("--")]
+        allowed = _COMPACT_FLAGS.get(verb)
+        if allowed is not None:
+            bad = sorted(f.split("=", 1)[0] for f in flags if f.split("=", 1)[0] not in allowed)
+            if bad:
+                hint = " ".join(sorted(allowed)) or "none"
+                raise ToolError(f"unknown option {', '.join(bad)} for {verb} (options: {hint})")
 
         def target(ws):
             if len(ws) == 2 and all(w.lstrip("-").isdigit() for w in ws):
@@ -1132,16 +1174,42 @@ class Toolkit:
             self.desk({"desktop": rest})
             return [_text(f"Current desktop: {rest}")]
         if verb in ("remove", "rm"):
-            return self.t_desktop({"action": "remove", "desktop": rest or None}, progress)
-        if verb in ("freeze", "thaw", "fork", "snapshot", "restore", "replay", "macro"):
-            key = "tag" if verb in ("snapshot", "restore") else "name"
+            if not rest:
+                raise ToolError("remove NAME: which desktop to remove (see `list`)")
+            return self.t_desktop({"action": "remove", "desktop": rest}, progress)
+        if verb == "windows":
+            wins = self.desk(args).windows()
+            lines = [
+                f'[{i}] "{w["title"]}" ({w["app"]}){" focused" if w.get("focused") else ""}'
+                for i, w in enumerate(wins, 1)
+            ]
+            return [_text("\n".join(lines) or "No windows are open.")]
+        if verb == "focus":
+            return self.t_act({"actions": [{"action": "focus", "window": _unquote(rest)}]}, progress)
+        if verb == "select":
+            target_, option_ = _first_word(rest)
+            if not target_ or not option_:
+                raise ToolError("select TARGET OPTION, e.g. select @14 Title")
+            return self.t_act(
+                {"actions": [{"action": "select", "target": target_, "option": _unquote(option_)}]}, progress
+            )
+        if verb == "restore":  # rewinds the session's current desktop (never an implied one)
+            if not self.current:
+                raise ToolError("restore TAG rewinds the current desktop: `use NAME` first (see `list`)")
+            return self.t_desktop({"action": "restore", "tag": rest or None, "desktop": self.current}, progress)
+        if verb in ("freeze", "thaw", "fork", "snapshot", "replay", "macro"):
+            key = "tag" if verb == "snapshot" else "name"
             return self.t_desktop({"action": verb, key: rest or None}, progress)
         if verb == "see":
             return self.t_see(
                 {"changes": "--changes" in flags, "ocr": "--ocr" in flags, "full_text": "--full" in flags}, progress
             )
         if verb in ("screenshot", "shot"):
-            a = {"marks": "--marks" in flags, "detail": "low" if "--low" in flags else "full"}
+            a = {
+                "marks": "--marks" in flags,
+                "grid": "--grid" in flags,
+                "detail": "low" if "--low" in flags else "full",
+            }
             for w in words:
                 if w.startswith("--zoom="):
                     a.update(region=[int(v) for v in w[7:].split(",")], zoom=True)
@@ -1150,16 +1218,23 @@ class Toolkit:
                 a.update(region=[int(v) for v in words[i + 1].split(",")], zoom=True)
             return self.t_screenshot(a, progress)
         if verb in ("click", "dclick", "rclick", "move", "hover"):
-            step = {
-                "action": {"dclick": "double_click", "rclick": "right_click", "hover": "move"}.get(verb, verb),
-                "target": target(plain),
-            }
-            return self.t_act({"actions": [step]}, progress)
+            action = {"dclick": "double_click", "rclick": "right_click", "hover": "move"}.get(verb, verb)
+            for flag, name in (
+                ("--double", "double_click"),
+                ("--right", "right_click"),
+                ("--triple", "triple_click"),
+                ("--middle", "middle_click"),
+            ):
+                if flag in flags:
+                    action = name
+            return self.t_act({"actions": [{"action": action, "target": target(plain)}]}, progress)
         if verb == "type":  # the rest of the command, verbatim (\n = Return, \t = Tab), as in act steps
             return self.t_act({"actions": [{"action": "type", "text": _escapes(_unquote(rest))}]}, progress)
         if verb in ("key", "press"):
             return self.t_act({"actions": [{"action": "key", "keys": k} for k in plain]}, progress)
         if verb == "scroll":
+            if len(plain) > 1 and not plain[1].isdigit():
+                raise ToolError("scroll up|down|left|right [N]: N is a number of wheel clicks")
             return self.t_act(
                 {
                     "actions": [
@@ -1184,7 +1259,20 @@ class Toolkit:
                 raise ToolError("drag FROM TO")
             return self.t_act({"actions": [{"action": "drag", "from": plain[0], "to": plain[1]}]}, progress)
         if verb in ("wait-for", "wait_for"):
-            return self.t_act({"actions": [{"action": "wait_for", "text": " ".join(plain)}]}, progress)
+            step, it, text_words = {"action": "wait_for"}, iter(words), []
+            for w in it:
+                if w == "--timeout" or w.startswith("--timeout="):
+                    value = w.split("=", 1)[1] if "=" in w else next(it, "")
+                    try:
+                        step["timeout"] = float(value)
+                    except ValueError:
+                        raise ToolError(f"wait-for --timeout takes seconds, got {value!r}") from None
+                elif w == "--gone":
+                    step["gone"] = True
+                else:
+                    text_words.append(w)
+            step["text"] = " ".join(text_words)
+            return self.t_act({"actions": [step]}, progress)
         if verb == "open":
             return self.t_open({"target": rest}, progress)
         if verb in ("run", "exec", "sh"):
@@ -1195,6 +1283,27 @@ class Toolkit:
             return self.t_view({"message": rest or None}, progress)
         raise ToolError(f"unknown command {verb!r}. Try: see · click @12 · type hello · open firefox · run ls")
 
+
+# Options each compact command takes (others take their text verbatim and are not checked).
+_COMPACT_FLAGS = {
+    "see": {"--changes", "--ocr", "--full"},
+    "screenshot": {"--marks", "--low", "--zoom", "--grid"},
+    "shot": {"--marks", "--low", "--zoom", "--grid"},
+    "click": {"--double", "--right", "--triple", "--middle"},
+    "dclick": set(),
+    "rclick": set(),
+    "move": set(),
+    "hover": set(),
+    "key": set(),
+    "press": set(),
+    "scroll": set(),
+    "drag": set(),
+    "wait-for": {"--timeout", "--gone"},
+    "wait_for": {"--timeout", "--gone"},
+    "list": set(),
+    "ls": set(),
+    "windows": set(),
+}
 
 RUN_TEXT_LIMIT = 12_000  # characters of command output a tool result carries (head + tail)
 

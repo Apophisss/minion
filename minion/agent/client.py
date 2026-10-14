@@ -28,6 +28,7 @@ __all__ = [
     "elements",
     "find",
     "cells",
+    "formulas",
     "act",
     "click",
     "double_click",
@@ -40,6 +41,7 @@ __all__ = [
     "hold_key",
     "scroll",
     "fill",
+    "select",
     "wait",
     "wait_for",
     "launch",
@@ -116,6 +118,14 @@ def elements(role: str | None = None, name: str | None = None) -> list[dict]:
 
 def find(text: str) -> list[dict]:
     return _call("find", {"text": text})["matches"]
+
+
+def formulas() -> dict[str, str]:
+    """Formulas of the visible spreadsheet cells: {"B7": "=SUM(B2:B6)", ...}. A cell whose formula
+    failed reads "#ERROR" in cells()."""
+    return {
+        e["name"]: e["value"] for e in look()["elements"] if e["role"] == "cell" and e.get("value", "").startswith("=")
+    }
 
 
 def cells() -> dict[str, str]:
@@ -206,9 +216,9 @@ def launch(target: str, wait: float = 12.0) -> dict:
     return _call("open", {"target": target, "wait": wait})
 
 
-def run(command: str, timeout: float = 60.0) -> dict:
-    """Run a shell command; returns {"code", "stdout", "stderr", ...}."""
-    return _call("run", {"command": command, "timeout": timeout})
+def run(command: str, timeout: float = 60.0, input: str | None = None) -> dict:
+    """Run a shell command (with optional stdin text); returns {"code", "stdout", "stderr", ...}."""
+    return _call("run", {"command": command, "timeout": timeout, "input": input})
 
 
 def screenshot(path: str = "/tmp/screenshot.png", region=None, marks: bool = False) -> str:
