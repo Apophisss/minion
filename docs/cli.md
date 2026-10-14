@@ -8,7 +8,7 @@ created or `use`d last, otherwise the most recent running one.
 
 | Command | |
 |---|---|
-| `minion up [PROFILE]` | Create and start a desktop (default profile `browser`). Options: `--name`, `--size 1280x800`, `--memory 2g`, `--cpus 1.5`, `--offline`, `-v HOST:DESKTOP[:ro]` (repeatable), `-e KEY=VALUE`, `-p PORT` (publish a desktop port on 127.0.0.1), `--view` |
+| `minion up [PROFILE]` | Create and start a desktop (default profile `browser`). `-c N` creates N in parallel. Options: `--name`, `--size 1280x800`, `--memory 2g`, `--cpus 1.5`, `--offline`, `-v HOST:DESKTOP[:ro]` (repeatable), `-e KEY=VALUE`, `-p PORT` (publish a desktop port on 127.0.0.1), `--view` |
 | `minion ls` | List desktops with live memory and CPU (`--fast` skips the stats) |
 | `minion rm NAME… \| --all` | Remove desktops (their files go with them) |
 | `minion stop / start [NAME]` | Stop (files are kept) or start |
@@ -25,7 +25,7 @@ created or `use`d last, otherwise the most recent running one.
 
 | Command | |
 |---|---|
-| `minion see` | The screen as text with `@ids`. `--ocr` always adds OCR, `--no-ocr` never does, `--window TITLE` describes another window, and `--full` keeps paragraphs whole |
+| `minion see` | The screen as text with `@ids`. `--changes` shows only what changed since the last look, `--ocr` always adds OCR, `--no-ocr` never does, `--window TITLE` describes another window, and `--full` keeps paragraphs whole |
 | `minion shot [-o FILE]` | A screenshot (`.png`, `.jpg`, `.webp` or `-` for stdout). Options: `--region x,y,w,h`, `--max-width N`, `--marks` (draw `@ids`), `--grid`, `--no-cursor` |
 | `minion windows` | List windows |
 
@@ -42,7 +42,8 @@ Targets are `@12`, visible text (`"Sign in"`), or coordinates (`640,400` or `640
 | `minion drag FROM TO` · `minion move TARGET` | |
 | `minion fill TARGET TEXT` | Replace a field's content (a label like `"Name"` finds its field) |
 | `minion wait-for TEXT [--timeout 15] [--gone]` | Wait until text appears (or disappears) |
-| `minion act STEP…` | Several actions in one round trip: `minion act "click @3" "type hello" "key Return"`. Also accepts JSON objects or lists, or `-` for JSON on stdin |
+| `minion act STEP…` | Several actions in one round trip: `minion act "click @3" "type hello" "key Return"`. Also accepts JSON objects or lists, or `-` for JSON on stdin. `--observe changes` prints the changed UI |
+| `minion script FILE\|-\|CODE` | Run Python inside the desktop with the GUI API preloaded (`click`, `write`, `key`, `see`, `cells`, `launch`, `run`, …) |
 | `minion open TARGET` | An app (`writer`, `calc`, `firefox`…), a URL, a file in the desktop, or a command |
 | `minion run CMD…` | A shell command in the desktop. It returns the command's exit code. `-t 60` sets a timeout, `-b` runs in the background |
 | `minion cp SRC DST` | Copy files: `minion cp report.pdf :~/Documents/` · `minion cp office-1:~/out.png .` |
@@ -67,6 +68,7 @@ command's own exit code (`124` on timeout).
 | `minion view [NAME]` | Open the live view in your browser. It starts a background server if needed. `--no-open` prints the URL |
 | `minion replay [-o FILE.html\|FILE.gif] [--open]` | Export the flight recorder |
 | `minion serve` | The HTTP API, dashboard and live view. Options: `--host`, `--port 4747`, `--token`, `--no-auth`, `--idle-freeze 600` |
-| `minion mcp` | The MCP server on stdio. Options: `--preload office,dev`, `--idle-freeze 600` |
+| `minion mcp` | The MCP server on stdio. Options: `--compact` (one `computer` tool), `--preload office,dev`, `--idle-freeze 600` |
+| `minion tools [-f openai\|anthropic\|gemini\|openai-responses\|mcp] [--compact]` | Print tool definitions for any LLM API. `minion tools --call see` runs one |
 
 Quote `~` paths so your own shell doesn't expand them: `minion open '~/Documents/report.docx'`.

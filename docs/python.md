@@ -31,7 +31,7 @@ Desktop.list(stats=False)        # [DesktopInfo(name, profile, state, size, memo
 
 | Method | Returns |
 |---|---|
-| `see(ocr="auto", window=None, full_text=False)` | `Observation`. `str(obs)` is the text an agent reads, and `obs.find("Save")` filters elements |
+| `see(ocr="auto", window=None, full_text=False, changes=False)` | `Observation`. `str(obs)` is the text an agent reads, and `obs.find("Save")` filters elements. `changes=True` returns only what changed since the last look (ids are stable) |
 | `screenshot(path=None, *, region=None, max_width=None, scale=None, width=None, format="png", marks=False, grid=False, cursor=True)` | `Screenshot` with `.data`, `.width`, `.height`, `.scale`, `.save()`, `.base64()` and `.to_screen(x, y)` |
 | `zoom(region, width=1024)` | A magnified region |
 | `find(text)` | Matches with score and position, from the accessibility tree first and then OCR |
@@ -60,6 +60,30 @@ desk.act({"click": "File"}, {"click": "Save As..."}, "type report.docx", "key Re
 ```
 
 The batch API accepts Claude computer-use shapes too (`{"action": "left_click", "coordinate": [x, y]}`).
+`act(..., observe="changes")` adds the changed UI as text (`res.observation`), and `observe="crop"` adds an
+image of just the changed region (`res.crop`).
+
+## Code mode
+
+```python
+result = desk.script('''
+launch("calc")
+for item, price in [("Coffee", 3.5), ("Bagel", 2.25)]:
+    write(f"{item}\\t{price}\\n")
+write("Total\\t=SUM(B1:B2)\\n")
+print(cells()["B3"])
+''')
+print(result.stdout)   # 5.75
+```
+
+The script runs inside the desktop with the API in `minion/agent/client.py` preloaded. Calls cost no model
+round trips, and only what it prints comes back.
+
+## Many desktops
+
+```python
+desks = Desktop.create_many("research", 4)     # in parallel, image prepared once
+```
 
 ## Apps, shell and files
 

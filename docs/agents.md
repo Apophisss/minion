@@ -38,10 +38,11 @@ use `uvx --from git+https://github.com/apophisss/minion minion mcp`.
 
 | Tool | What it does |
 |---|---|
-| `desktop` | `create` (profile, name, size), `list`, `profiles`, `remove`, `freeze`, `thaw`, `fork`, `snapshot`, `restore`, `replay` (HTML timeline) |
-| `see` | The screen as text: windows, then the focused window's controls with `@ids`, roles, names, values, states and centers. Use `ocr=true` for canvases and images, and `full_text=true` to read long text |
-| `screenshot` | A PNG. Use `marks=true` to draw `@ids`, `region=[x,y,w,h]` with `zoom=true` to magnify, and `grid=true` for a coordinate grid |
-| `act` | A batch of mouse and keyboard actions: `click`, `double_click`, `right_click`, `move`, `drag`, `type`, `paste`, `fill`, `key`, `scroll`, `wait`, `wait_for`, `focus`, and more. It stops at the first failure, waits for the screen to settle, and reports what changed |
+| `desktop` | `create` (profile, name, size, `count` for several in parallel), `list`, `profiles`, `remove`, `freeze`, `thaw`, `fork`, `snapshot`, `restore`, `replay` (HTML timeline) |
+| `see` | The screen as text: windows, then the focused window's controls with **stable** `@ids`, roles, names, values, states and centers. `changes=true` returns only what changed since the last look. Use `ocr=true` for canvases and images, and `full_text=true` to read long text |
+| `screenshot` | A PNG. Use `marks=true` to draw `@ids`, `detail="low"` for half size (4× fewer tokens), `region=[x,y,w,h]` with `zoom=true` to magnify, and `grid=true` for a coordinate grid |
+| `act` | A batch of mouse and keyboard actions: `click`, `double_click`, `right_click`, `move`, `drag`, `type`, `paste`, `fill`, `key`, `scroll`, `wait`, `wait_for`, `focus`, and more. It stops at the first failure, waits for the screen to settle, and reports what changed. `observe`: `summary` (default), `changes` (+ the changed UI as text), `see`, `screenshot` or `crop` (only the changed region) |
+| `script` | **Code mode**: Python runs inside the desktop with `click/write/key/scroll/fill/see/elements/cells/wait_for/launch/run`. Loops and data entry take one call, and only what the program prints comes back |
 | `open` | Launches a profile app (`writer`, `calc`, `firefox`, …), a URL, a file or a command, and waits for its window |
 | `run` | A shell command inside the desktop (`sudo` is available). Returns stdout, stderr and the exit code |
 | `files` | `upload` / `download` between this machine and the desktop, and `read` / `write` text files |
@@ -49,10 +50,17 @@ use `uvx --from git+https://github.com/apophisss/minion minion mcp`.
 
 The default target of every tool is the desktop the agent created or used last. Pass `desktop` to pick another.
 
+**Compact mode** (`minion mcp --compact`) exposes a single `computer` tool that takes CLI-style commands
+(`see`, `click @12`, `type 'hi'`, `run ls`, `create office -n 2`). It cuts the tool definitions sent with every
+request from about 2,100 tokens to about 230, and works well for small and local models.
+
 ## Tips for agents (paste into a system prompt if you like)
 
 - **Look with `see` first.** It is exact and usually costs fewer tokens than a screenshot. Click or fill by `@id`.
-  Use a screenshot when the layout, an image or a chart matters.
+  Use a screenshot when the layout, an image or a chart matters. Ids are stable, so after the first look
+  use `see(changes=true)` or `act(..., observe="changes")`, which usually costs a few dozen tokens.
+- **Write a script for anything repetitive.** Twenty rows of data entry or a loop over files belongs in one
+  `script` call, not twenty `act` calls.
 - **Batch actions.** For example,
   `act(actions=[{"action": "fill", "target": "@4", "text": "alice"}, {"action": "click", "target": "Sign in"}])`.
   The reply says what changed (new windows, focus, the changed region), which often makes another `see` unnecessary.

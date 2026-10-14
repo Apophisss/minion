@@ -95,6 +95,9 @@ def install_url(url: str) -> int:
 
 
 def install_pip(pkg: str) -> int:
+    if subprocess.call(["python3", "-c", "import ensurepip"], stderr=subprocess.DEVNULL) != 0:
+        if install_apt(["python3-venv"]) != 0:  # Debian splits venv support into its own package
+            return 1
     venv = HOME / ".local" / "venvs" / re.sub(r"[^A-Za-z0-9_.-]", "_", pkg)
     code = sh(
         f"python3 -m venv {shlex.quote(str(venv))} && {shlex.quote(str(venv))}/bin/pip install -q {shlex.quote(pkg)}"

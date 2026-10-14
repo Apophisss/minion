@@ -37,6 +37,22 @@ that the dashboard sets. Static assets (`/static/*`) are public. JSON in, JSON o
 
 Pages: `/` is the dashboard and `/view/{name}` is the live view.
 
+## Universal tools (any agent, any language)
+
+| Method & path | |
+|---|---|
+| `GET /api/tools?format=openai\|openai-responses\|anthropic\|gemini\|mcp[&compact=1]` | tool definitions ready for that API |
+| `POST /api/tools/call` | `{"name": "see", "arguments": {...}, "session": "agent-7"}` |
+| `POST /api/tools/{name}` | the arguments as the body (one REST endpoint per tool) |
+| `GET /openapi.json` | OpenAPI 3.1 for the tools (public). Import it into GPT Actions, Dify, n8n or OpenAPI toolkits |
+
+Results always look like `{"content": [{"type": "text", "text": "..."}, {"type": "image", "data": "<base64>",
+"mimeType": "image/png"}], "isError": false}`. Each `session` (or `X-Minion-Session` header) keeps its own
+"current desktop", so many agents can share one server.
+
+Mutating requests must carry the Bearer token, a JSON content type or the `X-Minion: 1` header, which stops
+other web pages from forging them. On a loopback bind, only loopback `Host` names are accepted.
+
 ```bash
 T=your-token
 curl -s -H "Authorization: Bearer $T" -X POST localhost:4747/api/desktops -d '{"profile":"browser"}'
