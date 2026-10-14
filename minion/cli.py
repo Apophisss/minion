@@ -604,6 +604,7 @@ def cmd_view(args) -> int:
     url = f"{base}/view/{d.name}?token={token}" if d else f"{base}/?token={token}"
     if not args.json:
         ok(f"live view: {url}")
+        info("  (a background server keeps it available; `minion serve --stop` stops it)")
     if not getattr(args, "no_open", False):
         webbrowser.open(url)
     if not ask:
@@ -622,9 +623,37 @@ def cmd_view(args) -> int:
     return 0 if note is not None else 1
 
 
+def _stop_server() -> int:
+    """Stop the background server that `minion view` (or `view --ask`) started."""
+    import signal
+    import subprocess
+
+    st = config.load_state().get("server") or {}
+    pid = int(st.get("pid") or 0)
+    if not pid:
+        info("No background server is recorded.")
+        return 0
+    try:  # only ever stop a `minion serve`: the state can also point at an MCP server hosting the view
+        cmdline = subprocess.run(["ps", "-o", "command=", "-p", str(pid)], capture_output=True, text=True).stdout
+    except OSError:
+        cmdline = ""
+    if not cmdline.strip():
+        config.update_state(server=None)
+        info(f"The background server (pid {pid}) is not running.")
+        return 0
+    if " serve" not in cmdline:
+        raise MinionError(f"pid {pid} is not a `minion serve` ({cmdline.strip()[:80]}); leaving it alone")
+    os.kill(pid, signal.SIGTERM)
+    config.update_state(server=None)
+    ok(f"stopped the background server (pid {pid})")
+    return 0
+
+
 def cmd_serve(args) -> int:
     from .server import serve
 
+    if getattr(args, "stop", False):
+        return _stop_server()
     serve(
         host=args.host,
         port=args.port,
@@ -761,7 +790,7 @@ minion — instant, featherweight Linux desktops for AI agents.
 First run: minion setup (checks Docker, prepares a desktop, connects your agent apps)
 Start:     minion up [office|dev|research|browser|data|windows|base]    then: minion see · minion view
 Look:      see · shot · windows
-Act:       click · type · key · scroll · drag · fill · open · run · act (batch) · wait-for
+Act:       click · type · key · scroll · drag · fill · select · open · run · act (batch) · wait-for
 Manage:    ls · rm · stop · start · freeze · thaw · fork · snapshot · restore · use · cp · clip
 Connect:   connect (add Minion to Claude, Cursor, VS Code, Codex...) · mcp (the MCP server itself)
            serve (HTTP API + dashboard) · view (live) · share (a URL for ChatGPT, Claude.ai, Le Chat)
@@ -1011,6 +1040,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="freeze desktops idle for this many seconds (0 = never)",
     )
     sp.add_argument("--quiet", "-q", action="store_true")
+    sp.add_argument("--stop", action="store_true", help="stop the background server that `minion view` started")
 
     sp = add("mcp", cmd_mcp, "run the MCP server on stdio (for Claude Code, Claude Desktop, Cursor, ...)")
     sp.add_argument("--preload", help="comma-separated profiles to prepare in the background")
