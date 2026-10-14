@@ -1,0 +1,86 @@
+name = "windows"
+title = "Windows apps"
+icon = "🪟"
+extends = "browser"
+description = "Runs Windows programs (.exe and .msi, 64- and 32-bit) with Wine 10, plus Firefox to download them. The Wine prefix is ready at first launch: no Mono/Gecko prompts and no crash dialogs. x86-64 (amd64) machines only."
+memory = "3g"
+packages = [
+  "file",
+  "unzip",
+  "7zip",
+  "cabextract",
+  "xz-utils",
+]
+setup = [
+  # Wine runs x86 Windows programs natively only on x86-64 hosts.
+  '''[ "$(dpkg --print-architecture)" = amd64 ] || { echo "The windows profile needs an x86-64 (amd64) machine." >&2; exit 1; }''',
+  # Wine 10 from Debian, and winetricks (in contrib). i386 is enabled only to fetch libwine:i386 below.
+  '''sed -i 's/^Components: main$/Components: main contrib/' /etc/apt/sources.list.d/debian.sources && dpkg --add-architecture i386 && apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends wine wine64 libwine fonts-wine winetricks binutils''',
+  # 32-bit programs (most installers are 32-bit) run in Wine's WoW64 mode: wine64 only needs the 32-bit
+  # Windows DLLs, not a 32-bit Linux userland (wine32:i386 would add ~850 MB of i386 libraries).
+  '''cd /tmp && apt-get download "libwine:i386=$(dpkg-query -W -f='${Version}' libwine)" && dpkg-deb -x libwine_*_i386.deb /tmp/libwine32 && cp -a /tmp/libwine32/usr/lib/i386-linux-gnu/wine/i386-windows/. /usr/lib/x86_64-linux-gnu/wine/i386-windows/ && rm -rf /tmp/libwine32 /tmp/libwine_*_i386.deb && dpkg --remove-architecture i386''',
+  # Debian ships Wine's Windows DLLs with debug info, and every prefix copies them: stripping saves ~1.6 GB.
+  '''find /usr/lib/x86_64-linux-gnu/wine/x86_64-windows /usr/lib/x86_64-linux-gnu/wine/i386-windows -type f -print0 | xargs -0 strip --strip-debug 2>/dev/null; true''',
+  # WoW64 mode works without wine32, so drop the wrapper's misleading "wine32 is missing" hint.
+  '''sed -i '/^ *wine32_hint >&2$/d' /usr/bin/wine-stable''',
+  "update-desktop-database /usr/share/applications",
+  # Create the prefix now so the first launch is fast. Mono/Gecko are skipped (no download prompts) and
+  # winemenubuilder is off (installers can't take over xdg-open or add menu entries).
+  "install -d -o agent -g agent /home/agent/Desktop /home/agent/Documents /home/agent/Downloads /home/agent/Pictures",
+  '''cd /home/agent && runuser -u agent -- env HOME=/home/agent USER=agent LOGNAME=agent WINEDEBUG=-all WINEDLLOVERRIDES="mscoree,mshtml=;winemenubuilder.exe=d" xvfb-run -a -s "-screen 0 1280x800x24" sh -c 'wineboot --init && wine regedit /S /usr/local/share/minion/wine-agent.reg && wineserver --wait' </dev/null''',
+  "apt-get clean && rm -rf /var/lib/apt/lists/* /var/cache/debconf/*-old",
+]
+# Notepad stays last: `minion up` suggests `minion open <last app>` as the next step.
+apps = [
+  { name = "Explorer", id = "explorer", command = "wine explorer" },
+  { name = "Registry Editor", id = "regedit", command = "wine regedit" },
+  { name = "Command Prompt", id = "cmd", command = "wineconsole cmd" },
+  { name = "Wine Settings", id = "winecfg", command = "winecfg" },
+  { name = "Notepad", id = "notepad", command = "wine notepad" },
+]
+tips = '''
+Windows programs run with Wine (x86-64 hosts only). Built in: `open notepad`, `open explorer`, `open regedit`, `open cmd`, `open winecfg`.
+Run a downloaded program with `open ~/Downloads/setup.exe` (also .msi), or `open "wine ~/Apps/tool/tool.exe"` for portable apps.
+Silent installs: NSIS `/S`, Inno Setup `/VERYSILENT`, MSI `wine msiexec /i app.msi /qn`. Installed programs land in
+~/.wine/drive_c/Program Files (x86)/ or Program Files/; start one with `open "wine 'C:\Program Files\App\app.exe'"`. C: is ~/.wine/drive_c, Z: is /.
+Wine windows have no accessibility tree: `see` reads them with OCR. Click by text, or by the @id from `see` when a text click misses
+(small dialogs, odd fonts); use a screenshot for icons and toolbars. Keyboard shortcuts (alt+F, ctrl+S) work everywhere.
+In file dialogs press ctrl+a in the File name box and type a full path; Linux paths such as /home/agent/Documents/out.txt work.
+Missing runtimes: `winetricks -q vcrun2022`, `winetricks -q corefonts`. `wineserver -k` closes every Windows program.
+'''
+
+[files]
+"/usr/local/share/minion/wine-agent.reg" = '''
+Windows Registry Editor Version 5.00
+
+; Minion: agent-friendly Wine defaults, imported into ~/.wine when the image is built.
+; Apply them to another prefix with: WINEPREFIX=~/other-prefix wine regedit /S /usr/local/share/minion/wine-agent.reg
+
+; No "Program Error" dialog when a program crashes (the backtrace still goes to the log).
+[HKEY_CURRENT_USER\Software\Wine\WineDbg]
+"ShowCrashDialog"=dword:00000000
+
+; Installers must not create Linux menu entries or take over file types (xdg-open).
+[HKEY_CURRENT_USER\Software\Wine\DllOverrides]
+"winemenubuilder.exe"=""
+
+; No blinking caret: steadier screenshots and change detection.
+[HKEY_CURRENT_USER\Control Panel\Desktop]
+"CursorBlinkRate"="-1"
+
+; Metric-compatible fonts for the classic Windows faces, so text fits where the program expects it.
+[HKEY_CURRENT_USER\Software\Wine\Fonts\Replacements]
+"Arial"="Liberation Sans"
+"Times New Roman"="Liberation Serif"
+"Courier New"="Liberation Mono"
+'''
+"/usr/share/applications/wine.desktop" = '''
+[Desktop Entry]
+Type=Application
+Name=Wine Windows Program Loader
+Exec=wine start /unix %f
+MimeType=application/x-ms-dos-executable;application/x-msdownload;application/vnd.microsoft.portable-executable;application/x-dosexec;application/x-msi;application/x-ms-shortcut;application/x-bat;text/x-msdos-batch;application/x-mswinurl;
+Icon=wine
+NoDisplay=true
+StartupNotify=false
+'''

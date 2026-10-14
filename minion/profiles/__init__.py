@@ -24,7 +24,7 @@ from ..errors import MinionError, NotFound
 
 BUILTIN_DIR = Path(__file__).parent
 NAME_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,30}$")
-BUILTIN_ORDER = ["base", "browser", "office", "dev", "research", "data"]
+BUILTIN_ORDER = ["base", "browser", "office", "dev", "research", "data", "windows"]
 
 
 @dataclass

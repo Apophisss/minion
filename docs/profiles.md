@@ -6,7 +6,8 @@ and each one extends another, so images share layers on disk.
 ```
 base ─┬─ browser ─┬─ office ── data
       │           ├─ dev
-      │           └─ research
+      │           ├─ research
+      │           └─ windows
       └─ (your own)
 ```
 
@@ -20,6 +21,7 @@ base ─┬─ browser ─┬─ office ── data
 | `dev` | lxterminal, Geany, Chromium | git, Python (venv, pip), Node.js + npm, build-essential, jq, ripgrep, sqlite3. Chromium runs with accessibility on |
 | `research` | Mousepad (notes) | poppler-utils (`pdftotext`), pandoc, Python requests, BeautifulSoup and lxml |
 | `data` | everything in `office` + Python | pandas, NumPy, SciPy, matplotlib, seaborn, openpyxl, tkinter, sqlite3 |
+| `windows` | Wine (Notepad, Explorer, Command Prompt, Registry Editor, Wine settings) + Firefox | Runs 64- and 32-bit Windows `.exe`/`.msi` programs on x86-64 hosts. The prefix is ready at first launch (no Mono/Gecko prompts, no crash dialogs, installers can't change file associations). `open setup.exe` runs a program. See [windows-apps.md](windows-apps.md) |
 
 `minion profiles` lists them, and `minion profiles office` shows one in detail.
 

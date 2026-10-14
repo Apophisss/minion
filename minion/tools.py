@@ -426,6 +426,15 @@ def _image(data_b64: str, mime: str = "image/png") -> dict:
     return {"type": "image", "data": data_b64, "mimeType": mime}
 
 
+def _split_words(text: str) -> list[str]:
+    """Split like a shell (quotes group words) but keep backslashes: Windows paths survive."""
+    lex = shlex.shlex(text, posix=True)
+    lex.whitespace_split = True
+    lex.commenters = ""
+    lex.escape = ""
+    return list(lex)
+
+
 def _get(obj, key: str):
     """A field from an SDK object or a plain dict (None when missing)."""
     if obj is None:
@@ -930,7 +939,7 @@ class Toolkit:
         verb = verb.lower()
         rest = rest.strip()
         try:
-            words = shlex.split(rest)
+            words = _split_words(rest)
         except ValueError:
             words = rest.split()
         flags = {w for w in words if w.startswith("--")}

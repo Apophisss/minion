@@ -375,24 +375,36 @@ class Perception:
                         continue
                     found.append((best, Target(cx, cy, f'{el.role} "{el.label()}" ({cx},{cy})', el)))
         if not found and use_ocr and ocr_mod.available():
-            img = self.screen.grab()
-            for ln in ocr_mod.recognize(img):
-                score = match_score(query, ln.text)
-                if score > 0:
-                    cx, cy = ln.center
-                    # Narrow to the matching words inside a longer line.
-                    qn = _norm(query).split()
-                    words = ln.words
-                    for i in range(len(words)):
-                        seg = words[i : i + len(qn)]
-                        if seg and _norm(" ".join(w.text for w in seg)) == " ".join(qn):
-                            x0, y0 = seg[0].x, min(w.y for w in seg)
-                            x1 = seg[-1].x + seg[-1].w
-                            y1 = max(w.y + w.h for w in seg)
-                            cx, cy = (x0 + x1) // 2, (y0 + y1) // 2
-                            score = max(score, 90)
-                            break
-                    found.append((score, Target(cx, cy, f'text "{ln.text}" ({cx},{cy}) via OCR', ln)))
+            # The focused window first, as `see` reads it: OCR of the whole screen inverts mostly-dark
+            # screens, which loses the text of a small light dialog in front of the dark wallpaper.
+            regions = []
+            focused = self.windows.focused()
+            if focused and not focused.minimized:
+                x0, y0 = max(0, focused.x), max(0, focused.y)
+                x1, y1 = min(sw, focused.x + focused.w), min(sh, focused.y + focused.h)
+                if x1 > x0 and y1 > y0 and (x0, y0, x1, y1) != (0, 0, sw, sh):
+                    regions.append((x0, y0, x1 - x0, y1 - y0))
+            regions.append((0, 0, sw, sh))
+            qn = _norm(query).split()
+            for region in regions:
+                for ln in ocr_mod.recognize(self.screen.grab(region), offset=region[:2]):
+                    score = match_score(query, ln.text)
+                    if score > 0:
+                        cx, cy = ln.center
+                        # Narrow to the matching words inside a longer line.
+                        words = ln.words
+                        for i in range(len(words)):
+                            seg = words[i : i + len(qn)]
+                            if seg and _norm(" ".join(w.text for w in seg)) == " ".join(qn):
+                                x0, y0 = seg[0].x, min(w.y for w in seg)
+                                x1 = seg[-1].x + seg[-1].w
+                                y1 = max(w.y + w.h for w in seg)
+                                cx, cy = (x0 + x1) // 2, (y0 + y1) // 2
+                                score = max(score, 90)
+                                break
+                        found.append((score, Target(cx, cy, f'text "{ln.text}" ({cx},{cy}) via OCR', ln)))
+                if found:
+                    break
         found.sort(key=lambda t: -t[0])
         return found
 

@@ -63,6 +63,7 @@ import asyncio
 from agents import Agent, Runner
 from agents.mcp import MCPServerStdio
 
+
 async def main():
     async with MCPServerStdio(
         name="minion",
@@ -70,11 +71,16 @@ async def main():
         client_session_timeout_seconds=900,  # default: 5 s
         cache_tools_list=True,
     ) as minion:
-        agent = Agent(name="Desktop agent", instructions="Use Minion's desktops. Read screens with see().",
-                      model="gpt-5", mcp_servers=[minion])
+        agent = Agent(
+            name="Desktop agent",
+            instructions="Use Minion's desktops. Read screens with see().",
+            model="gpt-5",
+            mcp_servers=[minion],
+        )
         task = "Open example.com and tell me its heading."
         result = await Runner.run(agent, task, max_turns=50)  # default: 10 turns
         print(result.final_output)
+
 
 asyncio.run(main())
 ```
@@ -90,9 +96,8 @@ from langchain.agents import create_agent
 from langchain_mcp_adapters.client import MultiServerMCPClient
 from langchain_mcp_adapters.tools import load_mcp_tools
 
-client = MultiServerMCPClient(
-    {"minion": {"transport": "stdio", "command": "uvx", "args": ["minion-desktop", "mcp"]}}
-)
+client = MultiServerMCPClient({"minion": {"transport": "stdio", "command": "uvx", "args": ["minion-desktop", "mcp"]}})
+
 
 async def main():
     async with client.session("minion") as session:  # one Minion server for the whole run
@@ -101,6 +106,7 @@ async def main():
         task = {"role": "user", "content": "Open example.com and tell me its heading."}
         result = await agent.ainvoke({"messages": [task]})
         print(result["messages"][-1].content)
+
 
 asyncio.run(main())
 ```
@@ -117,15 +123,18 @@ from llama_index.tools.mcp import McpToolSpec
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
+
 async def main():
     server = StdioServerParameters(command="uvx", args=["minion-desktop", "mcp"])
     async with stdio_client(server) as (read, write), ClientSession(read, write) as session:
         await session.initialize()
         tools = await McpToolSpec(client=session).to_tool_list_async()
         tools = [t for t in tools if t.metadata.name != "screenshot"]  # see below
-        agent = FunctionAgent(tools=tools, llm=OpenAI(model="gpt-5"),
-                              system_prompt="Use Minion's desktops. Read screens with see().")
+        agent = FunctionAgent(
+            tools=tools, llm=OpenAI(model="gpt-5"), system_prompt="Use Minion's desktops. Read screens with see()."
+        )
         print(await agent.run("Open example.com and tell me its heading.", max_iterations=50))  # default: 20
+
 
 asyncio.run(main())
 ```
@@ -145,11 +154,14 @@ from mcp import StdioServerParameters
 
 server = StdioServerParameters(command="uvx", args=["minion-desktop", "mcp"])
 with MCPServerAdapter(server, connect_timeout=60) as tools:
-    agent = Agent(role="Desktop operator", goal="Get things done on a Linux desktop",
-                  backstory="You use Minion desktops: see() reads the screen, act() clicks and types.",
-                  tools=tools, llm="gpt-5")
-    task = Task(description="Open example.com and tell me its heading.", expected_output="The heading",
-                agent=agent)
+    agent = Agent(
+        role="Desktop operator",
+        goal="Get things done on a Linux desktop",
+        backstory="You use Minion desktops: see() reads the screen, act() clicks and types.",
+        tools=tools,
+        llm="gpt-5",
+    )
+    task = Task(description="Open example.com and tell me its heading.", expected_output="The heading", agent=agent)
     print(Crew(agents=[agent], tasks=[task]).kickoff())
 ```
 
@@ -188,10 +200,12 @@ minion = MCPToolset(
 )
 agent = Agent("openai:gpt-5", toolsets=[minion])
 
+
 async def main():
     async with agent:  # starts Minion's server once for all runs
         result = await agent.run("Open example.com and tell me its heading.")
         print(result.output)
+
 
 asyncio.run(main())
 ```
@@ -210,13 +224,15 @@ root_agent = LlmAgent(
     model="gemini-3.5-flash",
     name="desktop_agent",
     instruction="Use Minion's desktops. Read screens with see().",
-    tools=[McpToolset(
-        connection_params=StdioConnectionParams(
-            server_params=StdioServerParameters(command="uvx", args=["minion-desktop", "mcp"]),
-            timeout=900,  # also the per-call read timeout (default: 5 s)
-        ),
-        tool_filter=lambda tool, ctx=None: tool.name != "screenshot",  # see below
-    )],
+    tools=[
+        McpToolset(
+            connection_params=StdioConnectionParams(
+                server_params=StdioServerParameters(command="uvx", args=["minion-desktop", "mcp"]),
+                timeout=900,  # also the per-call read timeout (default: 5 s)
+            ),
+            tool_filter=lambda tool, ctx=None: tool.name != "screenshot",  # see below
+        )
+    ],
 )
 ```
 
@@ -233,14 +249,19 @@ from autogen_agentchat.ui import Console
 from autogen_ext.models.openai import OpenAIChatCompletionClient
 from autogen_ext.tools.mcp import McpWorkbench, StdioServerParams
 
+
 async def main():
-    params = StdioServerParams(command="uvx", args=["minion-desktop", "mcp"],
-                               read_timeout_seconds=900)  # default: 5 s
+    params = StdioServerParams(command="uvx", args=["minion-desktop", "mcp"], read_timeout_seconds=900)  # default: 5 s
     async with McpWorkbench(params) as minion:
-        agent = AssistantAgent("desktop_agent", model_client=OpenAIChatCompletionClient(model="gpt-5"),
-                               workbench=minion, max_tool_iterations=50,  # default: 1
-                               system_message="Use Minion's desktops. Read screens with see(), not screenshot.")
+        agent = AssistantAgent(
+            "desktop_agent",
+            model_client=OpenAIChatCompletionClient(model="gpt-5"),
+            workbench=minion,
+            max_tool_iterations=50,  # default: 1
+            system_message="Use Minion's desktops. Read screens with see(), not screenshot.",
+        )
         await Console(agent.run_stream(task="Open example.com and tell me its heading."))
+
 
 asyncio.run(main())
 ```
@@ -292,10 +313,10 @@ Without an MCP client, use `minion.tools`. It exports the same tools in each mod
 from minion.tools import INSTRUCTIONS, Toolkit
 
 tk = Toolkit()
-tools = tk.definitions("openai")          # or "openai-responses", "anthropic", "gemini", "mcp"
+tools = tk.definitions("openai")  # or "openai-responses", "anthropic", "gemini", "mcp"
 # give `tools` (and INSTRUCTIONS as the system prompt) to your model; when it calls tools:
 messages += tk.run_calls(msg.tool_calls)  # runs them and returns the reply messages in that API's shape
-result = tk.call(name, arguments)         # or one call at a time: ToolResult(.text, .images, .is_error)
+result = tk.call(name, arguments)  # or one call at a time: ToolResult(.text, .images, .is_error)
 ```
 
 Complete loops for OpenAI, Anthropic and Gemini are in [agents.md](agents.md#without-mcp-function-calling-with-any-model).

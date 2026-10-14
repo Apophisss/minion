@@ -69,7 +69,7 @@ pipx install minion-desktop          # or: uv tool install minion-desktop / pip 
 minion doctor                        # checks your setup
 ```
 
-The first desktop of each profile downloads its image (188–700 MB, shared layers): `minion pull office research`.
+The first desktop of each profile downloads its image (188–710 MB, shared layers): `minion pull office research`.
 
 **2. Connect your agent.** With MCP:
 
@@ -134,8 +134,8 @@ minion cp :~/Documents/notes.md .       # copy files out (and in)
 | Python / TypeScript code | `from minion import Desktop` ([docs](docs/python.md)) · [`clients/typescript`](clients/typescript) |
 | Native computer-use models | Claude toolset ([docs](docs/computer-use.md)) · OpenAI and Gemini computer use ([docs](docs/computer-use-openai-gemini.md)) |
 
-A complete agent with **any** OpenAI-compatible model in about a dozen lines (`"anthropic"`, `"gemini"` and
-`"openai-responses"` work the same way):
+A complete agent with **any** OpenAI-compatible model (`"anthropic"`, `"gemini"` and `"openai-responses"` work
+the same way):
 
 ```python
 from openai import OpenAI
@@ -145,8 +145,11 @@ tk = Toolkit()
 client = OpenAI()  # or OpenAI(base_url="http://localhost:11434/v1", api_key="ollama") for a local model
 messages = [{"role": "user", "content": "On a research desktop, find the population of Iceland on Wikipedia."}]
 while True:
-    msg = client.chat.completions.create(model="YOUR-MODEL", messages=messages,
-                                         tools=tk.definitions("openai")).choices[0].message
+    msg = (
+        client.chat.completions.create(model="YOUR-MODEL", messages=messages, tools=tk.definitions("openai"))
+        .choices[0]
+        .message
+    )
     messages.append(msg)
     if not msg.tool_calls:
         break
@@ -161,12 +164,12 @@ from minion import Desktop
 
 with Desktop.create("office", keep=False) as desk:  # removed when the block ends
     desk.open("calc")
-    result = desk.script('''
+    result = desk.script("""
 for item, price in [("Coffee", 3.5), ("Bagel", 2.25), ("Juice", 4)]:
     write(f"{item}\\t{price}\\n")             # Tab moves right, Return goes down
 write("Total\\t=SUM(B1:B3)\\n")
 print(cells()["B4"])                          # visible cells as {"A1": ...}
-''')
+""")
     print(result.stdout)  # 9.75
     desk.key("ctrl+s")
     desk.fill("Name", "q3.xlsx")
@@ -193,7 +196,9 @@ from minion.integrations.anthropic import MinionComputer, allow_all
 desk = Desktop.create("office")
 with MinionComputer(desk, confirm=allow_all) as computer:  # the desktop is the sandbox
     runner = anthropic.Anthropic().beta.messages.tool_runner(
-        model="claude-opus-5-5", max_tokens=16000, tools=[computer],
+        model="claude-opus-5-5",
+        max_tokens=16000,
+        tools=[computer],
         messages=[{"role": "user", "content": "Make a 3-slide deck about otters in Impress."}],
     )
     for message in runner:
@@ -213,7 +218,7 @@ Claude's `computer_toolset_20260801` (all 17 actions) and the earlier `computer_
 | 🛠️ `dev` | git, Python, Node.js, build tools, Geany IDE, a real terminal (readable by `see`), Firefox + Chromium | 703 MB | ~55 MB |
 | 🔎 `research` | Firefox + `pdftotext`, `pandoc`, a notes editor, Python with requests and BeautifulSoup | 410 MB | ~55 MB |
 | 📊 `data` | `office` + pandas, NumPy, SciPy, matplotlib, seaborn, openpyxl, SQLite | 662 MB | ~105 MB |
-| 🪟 `windows` | Wine for Windows `.exe` programs, plus Firefox to download them ([docs](docs/windows-apps.md)) | see docs | see docs |
+| 🪟 `windows` | Wine 10 for 64- and 32-bit Windows `.exe`/`.msi` programs, plus Firefox to download them. x86-64 hosts ([docs](docs/windows-apps.md)) | 707 MB | ~56 MB (~270 MB with a program open) |
 | 🧩 `base` | X server, window manager, terminal and the agent. The foundation to build on | 188 MB | ~65 MB |
 
 **Your own profile** is a 5-line TOML file in `~/.config/minion/profiles/`. It is built automatically the first time you use it:

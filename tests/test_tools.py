@@ -108,6 +108,8 @@ def test_computer_command_parsing(tk):
     assert calls[5] == ("run", {"command": "ls -la | head"})
     assert calls[6][1]["changes"] is True
     assert calls[7][1]["actions"][0] == {"action": "fill", "target": "@4", "text": "Ada Lovelace"}
+    tk.call("computer", {"command": r"type C:\Users\agent"})
+    assert calls[-1][1]["actions"][0]["text"] == r"C:\Users\agent"
     assert tk.call("computer", {"command": "dance"}).is_error
 
 

@@ -58,3 +58,20 @@ def test_explicit_nulls_mean_defaults():
     )
     assert parse_step({"click": "@3", "key": None, "target": None}) == ("click", parse_step("click @3")[1])
     assert parse_step({"action": None, "type": "hi"})[0] == "type"
+
+
+def test_backslashes_survive_in_string_steps():
+    # Windows paths (Wine programs, file dialogs) must not lose their backslashes.
+    assert parse_step(r"type C:\Users\agent")[1]["text"] == r"C:\Users\agent"
+    assert parse_step(r"type 'C:\Program Files\App'")[1]["text"] == r"C:\Program Files\App"
+    assert parse_step(r'fill @4 "D:\data\q3.xlsx"')[1]["text"] == r"D:\data\q3.xlsx"
+    assert parse_step("type #1 in the queue")[1]["text"] == "#1 in the queue"  # no shell comments
+
+
+def test_window_app_names():
+    from minion.agent.windows import app_name
+
+    assert app_name("notepad.exe.notepad.exe") == "notepad"  # Wine
+    assert app_name("Navigator.firefox-esr") == "firefox-esr"
+    assert app_name("libreoffice.libreoffice-writer") == "libreoffice-writer"
+    assert app_name("geany") == "geany"

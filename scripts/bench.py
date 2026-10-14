@@ -21,6 +21,7 @@ MAIN_APP = {
     "research": "https://arxiv.org/list/cs.AI/recent",
     "data": "calc",
     "base": "terminal",
+    "windows": "notepad",
 }
 
 

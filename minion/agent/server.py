@@ -189,10 +189,20 @@ MAIN_PARAM = {
 }
 
 
+def split_words(text: str) -> list[str]:
+    """Split like a shell (quotes group words) but keep backslashes, so `type C:\\Users\\agent` types a
+    Windows path instead of `C:Usersagent`."""
+    lex = shlex.shlex(text, posix=True)
+    lex.whitespace_split = True
+    lex.commenters = ""
+    lex.escape = ""
+    return list(lex)
+
+
 def parse_step(step) -> tuple[str, dict]:
     """Normalize one action from any of the accepted shapes into (action, params)."""
     if isinstance(step, str):
-        parts = shlex.split(step)
+        parts = split_words(step)
         if not parts:
             raise RpcError("empty action")
         verb, args = parts[0].lower(), parts[1:]
@@ -881,7 +891,7 @@ class Agent:
         if ext in self.OFFICE_EXT and shutil.which("libreoffice"):
             return f"libreoffice {q}"
         if ext in self.WINE_EXT and shutil.which("wine"):  # Windows programs (the `windows` profile)
-            return f"wine msiexec /i {q}" if ext == ".msi" else f"wine start /unix {q}"
+            return f"wine start /unix {q}"  # .msi included: start hands it to msiexec
         if ext in self.WEB_EXT and self._browser() != "xdg-open":
             return f"{self._browser()} {q}"
         if ext in self.TEXT_EXT:

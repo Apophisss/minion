@@ -6,7 +6,7 @@ from minion.errors import MinionError, NotFound
 
 def test_builtins_load_and_inherit():
     reg = profiles.load_all()
-    for name in ("base", "browser", "office", "dev", "research", "data"):
+    for name in ("base", "browser", "office", "dev", "research", "data", "windows"):
         assert name in reg
         assert reg[name].builtin
     office = reg["office"]

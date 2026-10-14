@@ -8,6 +8,14 @@ import subprocess
 from dataclasses import asdict, dataclass, field
 
 
+def app_name(wmclass: str) -> str:
+    """The app from wmctrl's "instance.Class" column. Wine's is "notepad.exe.notepad.exe": "notepad"."""
+    segments = wmclass.split(".")
+    if len(segments) >= 2 and segments[-1].lower() == "exe":
+        return segments[-2]
+    return segments[-1]
+
+
 @dataclass
 class Window:
     id: str  # hex X window id, e.g. "0x01a00003"
@@ -112,7 +120,7 @@ class Windows:
                 wid_norm = f"0x{int(wid, 16):08x}"
             except ValueError:
                 continue
-            app = wmclass.split(".")[-1] if "." in wmclass else wmclass
+            app = app_name(wmclass)
             win = Window(
                 id=wid_norm,
                 title=title.strip(),

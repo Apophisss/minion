@@ -36,7 +36,7 @@ dependencies = []  # zero dependencies: the host side is pure standard library
 
 [project.optional-dependencies]
 anthropic = ["anthropic>=1.0"]
-dev = ["pytest>=8", "ruff>=0.6", "pillow>=10"]  # Pillow: to test the in-desktop agent code
+dev = ["pytest>=8", "ruff==0.17.0", "pillow>=10"]  # Pillow: to test the in-desktop agent code
 
 [project.scripts]
 minion = "minion.cli:entry"

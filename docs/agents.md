@@ -91,10 +91,16 @@ from openai import OpenAI
 from minion.tools import INSTRUCTIONS, Toolkit
 
 tk, client = Toolkit(), OpenAI()
-messages = [{"role": "system", "content": INSTRUCTIONS}, {"role": "user", "content": "Book-keep these receipts in Calc: ..."}]
+messages = [
+    {"role": "system", "content": INSTRUCTIONS},
+    {"role": "user", "content": "Book-keep these receipts in Calc: ..."},
+]
 while True:
-    msg = client.chat.completions.create(model="YOUR-MODEL", messages=messages,
-                                         tools=tk.definitions("openai")).choices[0].message
+    msg = (
+        client.chat.completions.create(model="YOUR-MODEL", messages=messages, tools=tk.definitions("openai"))
+        .choices[0]
+        .message
+    )
     messages.append(msg)
     if not msg.tool_calls:
         break
@@ -110,9 +116,14 @@ from minion.tools import INSTRUCTIONS, Toolkit
 tk, client = Toolkit(), anthropic.Anthropic()
 messages = [{"role": "user", "content": "Make a 3-slide deck about otters in Impress."}]
 while True:
-    reply = client.messages.create(model="claude-opus-5-5", max_tokens=16000, system=INSTRUCTIONS,
-                                   thinking={"type": "adaptive"}, tools=tk.definitions("anthropic"),
-                                   messages=messages)
+    reply = client.messages.create(
+        model="claude-opus-5-5",
+        max_tokens=16000,
+        system=INSTRUCTIONS,
+        thinking={"type": "adaptive"},
+        tools=tk.definitions("anthropic"),
+        messages=messages,
+    )
     messages.append({"role": "assistant", "content": reply.content})
     if reply.stop_reason != "tool_use":
         break
@@ -127,8 +138,9 @@ from google.genai import types
 from minion.tools import INSTRUCTIONS, Toolkit
 
 tk, client = Toolkit(), genai.Client()
-config = types.GenerateContentConfig(system_instruction=INSTRUCTIONS,
-                                     tools=[types.Tool(function_declarations=tk.definitions("gemini"))])
+config = types.GenerateContentConfig(
+    system_instruction=INSTRUCTIONS, tools=[types.Tool(function_declarations=tk.definitions("gemini"))]
+)
 contents = [types.Content(role="user", parts=[types.Part(text="Find three papers on RLHF and save the PDFs.")])]
 while True:
     response = client.models.generate_content(model="YOUR-GEMINI-MODEL", contents=contents, config=config)

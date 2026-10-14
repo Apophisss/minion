@@ -2,7 +2,8 @@
 
 **Does it work on macOS and Windows?**
 Yes, with Docker Desktop (or OrbStack, Colima, Podman). Desktops are Linux containers, and the `minion` command is
-pure Python. Images are published for `amd64` and `arm64`, so Apple Silicon runs them natively.
+pure Python. Images are published for `amd64` and `arm64`, so Apple Silicon runs them natively. The exception is
+`windows`, which is `amd64` only, because Wine runs x86 programs only on x86-64.
 
 **Do I need Docker?**
 On Linux, no: `MINION_BACKEND=local` runs desktops as native Xvfb sessions using the apps installed on the host

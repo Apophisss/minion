@@ -66,14 +66,14 @@ image of just the changed region (`res.crop`).
 ## Code mode
 
 ```python
-result = desk.script('''
+result = desk.script("""
 launch("calc")
 for item, price in [("Coffee", 3.5), ("Bagel", 2.25)]:
     write(f"{item}\\t{price}\\n")
 write("Total\\t=SUM(B1:B2)\\n")
 print(cells()["B3"])
-''')
-print(result.stdout)   # 5.75
+""")
+print(result.stdout)  # 5.75
 ```
 
 The script runs inside the desktop with the API in `minion/agent/client.py` preloaded. Calls cost no model
@@ -82,7 +82,7 @@ round trips, and only what it prints comes back.
 ## Many desktops
 
 ```python
-desks = Desktop.create_many("research", 4)     # in parallel, image prepared once
+desks = Desktop.create_many("research", 4)  # in parallel, image prepared once
 ```
 
 ## Apps, shell and files
