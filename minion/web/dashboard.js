@@ -31,7 +31,7 @@ function card(d) {
   const el = document.createElement("div");
   el.className = "card"; el.dataset.name = d.name;
   el.innerHTML = `
-    <div class="thumb" title="Open live view"><img alt=""><div class="overlay"></div></div>
+    <div class="thumb" title="Open live view"><img alt=""><div class="overlay">Loading…</div></div>
     <div class="body">
       <div class="row"><span class="name"></span><span class="badge"></span><span class="spacer"></span><span class="meta mem"></span></div>
       <div class="meta info"></div>
@@ -67,8 +67,10 @@ function update(el, d) {
     try { await api(`/api/desktops/${d.name}/${op}`, { method: "POST", body: "{}" }); refresh(); }
     catch (e) { toast(e.message); }
   };
-  el.querySelector(".overlay").textContent = d.state === "running" ? "" : d.state === "paused" ? "❄ frozen — 0% CPU" : d.state;
-  el.querySelector(".overlay").style.display = d.state === "running" ? "none" : "grid";
+  const loaded = (thumbs.get(d.name) || {}).loaded;
+  const ov = el.querySelector(".overlay");
+  ov.textContent = d.state === "running" ? (loaded ? "" : "Loading…") : d.state === "paused" ? "❄ frozen — 0% CPU" : d.state;
+  ov.style.display = d.state === "running" && loaded ? "none" : "grid";
 }
 
 async function pollThumb(name) {
@@ -82,6 +84,7 @@ async function pollThumb(name) {
       const url = URL.createObjectURL(await r.blob());
       const img = st.el.querySelector("img");
       const old = img.src; img.src = url; if (old.startsWith("blob:")) URL.revokeObjectURL(old);
+      st.loaded = true; update(st.el, st.info);
     } else if (r.status === 204) st.key = r.headers.get("X-Frame-Key") || st.key;
   } catch (_) {}
   st.busy = false;
@@ -95,7 +98,7 @@ async function refresh() {
     seen.add(d.name);
     let st = thumbs.get(d.name);
     if (!st) { st = { el: card(d), key: "" }; thumbs.set(d.name, st); grid.insertBefore(st.el, $("#new-card")); }
-    st.state = d.state; update(st.el, d);
+    st.state = d.state; st.info = d; update(st.el, d);
   }
   for (const [name, st] of thumbs) if (!seen.has(name)) { st.el.remove(); thumbs.delete(name); }
   const running = desks.filter((d) => d.state === "running").length;

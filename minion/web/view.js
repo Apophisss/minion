@@ -18,17 +18,28 @@ function setStatus(kind, text) {
 }
 
 // -- frames -------------------------------------------------------------------
+let shownW = 1280;
+function fit() {
+  const stage = document.querySelector(".stage").getBoundingClientRect();
+  const aspect = screenW / screenH;
+  const w = Math.max(320, Math.min(stage.width - 24, (stage.height - 24) * aspect));
+  shownW = w;
+  img.style.width = `${Math.round(w)}px`;
+  img.style.height = `${Math.round(w / aspect)}px`;
+}
+window.addEventListener("resize", fit);
+
 async function frames() {
   while (alive) {
     if (state !== "running") { await sleep(1000); continue; }
     try {
-      const w = Math.min(2560, Math.round(screenEl.clientWidth * (window.devicePixelRatio || 1)) || 1600);
-      const r = await fetch(`${BASE}/frame?since=${encodeURIComponent(key)}&wait=1500&max_width=${Math.max(640, w)}`,
+      const w = Math.min(2560, Math.max(640, Math.round(shownW * (window.devicePixelRatio || 1))));
+      const r = await fetch(`${BASE}/frame?since=${encodeURIComponent(key)}&wait=1500&max_width=${w}`,
         { credentials: "same-origin" });
       if (r.status === 200) {
         key = r.headers.get("X-Frame-Key") || "";
         const s = (r.headers.get("X-Screen") || "").split("x").map(Number);
-        if (s.length === 2 && s[0]) [screenW, screenH] = s;
+        if (s.length === 2 && s[0] && (s[0] !== screenW || s[1] !== screenH || !img.style.width)) { [screenW, screenH] = s; fit(); }
         const url = URL.createObjectURL(await r.blob());
         const old = img.src; img.src = url;
         if (old.startsWith("blob:")) setTimeout(() => URL.revokeObjectURL(old), 1000);

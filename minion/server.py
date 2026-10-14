@@ -327,9 +327,10 @@ class Handler(BaseHTTPRequestHandler):
         return self._error(400, "no hand-off pending")
 
 
-def _free_port(host: str, preferred: int) -> int:
-    for port in (preferred, 0):
+def _free_port(host: str, preferred: int, fallback: bool = True) -> int:
+    for port in (preferred, 0) if fallback else (preferred,):
         s = socket.socket()
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         try:
             s.bind((host, port))
             return s.getsockname()[1]
@@ -337,15 +338,15 @@ def _free_port(host: str, preferred: int) -> int:
             continue
         finally:
             s.close()
-    raise MinionError("no free port for the live view server")
+    raise MinionError(f"port {preferred} is already in use (choose another with --port)")
 
 
 def make_server(
-    host: str = "127.0.0.1", port: int = 4747, token: str | None = "", quiet: bool = False
+    host: str = "127.0.0.1", port: int = 4747, token: str | None = "", quiet: bool = False, fallback: bool = True
 ) -> tuple[ThreadingHTTPServer, str, str | None]:
     if token == "":
         token = secrets.token_urlsafe(16)
-    port = _free_port(host, port)
+    port = _free_port(host, port, fallback)
     handler = type("MinionHandler", (Handler,), {"token": token, "quiet": quiet})
     httpd = ThreadingHTTPServer((host, port), handler)
     httpd.daemon_threads = True
@@ -361,7 +362,7 @@ def serve(
     quiet: bool = False,
     record_state: bool = True,
 ) -> None:
-    httpd, base, token = make_server(host, port, token, quiet)
+    httpd, base, token = make_server(host, port, token, quiet, fallback=False)
     if record_state:
         config.update_state(server={"url": base, "token": token, "pid": os.getpid()})
     if idle_freeze and idle_freeze > 0:
