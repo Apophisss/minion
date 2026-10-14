@@ -56,7 +56,9 @@ The TypeScript client ([`clients/typescript`](../clients/typescript)) wraps thes
 `toVercelAiTools()` for the Vercel AI SDK.
 
 Mutating requests must carry the Bearer token, a JSON content type or the `X-Minion: 1` header, which stops
-other web pages from forging them. On a loopback bind, only loopback `Host` names are accepted.
+other web pages from forging them. On a loopback bind, only loopback `Host` names are accepted, plus the
+names in `MINION_ALLOWED_HOSTS` (comma-separated, e.g. your reverse proxy's domain; once set, the check
+applies on any bind).
 
 ```bash
 T=your-token
@@ -66,3 +68,55 @@ curl -s -H "Authorization: Bearer $T" localhost:4747/api/desktops/browser-1/see 
 curl -s -H "Authorization: Bearer $T" -X POST localhost:4747/api/desktops/browser-1/act \
      -d '{"actions":[{"action":"click","target":"More information..."}]}' | jq -r .summary
 ```
+
+## Remote MCP (`/mcp`)
+
+`minion serve` (and [`minion share`](remote.md), which puts it on a public HTTPS URL) also speaks the Model
+Context Protocol over [Streamable HTTP](https://modelcontextprotocol.io/specification/2025-11-25/basic/transports#streamable-http)
+at `/mcp`: the same tools as `minion mcp`, for clients that connect by URL (ChatGPT, Claude.ai, Le Chat,
+Cursor, VS Code, the MCP SDKs). Setup for each app: [remote.md](remote.md).
+
+| | |
+|---|---|
+| Endpoint | `POST /mcp` (the path's case doesn't matter) |
+| Auth | the token, as `?token=` in the URL (for chat apps that only take a URL) or `Authorization: Bearer`. The dashboard cookie doesn't count |
+| Options | `?compact=1`: the single `computer` tool. `?images=0`: text only (no `screenshot` tool, images left out) |
+| Protocol versions | `2025-11-25`, `2025-06-18`, `2025-03-26` (and `2024-11-05` in `initialize`) |
+| Sessions | `initialize` returns an `Mcp-Session-Id` header; send it on every later request. Each session has its own toolkit, so its own "current desktop". `DELETE /mcp` with the header ends the session (`204`) |
+| Responses | `tools/call` streams `text/event-stream` when the client accepts it: progress notifications (if the request has a `progressToken`), an SSE comment every 10 s while the tool works, then the result. Everything else is `application/json`. Notifications and responses get `202` with no body |
+
+Errors are HTTP statuses with a JSON-RPC error (`id: null`) in the body: `400` for a missing
+`Mcp-Session-Id`, an unsupported `MCP-Protocol-Version`, invalid JSON or a JSON-RPC batch (batches were
+removed in 2025-06-18), `401` without the token (with `WWW-Authenticate: Bearer`), `403` for a refused
+`Origin` or `Host`, `404` for an unknown or ended session (the client then initializes again), `405` for
+`GET` (there is no server-initiated stream), `415` for a body that isn't `application/json`. Sessions idle
+for 24 hours end, and so do the least recently used ones beyond 100.
+
+The stateless revision `2026-07-28` isn't served yet. Clients that support it probe with a `2026-07-28`
+request first; the `400` they get makes them fall back to `initialize`, as that spec's
+backward-compatibility rules require (verified with the official Python SDK's `auto` mode).
+
+**Origin.** The MCP spec asks servers to validate `Origin` against DNS rebinding. Clients that run on servers
+(ChatGPT, Cursor, VS Code, the SDKs) send none, but claude.ai's backend sends `Origin: https://claude.ai`, so
+the header alone proves nothing. On a public name (a tunnel's hostname or one in `MINION_ALLOWED_HOSTS`),
+anyone with the token can call the URL directly, so every `Origin` is accepted and the `Host` check is what
+stops rebinding pages. On a loopback name, `/mcp` accepts an `Origin` only from local pages
+(`localhost`, `127.0.0.1`), from the chat apps' own origins (claude.ai, chatgpt.com, chat.mistral.ai, for
+reverse proxies that rewrite `Host`), and from `MINION_ALLOWED_ORIGINS` (comma-separated); any other page
+gets `403`.
+
+```bash
+T=your-token; U="http://127.0.0.1:4747/mcp?token=$T"
+H=(-H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream')
+curl -si "$U" "${H[@]}" -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"curl","version":"1"}}}' | grep -i mcp-session-id
+S=…   # the Mcp-Session-Id value
+curl -s "$U" "${H[@]}" -H "Mcp-Session-Id: $S" -d '{"jsonrpc":"2.0","method":"notifications/initialized"}'   # 202
+curl -s "$U" "${H[@]}" -H "Mcp-Session-Id: $S" -d '{"jsonrpc":"2.0","id":2,"method":"tools/list"}' | jq '[.result.tools[].name]'
+curl -s "$U" "${H[@]}" -H "Mcp-Session-Id: $S" \
+     -d '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"desktop","arguments":{"action":"list"}}}'
+# event: message
+# data: {"jsonrpc":"2.0","id":3,"result":{"content":[{"type":"text","text":"Desktops:\n- …"}],"isError":false}}
+```
+
+In `minion share`, `files` `upload`/`download` are off unless you pass `--files`, and waits inside a tool
+call (desktop creation, hand-offs) stop at 45 s so that chat apps get an answer before they give up.

@@ -89,7 +89,9 @@ def test_tool_errors_are_reported_not_raised(monkeypatch):
     )
     by_id = {r["id"]: r for r in replies}
     assert by_id[1]["result"]["isError"] and "No desktop yet" in by_id[1]["result"]["content"][0]["text"]
-    assert by_id[2]["result"]["isError"]
+    # an unknown tool is a protocol error (MCP spec), listing the tools this server offers
+    assert by_id[2]["error"]["code"] == -32602 and "Unknown tool: bogus" in by_id[2]["error"]["message"]
+    assert "see" in by_id[2]["error"]["message"] and "computer" not in by_id[2]["error"]["message"]
     assert not by_id[3]["result"]["isError"] and "No desktops" in by_id[3]["result"]["content"][0]["text"]
 
 
@@ -119,9 +121,24 @@ def test_malformed_messages_do_not_kill_the_server(monkeypatch):
 
 
 def test_text_only_server(monkeypatch):
-    replies = run_session(monkeypatch, [{"jsonrpc": "2.0", "id": 1, "method": "tools/list"}], images=False)
-    names = [t["name"] for t in replies[0]["result"]["tools"]]
+    init = {"jsonrpc": "2.0", "id": 2, "method": "initialize", "params": {"protocolVersion": "2025-06-18"}}
+    bogus = {"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {"name": "nope", "arguments": {}}}
+    replies = run_session(monkeypatch, [{"jsonrpc": "2.0", "id": 1, "method": "tools/list"}, init, bogus], images=False)
+    by_id = {r["id"]: r for r in replies}
+    names = [t["name"] for t in by_id[1]["result"]["tools"]]
     assert "screenshot" not in names and "see" in names
+    assert "screenshot(" not in by_id[2]["result"]["instructions"]  # the notes match the tools listed
+    assert "screenshot" not in by_id[3]["error"]["message"]
+
+
+def test_instructions_follow_the_mode(monkeypatch):
+    init = {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "2025-06-18"}}
+    bogus = {"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": "see2", "arguments": {}}}
+    by_id = {r["id"]: r for r in run_session(monkeypatch, [init, bogus], compact=True)}
+    assert "see()" not in by_id[1]["result"]["instructions"]  # compact: notes for `computer`, not the nine tools
+    assert by_id[2]["error"]["message"].endswith("tools: computer")
+    full = run_session(monkeypatch, [init])[0]["result"]["instructions"]
+    assert "see()" in full and "screenshot" in full
 
 
 def test_cancelled_calls_get_no_response(monkeypatch):
@@ -161,4 +178,4 @@ def test_utf8_through_ansi_code_page_pipes(tmp_path):
         env=env,
     )
     reply = json.loads(out.stdout.decode("utf-8").splitlines()[0])
-    assert "nope ✓ שלום" in reply["result"]["content"][0]["text"], out.stderr.decode(errors="replace")
+    assert "nope ✓ שלום" in reply["error"]["message"], out.stderr.decode(errors="replace")  # unknown tool

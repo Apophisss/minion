@@ -1,9 +1,10 @@
-"""HTTP API, dashboard and live view (standard library only).
+"""HTTP API, dashboard, live view and remote MCP endpoint (standard library only).
 
     minion serve            # http://127.0.0.1:4747/?token=...
+                            # MCP over Streamable HTTP: http://127.0.0.1:4747/mcp
 
 Every endpoint needs the token (query ?token=, a cookie set on first visit, or
-`Authorization: Bearer`). It binds to 127.0.0.1 unless told otherwise.
+`Authorization: Bearer`; /mcp takes only the first two). It binds to 127.0.0.1 unless told otherwise.
 """
 
 from __future__ import annotations
@@ -12,6 +13,7 @@ import base64
 import json
 import mimetypes
 import os
+import queue
 import re
 import secrets
 import socket
@@ -30,9 +32,18 @@ from . import __version__, config, profiles
 from .backends import get_backend
 from .desktop import Desktop
 from .errors import AgentError, MinionError, NotFound
+from .tools import ToolError, Toolkit
 
 WEB = Path(__file__).parent / "web"
 COOKIE = "minion_token"
+LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "[::1]", ""})  # "": HTTP/1.0 clients send no Host
+# Web chat apps whose backends call MCP servers with their own Origin (claude.ai does). See _mcp_origin_ok.
+WEB_CLIENT_ORIGINS = frozenset(
+    {"https://claude.ai", "https://chatgpt.com", "https://chat.openai.com", "https://chat.mistral.ai"}
+)
+MCP_SESSIONS_MAX = 100  # least recently used sessions beyond this are ended (clients then initialize again)
+MCP_SESSION_IDLE = 24 * 3600.0  # seconds; idle sessions are ended
+SSE_KEEPALIVE = 10.0  # seconds between SSE comments while a tool works (proxies and tunnels drop quiet streams)
 
 _desktops: dict[str, Desktop] = {}
 _desk_lock = threading.Lock()
@@ -49,19 +60,130 @@ def _desk(name: str) -> Desktop:
         return d
 
 
+FILES_IN_DESKTOP = (
+    "Read or write text files inside a desktop. read: path -> text; write: text -> path. Desktop paths may "
+    "start with ~. (This server does not copy files to or from its own disk: fetch files inside the desktop "
+    "with run or open instead.)"
+)
+
+
+class ServedToolkit(Toolkit):
+    """The toolkit as this HTTP server serves it, to /mcp sessions and /api/tools.
+
+    Live-view links and hand-offs point at this server (its public URL behind a tunnel), long waits
+    can be capped below a client's timeout (`wait_cap`), and `files` upload/download, which touch this
+    server's disk, can be turned off (`host_files=False`, the default of `minion share`)."""
+
+    def __init__(self, *, files_root=None, images: bool = True, host_files: bool = True, wait_cap=None, token=None):
+        super().__init__(in_process_viewer=True, files_root=files_root, images=images)
+        self.host_files = host_files
+        self.wait_cap = wait_cap  # seconds, or None
+        self.token = token
+        self.base_url: str | None = None  # where clients reach this server; set per request
+
+    def definitions(self, format: str = "mcp", *, compact: bool = False) -> list[dict]:
+        defs = super().definitions(format, compact=compact)
+        if not self.host_files:
+            for d in defs:
+                fn = d.get("function", d)  # Chat Completions nests the definition
+                if fn.get("name") != "files":
+                    continue
+                fn["description"] = FILES_IN_DESKTOP
+                schema = fn.get("inputSchema") or fn.get("input_schema") or fn.get("parameters") or {}
+                props = schema.get("properties", {})
+                props.pop("local_path", None)
+                if "action" in props:
+                    props["action"]["enum"] = ["read", "write"]
+        return defs
+
+    def view_url(self, name: str) -> str | None:
+        if not self.base_url:
+            return super().view_url(name)
+        return f"{self.base_url}/view/{name}" + (f"?token={self.token}" if self.token else "")
+
+    def t_files(self, args: dict, progress) -> list:
+        if not self.host_files and args.get("action") in ("upload", "download"):
+            raise ToolError(
+                "upload and download are turned off on this server (they would use its disk). Use files "
+                "read/write for text, or run (curl, wget, …) to fetch files inside the desktop."
+            )
+        return super().t_files(args, progress)
+
+    def t_view(self, args: dict, progress) -> list:
+        if not args.get("message"):
+            return super().t_view(args, progress)
+        d = self.desk(args)
+        url = self.view_url(d.name)
+        wanted = float(args.get("timeout") or 600)
+        timeout = min(wanted, self.wait_cap) if self.wait_cap else wanted
+        progress(f"Waiting for the human at {url}")
+        note = _wait_for_human(d.name, args["message"], timeout)
+        if note is None and timeout < wanted:  # the client would time out first: let the agent ask again
+            text = (
+                f"The human has not pressed Done yet ({url}). Call view again with the same message to keep "
+                "waiting; the request stays on their screen."
+            )
+        elif note is None:
+            text = f"The human did not finish within {timeout:.0f}s. Link: {url}"
+        else:
+            said = f' They said: "{note}".' if note else ""
+            text = f"The human is done.{said} Call see() to check the screen."
+        return [{"type": "text", "text": text}]
+
+
 _toolkits: dict = {}
 
 
-def _toolkit(session: str):
-    from .tools import Toolkit
-
+def _toolkit(session: str, **options) -> ServedToolkit:
+    """The toolkit of one HTTP session (an MCP session, or a /api/tools `session`): each keeps its own
+    "current desktop". `options` (images, host_files, wait_cap, token) apply when it is first created."""
     with _desk_lock:
         tk = _toolkits.get(session)
         if tk is None:  # over HTTP, `files` may only touch the server's disk inside one folder
             root = os.environ.get("MINION_FILES_ROOT") or str(config.data_dir() / "files")
-            tk = Toolkit(in_process_viewer=True, files_root=root)
+            tk = ServedToolkit(files_root=root, **options)
             _toolkits[session] = tk
         return tk
+
+
+def _forget_toolkit(session: str) -> None:
+    with _desk_lock:
+        tk = _toolkits.pop(session, None)
+    for d in list(getattr(tk, "desktops", {}).values()):
+        try:
+            d.close()  # its connection (a `docker exec` process); the desktop itself stays
+        except Exception:
+            pass
+
+
+def _wait_for_human(name: str, message: str, timeout: float) -> str | None:
+    """A hand-off served by this process: the live view shows `message` until the human presses Done.
+    Returns their note, or None on timeout. The request stays up after a timeout, so an agent whose
+    client gave up first can wait again (same message) and still get the answer."""
+    with _handoff_lock:
+        h = _handoffs.get(name)
+        stale = h is not None and h["done"] and time.time() - h.get("done_at", 0) > 600
+        if h is None or h["message"] != message or stale:
+            h = {"message": message, "created": time.time(), "done": False, "note": None, "event": threading.Event()}
+            _handoffs[name] = h
+    if not h["event"].wait(timeout):
+        return None
+    with _handoff_lock:
+        if _handoffs.get(name) is h:
+            _handoffs.pop(name)
+    return h["note"] or ""
+
+
+class _McpEntry:
+    """An MCP session over HTTP: the protocol state, its toolkit's key, and use for expiry."""
+
+    def __init__(self, sid: str, session, key: str):
+        self.id, self.session, self.key = sid, session, key
+        self.used = time.monotonic()
+        self.busy = 0
+
+
+_mcp_lock = threading.Lock()
 
 
 def _forget(name: str) -> None:
@@ -76,33 +198,63 @@ class Handler(BaseHTTPRequestHandler):
     token: str | None = None
     quiet = False
     local_only = True
+    # Set per server by make_server() (and by `minion share` once its tunnel is up):
+    extra_hosts: frozenset = frozenset()  # more Host names to answer to: a tunnel's or reverse proxy's public name
+    base_url = ""  # this server's own address, e.g. http://127.0.0.1:4747
+    public_url: str | None = None  # the address clients use, if it differs (https://….trycloudflare.com)
+    host_files = True  # `files` upload/download may use this server's disk (inside MINION_FILES_ROOT)
+    wait_cap: float | None = None  # cap for long waits inside a tool call (chat apps time out after ~1 min)
+    activity = None  # callable(tool, arguments, client) told about each MCP tool call (`minion share` prints it)
+    mcp_sessions: dict = {}  # replaced by a fresh dict per server
 
     # -- plumbing -----------------------------------------------------------
     def log_message(self, fmt, *args):  # noqa: N802 - stdlib API
         if not self.quiet:
-            sys.stderr.write(f"[minion] {self.address_string()} {fmt % args}\n")
+            line = re.sub(r"(token=)[^&\s\"]+", r"\1…", fmt % args)  # keep the token out of logs
+            sys.stderr.write(f"[minion] {self._client()} {line}\n")
 
-    def _authorized(self, query: dict) -> bool:
+    def _client(self) -> str:
+        """The caller's address; behind a Cloudflare tunnel, the visitor rather than cloudflared."""
+        headers = getattr(self, "headers", None)  # not parsed yet when a malformed request is logged
+        return (headers.get("Cf-Connecting-Ip") if headers else None) or self.address_string()
+
+    def _authorized(self, query: dict, cookie: bool = True) -> bool:
         if not self.token:
             return True
+        token = self.token.encode()
         given = query.get("token", [None])[0]
-        if given and secrets.compare_digest(given, self.token):
+        if given and secrets.compare_digest(given.encode(), token):
             return True
         auth = self.headers.get("Authorization", "")
-        if auth.startswith("Bearer ") and secrets.compare_digest(auth[7:], self.token):
+        if auth.startswith("Bearer ") and secrets.compare_digest(auth[7:].strip().encode(), token):
             return True
-        cookie = SimpleCookie(self.headers.get("Cookie", ""))
-        if COOKIE in cookie and secrets.compare_digest(cookie[COOKIE].value, self.token):
+        jar = SimpleCookie(self.headers.get("Cookie", "")) if cookie else {}
+        if COOKIE in jar and secrets.compare_digest(jar[COOKIE].value.encode(), token):
             return True
         return False
 
-    def _host_ok(self) -> bool:
-        """On a loopback bind, only loopback Host names (blocks DNS-rebinding pages)."""
-        if not self.local_only:
-            return True
+    def _host_name(self) -> str:
         host = self.headers.get("Host") or ""
-        name = host[: host.find("]") + 1] if host.startswith("[") else host.split(":")[0]
-        return name.lower() in ("127.0.0.1", "localhost", "[::1]", "")
+        return (host[: host.find("]") + 1] if host.startswith("[") else host.split(":")[0]).lower()
+
+    def _host_ok(self) -> bool:
+        """Only Host names this server answers to (blocks DNS-rebinding pages): loopback names on a loopback
+        bind, plus extra_hosts (a tunnel's public name, MINION_ALLOWED_HOSTS). Any name on a non-loopback
+        bind that has no extra_hosts."""
+        if not self.local_only and not self.extra_hosts:
+            return True
+        name = self._host_name()
+        return name in LOOPBACK_HOSTS or name in self.extra_hosts
+
+    def _public_base(self) -> str:
+        """The base URL this request came in on, for links handed back to the client (live views)."""
+        if self.public_url:
+            return self.public_url
+        host = self.headers.get("Host")
+        if not host:
+            return self.base_url
+        proto = (self.headers.get("X-Forwarded-Proto") or "http").split(",")[0].strip().lower()
+        return f"{'https' if proto == 'https' else 'http'}://{host}"
 
     def _csrf_ok(self) -> bool:
         """Mutating requests must be impossible to forge from another web page: a Bearer token,
@@ -156,7 +308,8 @@ class Handler(BaseHTTPRequestHandler):
             ctype += "; charset=utf-8"
         headers = {}
         if self.token and query.get("token", [None])[0] == self.token:
-            headers["Set-Cookie"] = f"{COOKIE}={self.token}; Path=/; HttpOnly; SameSite=Strict"
+            secure = "; Secure" if self._public_base().startswith("https:") else ""  # behind a TLS tunnel/proxy
+            headers["Set-Cookie"] = f"{COOKIE}={self.token}; Path=/; HttpOnly; SameSite=Strict{secure}"
         self._send(200, path.read_bytes(), ctype, headers)
 
     # -- routing ------------------------------------------------------------
@@ -178,13 +331,16 @@ class Handler(BaseHTTPRequestHandler):
         parts = [p for p in url.path.split("/") if p]
         if not self._host_ok():
             return self._error(403, "forbidden host")
+        if [p.lower() for p in parts] == ["mcp"]:  # remote MCP (some clients change the path's case)
+            return self._mcp(method, query)
+        if parts[:1] == [".well-known"]:  # no OAuth metadata: the token in the URL or header is the credential
+            return self._error(404, "not found")
         if method == "GET" and parts[:1] == ["static"]:  # public assets (no data in them)
             return self._static("/".join(parts[1:]), query)
         if method == "GET" and parts == ["openapi.json"]:  # public: describes the API, holds no data
             from .tools import openapi
 
-            host = self.headers.get("Host") or "127.0.0.1:4747"
-            return self._json(openapi(f"http://{host}"))
+            return self._json(openapi(self._public_base()))
         if method in ("POST", "DELETE") and not self._csrf_ok():
             return self._error(403, "cross-site request refused: send JSON, a Bearer token or `X-Minion: 1`")
         if not self._authorized(query):
@@ -356,7 +512,7 @@ class Handler(BaseHTTPRequestHandler):
         fmt = query.get("format", ["mcp"])[0]
         compact = query.get("compact", ["0"])[0] in ("1", "true")
         if method == "GET" and not parts:
-            return self._json(_toolkit("default").definitions(fmt, compact=compact))
+            return self._json(_toolkit("default", **self._toolkit_options()).definitions(fmt, compact=compact))
         if method != "POST":
             return self._error(405, "POST a tool call")
         body = self._body()
@@ -367,7 +523,13 @@ class Handler(BaseHTTPRequestHandler):
             name, args = parts[0], {k: v for k, v in body.items() if k != "session"}
         else:
             return self._error(404, "unknown tools endpoint")
-        return self._json(_toolkit(session).call(name, args).to_mcp())
+        tk = _toolkit(str(session), **self._toolkit_options())
+        tk.base_url = self._public_base()
+        return self._json(tk.call(name, args).to_mcp())
+
+    def _toolkit_options(self, **more) -> dict:
+        """How this server's toolkits are made (see ServedToolkit)."""
+        return {"host_files": self.host_files, "wait_cap": self.wait_cap, "token": self.token, **more}
 
     def _handoff(self, method: str, name: str, query: dict) -> None:
         with _handoff_lock:
@@ -386,6 +548,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json({"ok": True})
             if method == "POST" and h is not None:  # human finished
                 h["done"] = True
+                h["done_at"] = time.time()
                 h["note"] = (body.get("note") or "").strip()
                 h["event"].set()
                 return self._json({"ok": True})
@@ -393,6 +556,270 @@ class Handler(BaseHTTPRequestHandler):
                 _handoffs.pop(name, None)
                 return self._json({"ok": True})
         return self._error(400, "no hand-off pending")
+
+    # -- MCP over Streamable HTTP (spec 2025-11-25, also serves 2025-06-18 and 2025-03-26 clients) ----------
+    # POST carries one JSON-RPC message. initialize opens a session (Mcp-Session-Id) with its own toolkit,
+    # so "the current desktop" is per session; DELETE ends it. tools/call answers as an SSE stream when the
+    # client accepts one (progress notifications, and keep-alive comments so proxies and tunnels don't cut
+    # a slow first-time image download); everything else is plain JSON. There is no server-initiated
+    # stream, so GET is 405. JSON-RPC batches are refused (removed from the spec in 2025-06-18).
+    # Protocol 2026-07-28 (stateless) is not served: its clients probe first and, on our 400 (no
+    # session), fall back to initialize as the spec's backward-compatibility rules require.
+    def _mcp(self, method: str, query: dict) -> None:
+        try:
+            if not self._mcp_origin_ok():
+                return self._mcp_error(403, "Forbidden: requests from this Origin may not use the MCP endpoint")
+            if not self._authorized(query, cookie=False):
+                return self._mcp_error(
+                    401,
+                    "Unauthorized: add ?token=... to the URL or send Authorization: Bearer <token>",
+                    {"WWW-Authenticate": 'Bearer realm="minion"'},
+                )
+            if method not in ("POST", "DELETE"):
+                return self._mcp_error(
+                    405, "Method not allowed: POST JSON-RPC messages here", {"Allow": "POST, DELETE"}
+                )
+            sid = self.headers.get("Mcp-Session-Id")
+            if method == "DELETE":
+                if not sid:
+                    return self._mcp_error(400, "Bad Request: missing Mcp-Session-Id header")
+                if not self._mcp_end(sid):
+                    return self._mcp_error(404, "Session not found")
+                self.send_response(204)
+                self.end_headers()
+                return
+            return self._mcp_post(query, sid)
+        except (BrokenPipeError, ConnectionResetError):
+            pass
+        except Exception as e:  # pragma: no cover - unexpected
+            self._mcp_error(500, f"{type(e).__name__}: {e}", code=-32603)
+
+    def _mcp_origin_ok(self) -> bool:
+        """The MCP spec asks servers to check Origin (403 when present and invalid) against DNS rebinding.
+
+        Clients that run on servers (ChatGPT's and Le Chat's backends, Cursor, VS Code, the MCP SDKs)
+        usually send no Origin: allowed. Browsers always send one, and so does claude.ai's backend
+        (https://claude.ai), so its mere presence proves nothing. What Origin can tell us depends on
+        the address the request came to:
+        - A public name (a tunnel's, a reverse proxy's domain): whoever holds the token can call that URL
+          directly, with or without a browser, so Origin adds nothing and every Origin is accepted. A
+          DNS-rebinding page can't get here: it would arrive with its own hostname, which the Host
+          check (_host_ok) refuses. (A non-loopback bind without allowed names turns the Host check
+          off; then, as for the rest of the API, the token is the only protection.)
+        - A loopback name: a local client, or a page in a browser on this machine. Accept loopback
+          origins (local tools such as the MCP Inspector), WEB_CLIENT_ORIGINS (a reverse proxy that
+          rewrites Host to 127.0.0.1 forwards chat apps' calls) and MINION_ALLOWED_ORIGINS; refuse every
+          other web page with 403, even if it somehow knows the token.
+        Cookies never authenticate /mcp (only ?token= or a Bearer header), so a cross-site page can't
+        borrow a session from the dashboard either."""
+        origin = (self.headers.get("Origin") or "").strip()
+        if not origin or self._host_name() not in LOOPBACK_HOSTS:
+            return True
+        origin = origin.rstrip("/").lower()
+        allowed = {o.strip().rstrip("/").lower() for o in os.environ.get("MINION_ALLOWED_ORIGINS", "").split(",")}
+        if origin in WEB_CLIENT_ORIGINS or origin in allowed:
+            return True
+        try:
+            return urlparse(origin).hostname in ("localhost", "127.0.0.1", "::1")
+        except ValueError:
+            return False
+
+    def _mcp_error(self, status: int, message: str, headers: dict | None = None, code: int = -32600) -> None:
+        """A transport-level rejection: an HTTP error status with a JSON-RPC error that has no id."""
+        body = {"jsonrpc": "2.0", "id": None, "error": {"code": code, "message": message}}
+        self._send(status, json.dumps(body).encode(), "application/json", headers)
+
+    def _mcp_json(self, status: int, msg: dict, sid: str | None = None) -> None:
+        body = json.dumps(msg, ensure_ascii=False, separators=(",", ":")).encode()
+        self._send(status, body, "application/json", {"Mcp-Session-Id": sid} if sid else None)
+
+    def _mcp_body(self, limit: int = 50 * 1024 * 1024) -> bytes:
+        """The request body, sent with a Content-Length or chunked."""
+        if "chunked" in (self.headers.get("Transfer-Encoding") or "").lower():
+            out = bytearray()
+            while True:
+                size = int(self.rfile.readline(1024).split(b";")[0].strip() or b"0", 16)
+                if size == 0:
+                    while self.rfile.readline(1024) not in (b"\r\n", b"\n", b""):  # trailers
+                        pass
+                    return bytes(out)
+                if len(out) + size > limit:
+                    raise MinionError("request body too large")
+                out += self.rfile.read(size)
+                self.rfile.readline(1024)  # the CRLF after each chunk
+        n = int(self.headers.get("Content-Length") or 0)
+        if n > limit:
+            raise MinionError("request body too large")
+        return self.rfile.read(n) if n > 0 else b""
+
+    def _mcp_post(self, query: dict, sid: str | None) -> None:
+        from .mcp import PROTOCOL_VERSIONS, is_tool_call, rpc_error
+
+        if (self.headers.get("Content-Type") or "").split(";")[0].strip().lower() != "application/json":
+            return self._mcp_error(415, "Unsupported Media Type: POST one JSON-RPC message as application/json")
+        try:
+            msg = json.loads(self._mcp_body())
+        except MinionError as e:
+            return self._mcp_error(413, str(e))
+        except ValueError:
+            return self._mcp_error(400, "Parse error: the body is not valid JSON", code=-32700)
+        if isinstance(msg, list):
+            return self._mcp_error(400, "Batches are not supported: POST one JSON-RPC message per request")
+        if not isinstance(msg, dict):
+            return self._mcp_error(400, "Invalid request: expected a JSON-RPC object")
+        is_request = isinstance(msg.get("method"), str) and msg.get("id") is not None
+        if is_request and msg["method"] == "initialize":  # always a new session, whatever headers come with it
+            return self._mcp_initialize(msg, query)
+        version = self.headers.get("MCP-Protocol-Version")
+        if version and version not in PROTOCOL_VERSIONS:  # e.g. a 2026-07-28 probe: a plain 400 makes it fall back
+            supported = ", ".join(PROTOCOL_VERSIONS)
+            return self._mcp_error(
+                400,
+                f"Bad Request: unsupported MCP-Protocol-Version {version!r} (supported: {supported}; initialize first)",
+            )
+        if not sid:
+            return self._mcp_error(400, "Bad Request: missing Mcp-Session-Id header (initialize first)")
+        entry = self._mcp_find(sid)
+        if entry is None:
+            return self._mcp_error(404, "Session not found: it ended or expired, initialize a new one")
+        if not is_request:  # a notification (initialized, cancelled) or a response
+            reply = entry.session.handle(msg)
+            if reply is not None:  # not a valid message
+                return self._mcp_json(400, reply, sid)
+            self.send_response(202)
+            self.send_header("Content-Length", "0")
+            self.send_header("Mcp-Session-Id", sid)
+            self.end_headers()
+            return
+        hook = type(self).activity  # read off the class: through self, a function would become a method
+        if is_tool_call(msg) and hook:
+            params = msg.get("params") if isinstance(msg.get("params"), dict) else {}
+            try:
+                hook(params.get("name"), params.get("arguments"), self._client())
+            except Exception:  # a broken log line must not break the call
+                pass
+        if is_tool_call(msg) and self._accepts_sse():
+            return self._mcp_stream(entry, msg)
+        reply = self._mcp_run(entry, msg)
+        if reply is None:  # cancelled while it ran; a request must still be answered over HTTP
+            reply = rpc_error(msg["id"], -32800, "Request cancelled")
+        return self._mcp_json(200, reply, sid)
+
+    def _mcp_initialize(self, msg: dict, query: dict) -> None:
+        from .mcp import Session
+
+        def flag(name: str, default: str) -> bool:
+            return (query.get(name, [default])[0] or default).lower() not in ("0", "false", "no", "off")
+
+        sid = secrets.token_hex(16)
+        key = f"mcp:{sid}"
+        tk = _toolkit(key, **self._toolkit_options(images=flag("images", "1")))
+        tk.base_url = self._public_base()
+        session = Session(tk, compact=flag("compact", "0"), log=_quiet if self.quiet else _log)
+        reply = session.handle(msg)
+        if "error" in reply:
+            _forget_toolkit(key)
+            return self._mcp_json(400, reply)
+        closing = []
+        with _mcp_lock:
+            sessions = self.mcp_sessions
+            now = time.monotonic()
+            idle = sorted((e for e in sessions.values() if not e.busy), key=lambda e: e.used)
+            for e in idle:  # expire idle sessions, and the least recently used beyond the limit
+                if now - e.used > MCP_SESSION_IDLE or len(sessions) >= MCP_SESSIONS_MAX:
+                    sessions.pop(e.id, None)
+                    closing.append(e.key)
+            sessions[sid] = _McpEntry(sid, session, key)
+        for k in closing:
+            _forget_toolkit(k)
+        return self._mcp_json(200, reply, sid)
+
+    def _mcp_find(self, sid: str) -> _McpEntry | None:
+        with _mcp_lock:
+            entry = self.mcp_sessions.get(sid)
+            if entry is not None:
+                entry.used = time.monotonic()
+            return entry
+
+    def _mcp_end(self, sid: str) -> bool:
+        with _mcp_lock:
+            entry = self.mcp_sessions.pop(sid, None)
+        if entry is None:
+            return False
+        _forget_toolkit(entry.key)
+        return True
+
+    def _mcp_run(self, entry: _McpEntry, msg: dict, notify=None) -> dict | None:
+        with _mcp_lock:
+            entry.busy += 1
+        try:
+            return entry.session.handle(msg, notify=notify)
+        finally:
+            with _mcp_lock:
+                entry.busy -= 1
+                entry.used = time.monotonic()
+
+    def _accepts_sse(self) -> bool:
+        types = [t.split(";")[0].strip().lower() for t in (self.headers.get("Accept") or "").split(",")]
+        return any(t in ("text/event-stream", "text/*", "*/*") for t in types)
+
+    def _mcp_stream(self, entry: _McpEntry, msg: dict) -> None:
+        """Answer a tools/call with an SSE stream: progress notifications while the tool works, a comment
+        every SSE_KEEPALIVE seconds so nothing in between closes a quiet connection, then the result.
+        If the client goes away the tool still finishes (a disconnect is not a cancellation); its
+        result is dropped."""
+        from .mcp import rpc_error
+
+        events: queue.Queue = queue.Queue()
+        done = object()
+
+        def work() -> None:
+            try:
+                reply = self._mcp_run(entry, msg, notify=events.put)
+            except BaseException as e:  # pragma: no cover - Session.handle reports errors itself
+                reply = rpc_error(msg.get("id"), -32603, f"{type(e).__name__}: {e}")
+            events.put((done, reply))
+
+        threading.Thread(target=work, daemon=True, name="minion-mcp-call").start()
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream")
+        self.send_header("Cache-Control", "no-cache, no-transform")
+        self.send_header("X-Accel-Buffering", "no")  # nginx: don't buffer the stream
+        self.send_header("Mcp-Session-Id", entry.id)
+        self.end_headers()
+        while True:
+            try:
+                item = events.get(timeout=SSE_KEEPALIVE)
+            except queue.Empty:
+                if not self._sse(b": keep-alive\n\n"):
+                    return
+                continue
+            if isinstance(item, tuple) and item[0] is done:
+                if item[1] is not None:  # None: the client cancelled the call, so no response
+                    self._sse(_sse_event(item[1]))
+                return
+            if not self._sse(_sse_event(item)):
+                return
+
+    def _sse(self, data: bytes) -> bool:
+        try:
+            self.wfile.write(data)
+            self.wfile.flush()
+            return True
+        except OSError:
+            return False
+
+
+def _sse_event(msg: dict) -> bytes:
+    return b"event: message\ndata: " + json.dumps(msg, ensure_ascii=False, separators=(",", ":")).encode() + b"\n\n"
+
+
+def _log(text: str) -> None:
+    sys.stderr.write(f"[minion] {text}\n")
+
+
+def _quiet(text: str) -> None:
+    pass
 
 
 def _free_port(host: str, preferred: int, fallback: bool = True) -> int:
@@ -410,17 +837,29 @@ def _free_port(host: str, preferred: int, fallback: bool = True) -> int:
 
 
 def make_server(
-    host: str = "127.0.0.1", port: int = 4747, token: str | None = "", quiet: bool = False, fallback: bool = True
+    host: str = "127.0.0.1",
+    port: int = 4747,
+    token: str | None = "",
+    quiet: bool = False,
+    fallback: bool = True,
+    allowed_hosts=(),
 ) -> tuple[ThreadingHTTPServer, str, str | None]:
+    """A server (not yet serving) and its base URL. `allowed_hosts` (plus MINION_ALLOWED_HOSTS, comma-separated)
+    are Host names to answer to besides loopback ones, e.g. a reverse proxy's domain; once set, the Host check
+    applies on any bind address."""
     if token == "":
         token = secrets.token_urlsafe(16)
     port = _free_port(host, port, fallback)
     local_only = host in ("127.0.0.1", "localhost", "::1")
-    handler = type("MinionHandler", (Handler,), {"token": token, "quiet": quiet, "local_only": local_only})
+    names = [*allowed_hosts, *os.environ.get("MINION_ALLOWED_HOSTS", "").split(",")]
+    extra = frozenset(n.strip().lower() for n in names if n.strip())
+    shown = "127.0.0.1" if host in ("0.0.0.0", "") else (f"[{host}]" if ":" in host else host)
+    base = f"http://{shown}:{port}"
+    attrs = {"token": token, "quiet": quiet, "local_only": local_only, "extra_hosts": extra, "base_url": base}
+    handler = type("MinionHandler", (Handler,), {**attrs, "mcp_sessions": {}})
     httpd = ThreadingHTTPServer((host, port), handler)
     httpd.daemon_threads = True
-    shown = "127.0.0.1" if host in ("0.0.0.0", "") else host
-    return httpd, f"http://{shown}:{port}", token
+    return httpd, base, token
 
 
 def serve(
@@ -441,6 +880,8 @@ def serve(
     url = f"{base}/?token={token}" if token else base + "/"
     if not quiet:
         print(f"Minion {__version__} · dashboard and API at {url}", flush=True)
+        mcp_url = f"{base}/mcp?token={token}" if token else f"{base}/mcp"
+        print(f"Remote MCP (Streamable HTTP) at {mcp_url}  (public URL for chat apps: minion share)", flush=True)
         if host not in ("127.0.0.1", "localhost", "::1") and not token:
             print(
                 "WARNING: no token and not bound to localhost — anyone on the network can control your desktops.",
