@@ -1,0 +1,116 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - run: uvx ruff@0.17.0 check .
+      - run: uvx ruff@0.17.0 format --check .   # also formats Python blocks in Markdown
+
+  unit:
+    name: unit (${{ matrix.os }}, py${{ matrix.python }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        python: ["3.11", "3.12", "3.13", "3.14"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+          allow-prereleases: true
+      - run: python -m pip install -e ".[dev]"
+      - run: python -m pytest -m "not x11 and not docker" -q
+
+  installers:
+    name: installers (shellcheck, PowerShell parse)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: shellcheck install.sh
+      - shell: pwsh
+        run: |
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile("$PWD/install.ps1", [ref]$null, [ref]$errors) | Out-Null
+          if ($errors) { $errors; exit 1 }
+
+  local-desktops:
+    name: integration (local Xvfb desktops)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Desktop tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends xvfb xauth x11-utils x11-xserver-utils xdotool wmctrl \
+            jwm xterm xclip dbus-daemon dbus-bin at-spi2-core gir1.2-atspi-2.0 python3-gi python3-pil \
+            tesseract-ocr tesseract-ocr-eng fonts-dejavu-core
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install -e ".[dev]"
+      - run: python -m pytest -m x11 -v
+
+  docker-desktops:
+    name: integration (Docker desktops)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install -e ".[dev]"
+      - name: Build the base image from this commit
+        run: minion build base
+      - run: python -m pytest -m docker -v
+        env:
+          MINION_TEST_DOCKER: "1"
+          MINION_PULL: never
+
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - run: uv build
+      - name: The wheel installs and runs with no dependencies
+        run: |
+          python -m venv /tmp/v && /tmp/v/bin/pip install dist/*.whl
+          /tmp/v/bin/minion --version && /tmp/v/bin/minion profiles && /tmp/v/bin/minion skill > /dev/null
+          /tmp/v/bin/minion tools --format gemini --compact > /dev/null
+          /tmp/v/bin/python -c "import minion, minion.mcp, minion.server, minion.tools, minion.connect, minion.onboard, minion.share, minion.integrations.anthropic, minion.integrations.openai, minion.integrations.gemini"
+      - name: The Claude Desktop extension builds, starts and validates
+        run: |
+          python3 scripts/build_mcpb.py --smoke --stage /tmp/mcpb
+          npx -y @anthropic-ai/mcpb@2.1.2 validate /tmp/mcpb
+      - name: server.json is valid for the MCP Registry
+        run: |
+          curl -fsSL https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_linux_amd64.tar.gz | tar xz mcp-publisher
+          ./mcp-publisher validate
+
+  typescript:
+    name: TypeScript client
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: clients/typescript
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: npm ci
+      - run: npm test

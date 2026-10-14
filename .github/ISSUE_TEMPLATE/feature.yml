@@ -1,0 +1,13 @@
+name: Feature or profile request
+description: A new capability, app support or desktop profile
+labels: [enhancement]
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would you like your agents to be able to do?
+    validations: { required: true }
+  - type: textarea
+    id: why
+    attributes:
+      label: Why does it matter (who needs it)?

@@ -1,0 +1,14 @@
+# The Claude Desktop extension is a uv project (MCPB server type "uv"). Claude Desktop starts it with
+# `uv run --directory <extension> server/main.py mcp`, and uv brings a Python that matches requires-python,
+# downloading one the first time if the computer has none. Minion has no dependencies, and the project is
+# not built or installed (package = false): its source sits in server/minion and runs from there.
+# scripts/build_mcpb.py stamps the version from minion/agent/__init__.py.
+[project]
+name = "minion-desktop-mcpb"
+version = "1.0.0"
+description = "Minion's MCP server, packaged as a Claude Desktop extension."
+requires-python = ">=3.11"
+dependencies = []
+
+[tool.uv]
+package = false

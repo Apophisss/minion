@@ -1,0 +1,11 @@
+name = "base"
+title = "Minimal"
+icon = "🧩"
+description = "The bare desktop: X server, window manager, terminal and the agent. Smallest and fastest; the foundation of every other profile."
+memory = "512m"
+apps = [
+  { name = "Terminal", id = "terminal", command = "xterm -fa 'DejaVu Sans Mono' -fs 11 -bg '#0b1020' -fg '#e2e8f0' -cr '#a5b4fc' -sl 5000" },
+]
+tips = """
+Minimal Linux desktop (Debian). Install anything you need with `run`, e.g. `sudo apt-get update && sudo apt-get install -y gimp`.
+"""

@@ -1,0 +1,1130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Minion: give every AI agent its own computer</title>
+<meta name="description" content="Featherweight Linux desktops for AI agents, over MCP, function calling, HTTP, a CLI, Python or TypeScript. Agents read the screen as text with stable @ids.">
+<link rel="canonical" href="https://apophisss.github.io/minion/">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#070a18" media="(prefers-color-scheme: dark)">
+<link rel="icon" href="assets/site/logo.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="assets/site/apple-touch-icon.png">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Minion">
+<meta property="og:title" content="Minion: give every AI agent its own computer">
+<meta property="og:description" content="Featherweight Linux desktops that any AI agent can use over MCP, function calling, HTTP, a CLI, Python or TypeScript. Open source, MIT.">
+<meta property="og:url" content="https://apophisss.github.io/minion/">
+<meta property="og:image" content="https://apophisss.github.io/minion/assets/social-preview.png">
+<meta property="og:image:width" content="1280">
+<meta property="og:image:height" content="640">
+<meta property="og:image:alt" content="Minion: give every AI agent its own computer. A LibreOffice window next to the same screen as text with @ids.">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Minion: give every AI agent its own computer">
+<meta name="twitter:description" content="Featherweight Linux desktops that any AI agent can use over MCP, function calling, HTTP, a CLI, Python or TypeScript. Open source, MIT.">
+<meta name="twitter:image" content="https://apophisss.github.io/minion/assets/social-preview.png">
+<meta name="twitter:image:alt" content="Minion: give every AI agent its own computer.">
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"SoftwareApplication","name":"Minion","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Windows, Linux","description":"Featherweight Linux desktops that any AI agent can use over MCP, function calling, HTTP, a CLI, Python or TypeScript.","url":"https://apophisss.github.io/minion/","downloadUrl":"https://pypi.org/project/minion-desktop/","license":"https://opensource.org/licenses/MIT","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"}}</script>
+<script>try{var t=localStorage.getItem("minion-theme");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t)}catch(e){}document.documentElement.classList.add("js")</script>
+<style>
+:root{
+--sans:-apple-system,BlinkMacSystemFont,"Segoe UI Variable Text","Segoe UI",Inter,Roboto,"Noto Sans",Ubuntu,Cantarell,"Helvetica Neue",Arial,sans-serif;
+--display:-apple-system,BlinkMacSystemFont,"Segoe UI Variable Display","Segoe UI",Inter,Roboto,"Noto Sans",Ubuntu,Cantarell,"Helvetica Neue",Arial,sans-serif;
+--mono:ui-monospace,"SF Mono",SFMono-Regular,"Cascadia Code","JetBrains Mono",Menlo,Consolas,"Liberation Mono","DejaVu Sans Mono",monospace;
+--bg:#fff;--bg2:#f6f7fb;--card:#fff;--line:#e4e6f0;--line2:#d3d6e4;
+--text:#0b1020;--text2:#3f4560;--muted:#5d6380;
+--accent:#4f46e5;--accent-bg:#eef0ff;--pink:#be185d;
+--bar:#6366f1;--bar0:#8b91aa;--track:#eceef6;
+--ring:#4f46e5;--hdr:rgba(255,255,255,.8);
+--glow1:rgba(99,102,241,.17);--glow2:rgba(14,165,233,.11);--grid:rgba(11,16,32,.05);
+--shadow:0 1px 2px rgba(11,16,32,.05),0 12px 32px -18px rgba(11,16,32,.22);
+--sun:none;--moon:block;color-scheme:light}
+@media (prefers-color-scheme:dark){:root:not([data-theme=light]){
+--bg:#070a18;--bg2:#0a0e1f;--card:#0d1226;--line:#1b2140;--line2:#283056;
+--text:#e8eaf6;--text2:#b8bdd6;--muted:#8e95b5;
+--accent:#a5b4fc;--accent-bg:rgba(99,102,241,.16);--pink:#f472b6;
+--bar:#818cf8;--bar0:#646b93;--track:#151b36;
+--ring:#a5b4fc;--hdr:rgba(7,10,24,.74);
+--glow1:rgba(99,102,241,.3);--glow2:rgba(14,165,233,.13);--grid:rgba(165,180,252,.06);
+--shadow:inset 0 1px 0 rgba(255,255,255,.03),0 18px 40px -22px rgba(0,0,0,.8);
+--sun:block;--moon:none;color-scheme:dark}}
+:root[data-theme=dark]{
+--bg:#070a18;--bg2:#0a0e1f;--card:#0d1226;--line:#1b2140;--line2:#283056;
+--text:#e8eaf6;--text2:#b8bdd6;--muted:#8e95b5;
+--accent:#a5b4fc;--accent-bg:rgba(99,102,241,.16);--pink:#f472b6;
+--bar:#818cf8;--bar0:#646b93;--track:#151b36;
+--ring:#a5b4fc;--hdr:rgba(7,10,24,.74);
+--glow1:rgba(99,102,241,.3);--glow2:rgba(14,165,233,.13);--grid:rgba(165,180,252,.06);
+--shadow:inset 0 1px 0 rgba(255,255,255,.03),0 18px 40px -22px rgba(0,0,0,.8);
+--sun:block;--moon:none;color-scheme:dark}
+*,*::before,*::after{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%;text-size-adjust:100%;scroll-padding-top:84px}
+@media (prefers-reduced-motion:no-preference){html{scroll-behavior:smooth}}
+body{margin:0;background:var(--bg);color:var(--text);font:16px/1.6 var(--sans);-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+img,svg{display:block;max-width:100%}
+img{height:auto}
+a{color:inherit;text-decoration:none}
+h1,h2,h3{margin:0;font-family:var(--display);text-wrap:balance}
+p{margin:0}
+ul,ol{margin:0;padding:0}
+[hidden]{display:none!important}
+code,pre{font-family:var(--mono)}
+:not(pre)>code{font-size:.86em;padding:.14em .4em;border-radius:6px;background:var(--accent-bg);overflow-wrap:anywhere}
+:focus-visible{outline:2px solid var(--ring);outline-offset:3px;border-radius:6px}
+.sr{position:absolute!important;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+.skip{position:absolute;left:12px;top:-80px;z-index:100;padding:10px 16px;border-radius:10px;background:var(--text);color:var(--bg);font-weight:600}
+.skip:focus{top:12px}
+.wrap{max-width:1200px;margin:0 auto;padding:0 clamp(16px,4vw,32px)}
+.ic{width:20px;height:20px;flex:none;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.lk{color:var(--accent);font-weight:600;display:inline-flex;align-items:center;gap:6px}
+.lk .ic{width:16px;height:16px;transition:transform .2s}
+.lk:hover .ic{transform:translateX(3px)}
+.lk:hover{text-decoration:underline;text-underline-offset:3px}
+.at{display:inline-block;font:700 .8em/1 var(--mono);padding:.2em .42em;border-radius:5px;background:#db2777;color:#fff;vertical-align:.1em}
+
+/* header */
+.hdr{position:sticky;top:0;z-index:50;background:var(--hdr);-webkit-backdrop-filter:saturate(1.6) blur(14px);backdrop-filter:saturate(1.6) blur(14px);border-bottom:1px solid var(--line)}
+.hdr .wrap{display:flex;align-items:center;gap:20px;height:64px}
+.brand{display:flex;align-items:center;gap:10px;font:700 20px/1 var(--display);letter-spacing:-.03em}
+.brand svg{width:32px;height:32px}
+.nav{display:flex;gap:2px;margin-left:16px}
+.nav a,.hdr-r>.doc{padding:8px 11px;border-radius:8px;font-size:14px;font-weight:500;color:var(--muted)}
+.nav a:hover,.hdr-r>.doc:hover{color:var(--text);background:var(--accent-bg)}
+.hdr-r{margin-left:auto;display:flex;align-items:center;gap:8px}
+.tb{width:40px;height:40px;display:grid;place-items:center;border-radius:10px;border:1px solid var(--line2);background:var(--card);color:var(--text);cursor:pointer}
+.tb:hover{border-color:var(--muted)}
+.tb .sun{display:var(--sun)}.tb .moon{display:var(--moon)}
+@media (max-width:1060px){.nav{display:none}}
+@media (max-width:480px){.hdr-r>.doc{display:none}.hdr .gh span{display:none}.hdr .gh{width:40px;padding:0}}
+
+/* buttons */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:46px;padding:0 20px;border-radius:12px;border:1px solid transparent;font:600 15px/1 var(--sans);cursor:pointer;white-space:nowrap;transition:transform .15s,box-shadow .2s,background-color .2s,border-color .2s}
+.btn svg{width:18px;height:18px}
+.btn-p{color:#fff;background:linear-gradient(180deg,#5b5ef0,#4f46e5);box-shadow:inset 0 1px 0 rgba(255,255,255,.22),0 1px 2px rgba(11,16,32,.18),0 10px 26px -10px rgba(79,70,229,.7)}
+.btn-p:hover{background:linear-gradient(180deg,#5254e6,#4338ca);transform:translateY(-1px)}
+.btn-s{color:var(--text);background:var(--card);border-color:var(--line2);box-shadow:0 1px 2px rgba(11,16,32,.06)}
+.btn-s:hover{border-color:var(--muted);transform:translateY(-1px)}
+.btn-sm{height:38px;padding:0 14px;font-size:14px;border-radius:10px}
+.btn-p .ic,.btn-s .ic{stroke-width:2}
+
+/* hero */
+.hero{position:relative;isolation:isolate;overflow:clip;padding:clamp(40px,6vw,72px) 0 clamp(64px,8vw,104px);text-align:center}
+.hero::before{content:"";position:absolute;inset:0;z-index:-1;background-image:linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px);background-size:56px 56px;background-position:50% -1px;-webkit-mask-image:radial-gradient(ellipse 70% 50% at 50% 0,#000 30%,transparent 78%);mask-image:radial-gradient(ellipse 70% 50% at 50% 0,#000 30%,transparent 78%)}
+.hero::after{content:"";position:absolute;inset:0;z-index:-2;background:radial-gradient(40% 34% at 82% 6%,var(--glow1),transparent 72%),radial-gradient(36% 30% at 10% 26%,var(--glow2),transparent 72%),radial-gradient(56% 34% at 50% 78%,var(--glow1),transparent 72%)}
+.pill{display:inline-flex;align-items:center;gap:10px;padding:5px 14px 5px 5px;border-radius:999px;border:1px solid var(--line2);background:var(--card);font-size:13.5px;font-weight:500;color:var(--text2);box-shadow:0 1px 2px rgba(11,16,32,.05)}
+.pill b{padding:4px 9px;border-radius:999px;background:var(--accent-bg);color:var(--accent);font-size:12px;font-weight:700;letter-spacing:.02em}
+.pill .ic{width:15px;height:15px;color:var(--muted);transition:transform .2s}
+.pill:hover .ic{transform:translateX(3px)}
+.hero h1{margin:22px auto 0;max-width:13.5em;font-size:clamp(2.3rem,1.05rem + 5vw,4.75rem);line-height:1.04;letter-spacing:-.045em;font-weight:700}
+.grad{display:inline-block;background:linear-gradient(100deg,#4f46e5 10%,#7c3aed 55%,#db2777 95%);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent;padding-bottom:.06em}
+@media (prefers-color-scheme:dark){:root:not([data-theme=light]) .grad{background-image:linear-gradient(100deg,#a5b4fc 10%,#c4b5fd 55%,#f9a8d4 95%)}}
+:root[data-theme=dark] .grad{background-image:linear-gradient(100deg,#a5b4fc 10%,#c4b5fd 55%,#f9a8d4 95%)}
+@media (forced-colors:active){.grad{-webkit-text-fill-color:currentColor;background:none}.bf,.pills i,.tag,.at{forced-color-adjust:none}}
+.lead{font-size:clamp(1.0625rem,.98rem + .4vw,1.25rem);line-height:1.6;color:var(--text2);text-wrap:pretty}
+.hero .lead{max-width:41em;margin:20px auto 0}
+.cta{display:flex;flex-wrap:wrap;justify-content:center;gap:12px;margin-top:30px}
+.meta{display:flex;flex-wrap:wrap;justify-content:center;gap:10px 28px;margin-top:24px;list-style:none;font-size:14px;color:var(--muted)}
+.meta li{display:flex;align-items:center;gap:8px}
+.meta li::before{content:"";width:6px;height:6px;border-radius:50%;background:linear-gradient(135deg,#818cf8,#7c3aed)}
+.meta b{color:var(--text);font-weight:600}
+@media (prefers-reduced-motion:no-preference){.rise{animation:rise .75s cubic-bezier(.2,.75,.2,1) both;animation-delay:calc(var(--d,0)*60ms)}}
+@keyframes rise{from{opacity:0;transform:translateY(16px)}}
+
+/* replay console */
+.replay{margin:clamp(40px,5vw,56px) auto 0;max-width:1100px;text-align:left}
+.rp{position:relative;border-radius:20px;background:#0b1020;color:#d7dbf0;border:1px solid #232b4d;overflow:hidden;box-shadow:0 0 0 1px rgba(99,102,241,.08),0 40px 90px -40px rgba(49,46,129,.75),0 18px 40px -24px rgba(11,16,32,.5)}
+.rp-bar{display:flex;align-items:center;gap:12px;height:48px;padding:0 8px 0 16px;border-bottom:1px solid #1c2342;font-size:13px;color:#9aa3c4}
+.rp-bar svg.lg{width:22px;height:22px}
+.rp-bar strong{color:#eef0fb;font-weight:600}
+.rp-live{display:inline-flex;align-items:center;gap:7px;margin-left:4px;padding:4px 9px;border-radius:999px;background:#141b38;font:600 11.5px/1 var(--mono);letter-spacing:.04em;color:#c7cbe6}
+.rp-live::before{content:"";width:7px;height:7px;border-radius:50%;background:#f472b6;box-shadow:0 0 0 3px rgba(244,114,182,.2)}
+.paused .rp-live::before{background:#646b93;box-shadow:none}
+.rp-n{margin-left:auto;font:500 12.5px/1 var(--mono);color:#8e95b5}
+.rp-play{width:36px;height:36px;display:grid;place-items:center;border-radius:9px;border:1px solid #283056;background:#121936;color:#e8eaf6;cursor:pointer}
+.rp-play:hover{background:#1a2250}
+.rp-play .ic{width:16px;height:16px;stroke-width:2.2}
+.rp-play .i-play{display:none}.paused .rp-play .i-play{display:block}.paused .rp-play .i-pause{display:none}
+.rp-body{display:grid;grid-template-columns:minmax(0,720fr) minmax(260px,360fr)}
+.rp-screen{position:relative;aspect-ratio:16/10;background:#0b1020}
+.rp-screen img{position:absolute;inset:0;width:100%;height:100%;opacity:0;transition:opacity .45s ease}
+.rp-screen img.was{opacity:1;transition:none}
+.rp-screen img.on{opacity:1;z-index:1}
+.rp-steps{list-style:none;padding:10px;border-left:1px solid #1c2342;display:flex;flex-direction:column;gap:2px;counter-reset:s}
+.rp-steps button{position:relative;display:block;width:100%;text-align:left;padding:11px 12px 13px 44px;border:0;border-radius:10px;background:none;color:#8e95b5;font:12.5px/1.5 var(--mono);cursor:pointer;overflow-wrap:anywhere}
+.rp-steps button:hover{background:#10162e;color:#c7cbe6}
+.rp-steps button::before{counter-increment:s;content:counter(s);position:absolute;left:12px;top:10px;width:20px;height:20px;border-radius:6px;display:grid;place-items:center;background:#141b38;color:#8e95b5;font:600 11px/1 var(--mono)}
+.rp-steps [aria-current]{background:#121936;color:#eef0fb}
+.rp-steps [aria-current]::before{background:linear-gradient(135deg,#6366f1,#7c3aed);color:#fff}
+.k{color:#f472b6}
+.rp-steps i{position:absolute;left:44px;right:12px;bottom:6px;height:2px;border-radius:2px;background:#1e2648;overflow:hidden;opacity:0}
+.rp-steps [aria-current] i{opacity:1}
+.rp-steps i::after{content:"";position:absolute;inset:0;border-radius:2px;background:linear-gradient(90deg,#818cf8,#f472b6);transform:scaleX(0);transform-origin:left}
+.rp-steps [aria-current] i::after{animation:prog 2.8s linear forwards}
+.paused .rp-steps [aria-current] i::after{animation-play-state:paused}
+@keyframes prog{to{transform:scaleX(1)}}
+.rp-cap{display:none}
+.replay figcaption{margin-top:16px;text-align:center;font-size:13.5px;color:var(--muted)}
+@media (max-width:860px){
+.rp-body{grid-template-columns:1fr}
+.rp-steps{flex-direction:row;gap:6px;padding:14px 16px 0;border-left:0;border-top:1px solid #1c2342}
+.rp-steps li{flex:1}
+.rp-steps button{height:24px;padding:0;font-size:0;color:transparent;border-radius:6px}
+.rp-steps button::before{display:none}
+.rp-steps button:hover,.rp-steps [aria-current]{background:none}
+.rp-steps i{left:0;right:0;bottom:11px;opacity:1}
+.rp-steps [aria-current] i{background:#2a3258}
+.rp-cap{display:block;min-height:4.6em;padding:6px 16px 14px;font:12.5px/1.5 var(--mono);color:#eef0fb}
+}
+@media (max-width:480px){.rp-bar .rp-t{display:none}}
+
+/* sections */
+.sec{position:relative;padding:clamp(72px,9vw,120px) 0}
+.alt{background:var(--bg2);border-block:1px solid var(--line)}
+.sh{max-width:780px;margin-bottom:clamp(36px,5vw,56px)}
+.eyebrow{display:flex;align-items:center;gap:10px;margin-bottom:18px;font:600 12.5px/1 var(--mono);letter-spacing:.09em;text-transform:uppercase;color:var(--muted)}
+.tag{padding:4px 6px;border-radius:5px;background:#db2777;color:#fff;font:700 11.5px/1 var(--mono);letter-spacing:0;text-transform:none}
+h2{font-size:clamp(2.1rem,1.35rem + 2.7vw,3.4rem);line-height:1.05;letter-spacing:-.038em;font-weight:700}
+.sh .lead{margin-top:20px}
+h3{font-size:1.0625rem;line-height:1.35;letter-spacing:-.012em;font-weight:600}
+.card{border:1px solid var(--line);border-radius:20px;background:var(--card);box-shadow:var(--shadow)}
+.fine{margin-top:28px;font-size:13.5px;color:var(--muted)}
+
+/* code */
+.code{position:relative;border-radius:12px;background:#0b1020;border:1px solid #1f2747;color:#d7dbf0}
+.code pre{margin:0;padding:13px 52px 13px 16px;font-size:13.5px;line-height:1.6;white-space:pre-wrap;overflow-wrap:anywhere;tab-size:2}
+.code.x pre{padding-right:16px;white-space:pre;overflow-wrap:normal;overflow-x:auto}
+.code-h{display:flex;align-items:center;gap:10px;min-height:42px;padding:4px 5px 4px 14px;border-bottom:1px solid #1c2342;font:500 12.5px/1.2 var(--mono);color:#9aa3c4}
+.code-h .copy{position:static;margin-left:auto}
+.cmd::before{content:"$ ";color:#646b93}
+.ps .cmd::before{content:"PS> "}
+.s{color:#9be3c3}.nu{color:#fcd34d}.kw{color:#c4b5fd}.cm{color:#7d86a8}.r{color:#a5b4fc}.c{color:#7d86a8}.st{color:#fcd34d}.ok{color:#86efac}.id{color:#f472b6;font-weight:700}
+.copy{position:absolute;top:8px;right:8px;display:inline-flex;align-items:center;justify-content:center;gap:6px;min-width:32px;height:32px;padding:0 8px;border-radius:8px;border:1px solid #2a3258;background:#121936;color:#c7cbe6;font:600 12.5px/1 var(--sans);cursor:pointer;transition:background-color .15s,color .15s}
+.copy:hover{background:#1b2350;color:#fff}
+.copy .ic{width:16px;height:16px}
+.copy .y{display:none}
+.copy.done{color:#86efac;border-color:#2a6a4b;background:#0f2a22}
+.copy.done .y{display:inline}.copy.done .n{display:none}
+.code :focus-visible,.term :focus-visible,.rp :focus-visible,.band :focus-visible{outline-color:#a5b4fc}
+
+/* install */
+.tabs{overflow:hidden}
+.tablist{display:flex;flex-wrap:wrap;gap:4px;padding:8px;border-bottom:1px solid var(--line);background:var(--bg2)}
+.tab{height:40px;padding:0 15px;border-radius:10px;border:1px solid transparent;background:none;color:var(--muted);font:500 14.5px/1 var(--sans);cursor:pointer;white-space:nowrap}
+.tab:hover{color:var(--text)}
+.tab[aria-selected=true]{background:var(--card);border-color:var(--line2);color:var(--text);font-weight:600;box-shadow:0 1px 3px rgba(11,16,32,.08)}
+.panel{padding:clamp(20px,3.4vw,36px)}
+.panel:focus-visible{outline-offset:-4px}
+.js .ph{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap}
+.ph{font-size:1.125rem;margin-bottom:16px}
+.tabs-b{display:grid;grid-template-columns:minmax(0,1fr) 300px}
+.steps{list-style:none;display:grid;gap:24px;counter-reset:n}
+.steps p,.steps-p{margin:0 0 12px;color:var(--text2)}
+.steps p{padding-left:38px;text-indent:-38px}
+.steps p::before{counter-increment:n;content:counter(n);display:inline-grid;place-items:center;width:26px;height:26px;margin-right:12px;border-radius:8px;vertical-align:middle;text-indent:0;background:var(--accent-bg);color:var(--accent);font:700 12.5px/1 var(--mono)}
+.steps.or p::before{content:"";width:10px;height:10px;margin:0 20px 0 8px;border-radius:50%;background:none;border:2px solid var(--muted)}
+html:not(.js) .tablist{display:none}
+.js [data-tabs]:not(.ready) .panel+.panel{display:none}
+.note{margin-top:26px;padding-top:20px;border-top:1px solid var(--line);font-size:14.5px;color:var(--muted)}
+.note a,.qa a{color:var(--accent);font-weight:600}
+.one{display:flex;flex-wrap:wrap;align-items:center;gap:12px 16px;margin-bottom:26px}
+.one span{font-size:14px;color:var(--muted)}
+.one span a{color:var(--accent);font-weight:600}
+.tabs-a{display:grid;gap:30px;align-content:start;padding:clamp(20px,3.4vw,36px) 28px;border-left:1px solid var(--line);background:var(--bg2)}
+.tabs-a h3{font:600 12.5px/1 var(--mono);letter-spacing:.09em;text-transform:uppercase;color:var(--muted)}
+.tabs-a p{margin-top:12px;font-size:14.5px;color:var(--text2)}
+.tabs-a q{display:block;margin-top:12px;font-size:16.5px;line-height:1.5;font-weight:500;color:var(--text);quotes:"\201C" "\201D"}
+@media (max-width:980px){.tabs-b{grid-template-columns:1fr}.tabs-a{grid-template-columns:1fr 1fr;border-left:0;border-top:1px solid var(--line)}}
+@media (max-width:640px){.tabs-a{grid-template-columns:1fr}.tablist{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;padding-right:44px;-webkit-mask-image:linear-gradient(90deg,#000 calc(100% - 48px),transparent);mask-image:linear-gradient(90deg,#000 calc(100% - 48px),transparent)}.tablist::-webkit-scrollbar{display:none}.tab{flex:none}}
+
+/* see */
+.see{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:24px;align-items:start}
+.shot{margin:0;border-radius:16px;overflow:hidden;border:1px solid var(--line);background:var(--card);box-shadow:var(--shadow)}
+.shot img{width:100%}
+.shot figcaption,.term-h{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;min-height:50px;padding:10px 16px;font-size:14px}
+.shot figcaption{border-top:1px solid var(--line);color:var(--text2)}
+.badge{margin-left:auto;padding:5px 9px;border-radius:7px;font:600 12px/1 var(--mono);white-space:nowrap;background:var(--accent-bg);color:var(--accent)}
+.term .badge{background:#161d3d;color:#c7d2fe}
+.term .badge.hot{background:linear-gradient(135deg,#4f46e5,#7c3aed);color:#fff}
+.term{border-radius:16px;overflow:hidden;background:#0b1020;border:1px solid #1f2747;color:#d7dbf0;box-shadow:var(--shadow)}
+.term-h{border-bottom:1px solid #1a2140;color:#c7cbe6;font-weight:500}
+.term-h code{background:#161d3d;color:#e0e7ff}
+.out{margin:0;padding:16px 18px 18px;font-size:12.5px;line-height:1.7;white-space:pre-wrap;overflow-wrap:anywhere}
+.out .l{display:block;padding-left:3ch;text-indent:-3ch}
+.out .l.i{padding-left:5ch;text-indent:-5ch}
+.facts{list-style:none;display:grid;gap:18px;margin-top:28px}
+.facts li{display:grid;grid-template-columns:22px minmax(0,1fr);gap:12px;color:var(--text2);font-size:15px}
+.facts li::before{content:"";width:8px;height:8px;margin:8px 0 0 6px;border-radius:2px;background:#db2777}
+.facts b{color:var(--text);font-weight:600}
+.shot figcaption>span:first-child{flex:1 1 220px}
+.shot .btn{margin-left:auto}
+@media (max-width:900px){.see{grid-template-columns:1fr}}
+
+/* tokens */
+.tok{display:grid;grid-template-columns:1.55fr 1fr;gap:20px}
+.tok-side{display:grid;gap:20px;align-content:start}
+.tok-side .bars th{width:50%}
+.chart{margin:0;padding:clamp(20px,2.8vw,30px)}
+.chart figcaption p{margin-top:4px;font-size:14px;color:var(--muted)}
+.bars{width:100%;border-collapse:collapse;margin-top:14px}
+.bars th{width:41%;padding:11px 16px 11px 0;text-align:left;font-size:14.5px;font-weight:500;vertical-align:middle}
+.bars th small{display:block;margin-top:2px;font-size:12.5px;color:var(--muted);font-weight:400}
+.bars td{padding:11px 0}
+.bars thead th{padding:0;border:0}
+.bars tbody tr+tr>*{border-top:1px solid var(--line)}
+.bars .grp th{width:auto;padding:22px 0 6px;font:600 12px/1.2 var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.bars tbody:first-of-type .grp th{padding-top:4px}
+.bars .grp+tr>*{border-top:0}
+.bars tr.grp:hover>*{background:none}
+.stat{padding:clamp(20px,2.8vw,30px)}
+.stat .big{margin-top:14px;font:700 clamp(3rem,2.3rem + 2vw,4.25rem)/1 var(--display);letter-spacing:-.045em;color:var(--text)}
+.stat .big span{margin-left:.15em;font-size:.34em;font-weight:600;letter-spacing:-.01em;color:var(--accent)}
+.stat p:last-child{margin-top:14px;font-size:14.5px;color:var(--text2)}
+.bt{display:flex;align-items:center;gap:10px}
+.bf{flex:none;height:16px;width:calc(var(--p)*(100% - 76px));min-width:4px;border-radius:0 4px 4px 0;background:var(--bar);transition:width 1.1s cubic-bezier(.2,.75,.2,1)}
+.base .bf{background:var(--bar0)}
+.bv{font-size:14.5px;font-weight:650;font-variant-numeric:tabular-nums;white-space:nowrap}
+.js [data-bars]:not(.in) .bf{width:4px}
+.bars tr:hover>*{background:color-mix(in srgb,var(--accent-bg) 55%,transparent)}
+.pills{display:flex;gap:5px}
+.pills i{width:22px;height:16px;border-radius:4px;background:var(--bar0);transition:transform .4s cubic-bezier(.2,.75,.2,1),opacity .4s}
+.pills i.on{background:var(--bar)}
+.pills i:nth-child(2){transition-delay:.08s}.pills i:nth-child(3){transition-delay:.16s}.pills i:nth-child(4){transition-delay:.24s}.pills i:nth-child(5){transition-delay:.32s}
+.js [data-bars]:not(.in) .pills i{transform:scale(.4);opacity:0}
+@media (max-width:960px){.tok{grid-template-columns:1fr}}
+@media (max-width:520px){.bars .grp th{padding-top:18px}.bars th{display:block;width:auto;padding:12px 0 6px}.bars td{display:block;padding:0 0 12px}.bars tr+tr>td{border-top:0}}
+
+/* resources band */
+.band{background:#070a18;color:#e8eaf6;overflow:clip;isolation:isolate;border-block:1px solid #1b2140}
+.band::before{content:"";position:absolute;inset:0;z-index:-1;background:radial-gradient(46% 55% at 88% 0,rgba(99,102,241,.32),transparent 70%),radial-gradient(40% 50% at 0 100%,rgba(14,165,233,.13),transparent 70%)}
+.band .eyebrow{color:#8e95b5}.band h2{color:#fff}.band .lead{color:#b8bdd6}.band .fine{color:#8e95b5}
+.band :not(pre)>code{background:#161d3d;color:#e0e7ff}
+.kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:1px;margin:0;border-radius:20px;overflow:hidden;background:#1f2747;border:1px solid #1f2747}
+.kpis>div{padding:28px 26px 30px;background:linear-gradient(180deg,#0e1430,#0b1020)}
+.kpis dt{font-size:14px;font-weight:500;color:#b8bdd6}
+.kpis dd{margin:14px 0 0}
+.kpis b{display:block;font:700 clamp(2.6rem,1.7rem + 2.2vw,3.6rem)/1 var(--display);letter-spacing:-.045em;color:#fff;white-space:nowrap}
+.kpis b small{margin-left:.12em;font-size:.42em;font-weight:600;letter-spacing:-.01em;color:#a5b4fc}
+.kpis span{display:block;margin-top:14px;font-size:14px;color:#8e95b5}
+.why{list-style:none;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:28px;margin-top:44px}
+.why h3{color:#fff;font-size:15.5px}
+.why p{margin-top:8px;font-size:14.5px;color:#a8aecb}
+@media (max-width:1000px){.kpis,.why{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:540px){.why{grid-template-columns:1fr}.kpis>div{padding:20px 18px 22px}.kpis b{font-size:2.1rem}.kpis span{font-size:13px}}
+
+/* features */
+.bento{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:20px}
+.f{grid-column:span 2;display:flex;flex-direction:column;gap:12px;padding:26px;overflow:hidden;transition:transform .2s,border-color .2s,box-shadow .2s}
+.f:hover{transform:translateY(-2px);border-color:var(--line2)}
+.f.w3{grid-column:span 3}.f.w4{grid-column:span 4}
+.fi{width:42px;height:42px;display:grid;place-items:center;border-radius:12px;background:var(--accent-bg);color:var(--accent);margin-bottom:6px}
+.fi .ic{width:21px;height:21px}
+.f h3{font-size:1.1875rem}
+.f p{color:var(--text2);font-size:15px}
+.f p+.code{margin-top:auto}
+.f>p{margin-bottom:4px}
+.f .code pre{font-size:12.5px}
+.f .media{margin:auto -26px -26px;border-top:1px solid var(--line);background:var(--bg2)}
+.f .media img{width:100%;aspect-ratio:16/7;object-fit:cover;object-position:top}
+.chips{display:flex;flex-wrap:wrap;gap:6px;list-style:none}
+.chips li{padding:5px 10px;border-radius:8px;border:1px solid var(--line);background:var(--bg2);font-size:13px;color:var(--text2);white-space:nowrap}
+.chips.m li{font-family:var(--mono);font-size:12.5px}
+.f ul.dots{list-style:none;display:grid;gap:8px;font-size:14.5px;color:var(--text2)}
+.dots li{display:grid;grid-template-columns:14px minmax(0,1fr);gap:8px}
+.dots li::before{content:"";width:6px;height:6px;margin-top:9px;border-radius:50%;background:var(--accent)}
+.f .lk{margin-top:auto;padding-top:6px}
+@media (max-width:1000px){.bento{grid-template-columns:repeat(2,minmax(0,1fr))}.f{grid-column:span 1}.f.w3,.f.w4{grid-column:span 2}}
+@media (max-width:640px){.bento{grid-template-columns:1fr}.f,.f.w3,.f.w4{grid-column:auto}}
+
+/* profiles */
+.profiles{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px;list-style:none}
+.pc{display:flex;flex-direction:column;gap:10px;padding:22px;transition:transform .2s,border-color .2s}
+.pc:hover{transform:translateY(-2px);border-color:var(--line2)}
+.pc h3{display:flex;align-items:center;gap:12px;font:600 16px/1.2 var(--mono);letter-spacing:0}
+.pc h3 span{width:38px;height:38px;display:grid;place-items:center;border-radius:11px;background:var(--accent-bg);color:var(--accent)}
+.pc p{flex:1;font-size:14.5px;color:var(--text2)}
+.pc dl{display:flex;gap:22px;margin:6px 0 0;padding-top:14px;border-top:1px solid var(--line);font-size:12.5px;color:var(--muted)}
+.pc dd{margin:2px 0 0;font-size:14px;font-weight:600;color:var(--text);font-variant-numeric:tabular-nums}
+.pc.own{border-style:dashed;box-shadow:none;background:transparent}
+.pc .code pre{font-size:12px;padding:12px 14px}
+@media (max-width:1060px){.profiles{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:560px){.profiles{grid-template-columns:1fr}}
+
+/* agents */
+.paths{list-style:none;overflow:hidden}
+.paths>li{display:grid;grid-template-columns:minmax(0,230px) minmax(0,300px) minmax(0,1fr);gap:28px;align-items:center;padding:22px 28px}
+.paths>li+li{border-top:1px solid var(--line)}
+.paths h3{font-size:16.5px}
+.paths p{margin-top:3px;font-size:14px;color:var(--muted)}
+.paths .code pre{padding:9px 48px 9px 12px;font-size:12.5px;white-space:pre-wrap;overflow-wrap:anywhere}
+.paths .copy{top:4px;right:4px;height:30px;min-width:30px}
+.more{display:flex;flex-wrap:wrap;gap:12px 28px;margin-top:28px}
+@media (max-width:980px){.paths>li{grid-template-columns:1fr;gap:12px;padding:22px}}
+
+/* faq */
+.faq{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.7fr);gap:clamp(32px,6vw,88px);align-items:start}
+.faq .sh{margin:0}
+.qa details{border-bottom:1px solid var(--line)}
+.qa details:first-child{border-top:1px solid var(--line)}
+.qa summary{display:flex;align-items:center;justify-content:space-between;gap:20px;padding:20px 4px;font-size:17px;font-weight:600;cursor:pointer;list-style:none}
+.qa summary::-webkit-details-marker{display:none}
+.qa summary::after{content:"";flex:none;width:13px;height:13px;color:var(--muted);background:linear-gradient(currentColor,currentColor) center/100% 2px no-repeat,linear-gradient(currentColor,currentColor) center/2px 100% no-repeat;transition:transform .25s}
+.qa details[open] summary::after{transform:rotate(45deg)}
+.qa summary:hover{color:var(--accent)}
+.qa .a{padding:0 40px 24px 4px;color:var(--text2)}
+.qa .a p+p{margin-top:10px}
+@media (max-width:900px){.faq{grid-template-columns:1fr}}
+
+/* final + footer */
+.final{text-align:center;overflow:clip;isolation:isolate}
+.final::before{content:"";position:absolute;inset:0;z-index:-1;background:radial-gradient(46% 60% at 50% 100%,var(--glow1),transparent 72%)}
+.final svg.lg{width:64px;height:64px;margin:0 auto 26px}
+.final .lead{max-width:34em;margin:20px auto 0}
+.ft{border-top:1px solid var(--line);padding:56px 0 36px;font-size:14px;color:var(--muted)}
+.ft-g{display:grid;grid-template-columns:1.3fr 2fr 1fr;gap:40px}
+.ft .brand{color:var(--text)}
+.ft-g>div>p{margin-top:14px;max-width:24em}
+.ft h2{font:600 12.5px/1 var(--mono);letter-spacing:.09em;text-transform:uppercase;color:var(--text)}
+.ft ul{list-style:none;display:grid;gap:9px;margin-top:16px}
+.ft .two{display:block;columns:2;column-gap:24px}
+.ft .two li{margin-bottom:9px}
+.ft a:hover{color:var(--text)}
+.ft-b{display:flex;flex-wrap:wrap;justify-content:space-between;gap:10px 24px;margin-top:48px;padding-top:24px;border-top:1px solid var(--line)}
+@media (max-width:860px){.ft-g{grid-template-columns:1fr 1fr}.ft-g>div:first-child{grid-column:1/-1}}
+@media (max-width:480px){.ft-g{grid-template-columns:1fr}}
+
+/* "mark this page" overlay */
+.marks{position:absolute;top:0;left:0;z-index:45;pointer-events:none}
+.mk{position:absolute;border:1.5px solid #ec4899;border-radius:5px}
+.mk::before{content:attr(data-id);position:absolute;left:-1.5px;bottom:100%;margin-bottom:1px;padding:2px 4px;border-radius:3px;background:#db2777;color:#fff;font:700 10px/1 var(--mono)}
+
+@media (prefers-reduced-motion:reduce){
+*,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important;transition-delay:0s!important}
+.rp-steps [aria-current] i::after{animation-duration:2.8s!important}
+}
+</style>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+<defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#818cf8"/><stop offset=".55" stop-color="#6366f1"/><stop offset="1" stop-color="#7c3aed"/></linearGradient></defs>
+<symbol id="logo" viewBox="0 0 64 64"><rect x="4" y="8" width="56" height="42" rx="10" fill="url(#lg)"/><rect x="9" y="13" width="46" height="32" rx="6" fill="#0b1020" opacity=".92"/><path d="M27 20v19l5-4.5 3.5 7.5 3.5-1.6-3.4-7.4H42z" fill="#fff"/><path d="m47 18.5 1.4 3.1 3.1 1.4-3.1 1.4-1.4 3.1-1.4-3.1-3.1-1.4 3.1-1.4z" fill="#a5b4fc"/><rect x="24" y="52" width="16" height="4" rx="2" fill="#6366f1" opacity=".7"/></symbol>
+<symbol id="i-gh" viewBox="0 0 16 16"><path fill="currentColor" stroke="none" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8"/></symbol>
+<symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
+<symbol id="i-copy" viewBox="0 0 24 24"><rect x="8.5" y="8.5" width="12" height="12" rx="2.5"/><path d="M15.5 8.5V6A2.5 2.5 0 0 0 13 3.5H6A2.5 2.5 0 0 0 3.5 6v7A2.5 2.5 0 0 0 6 15.5h2.5"/></symbol>
+<symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5"/></symbol>
+<symbol id="i-dl" viewBox="0 0 24 24"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></symbol>
+<symbol id="i-win" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M3 8.5h18M6.5 6.3h.01M9 6.3h.01"/></symbol>
+<symbol id="i-code" viewBox="0 0 24 24"><path d="m8 7-5 5 5 5M16 7l5 5-5 5M13.5 4.5l-3 15"/></symbol>
+<symbol id="i-fork" viewBox="0 0 24 24"><rect x="3" y="8" width="13" height="11" rx="2.2"/><path d="M8 5h11a2 2 0 0 1 2 2v9"/></symbol>
+<symbol id="i-eye" viewBox="0 0 24 24"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12"/><circle cx="12" cy="12" r="3"/></symbol>
+<symbol id="i-replay" viewBox="0 0 24 24"><path d="M3.5 12a8.5 8.5 0 1 0 2.6-6.1"/><path d="M3.5 4v4.5H8"/><path d="m10 9 5 3-5 3z"/></symbol>
+<symbol id="i-shield" viewBox="0 0 24 24"><path d="m12 3 7.5 3v5.5c0 4.6-3.2 8.3-7.5 9.5-4.3-1.2-7.5-4.9-7.5-9.5V6z"/><path d="m9 12 2 2 4-4"/></symbol>
+<symbol id="i-cursor" viewBox="0 0 24 24"><path d="M6 3.5V18l4-3.6 2.8 6 2.6-1.2-2.7-5.8H18z"/></symbol>
+<symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.4 2.6 3.6 5.6 3.6 9s-1.2 6.4-3.6 9c-2.4-2.6-3.6-5.6-3.6-9S9.6 5.6 12 3"/></symbol>
+<symbol id="i-doc" viewBox="0 0 24 24"><path d="M6 3h8l5 5v13H6z"/><path d="M14 3v5h5M9 13h7M9 17h5"/></symbol>
+<symbol id="i-term" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="m7 9.5 3 2.5-3 2.5M12.5 15H17"/></symbol>
+<symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m20 20-4.8-4.8"/></symbol>
+<symbol id="i-chart" viewBox="0 0 24 24"><path d="M4 20h16M7 16v-4M12 16V7M17 16v-6"/></symbol>
+<symbol id="i-wine" viewBox="0 0 24 24"><path d="M8 3h8l-.4 5.2a3.6 3.6 0 0 1-7.2 0z"/><path d="M12 11.8V20M8.5 20h7"/></symbol>
+<symbol id="i-layers" viewBox="0 0 24 24"><path d="m12 3 9 5-9 5-9-5z"/><path d="m3 13 9 5 9-5"/></symbol>
+<symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 6v12M6 12h12"/></symbol>
+<symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4"/></symbol>
+<symbol id="i-moon" viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5"/></symbol>
+<symbol id="i-play" viewBox="0 0 24 24"><path d="M8 5.5v13l10-6.5z"/></symbol>
+<symbol id="i-pause" viewBox="0 0 24 24"><path d="M8.5 5.5v13M15.5 5.5v13"/></symbol>
+</svg>
+
+<header class="hdr">
+<div class="wrap">
+<a class="brand" href="./" aria-label="Minion home"><svg aria-hidden="true"><use href="#logo"/></svg>minion</a>
+<nav class="nav" aria-label="Sections">
+<a href="#install">Install</a><a href="#see">How it sees</a><a href="#tokens">Tokens</a><a href="#features">Features</a><a href="#profiles">Profiles</a><a href="#agents">Integrations</a><a href="#faq">FAQ</a>
+</nav>
+<div class="hdr-r">
+<a class="doc" href="https://github.com/apophisss/minion/blob/main/docs/install.md">Docs</a>
+<a class="btn btn-s btn-sm gh" href="https://github.com/apophisss/minion" aria-label="Minion on GitHub"><svg class="ic" aria-hidden="true"><use href="#i-gh"/></svg><span>GitHub</span></a>
+<button class="tb" id="theme" type="button" aria-label="Switch to dark theme"><svg class="ic sun" aria-hidden="true"><use href="#i-sun"/></svg><svg class="ic moon" aria-hidden="true"><use href="#i-moon"/></svg></button>
+</div>
+</div>
+</header>
+
+<main id="main">
+<section class="hero" aria-labelledby="hero-h">
+<div class="wrap">
+<a class="pill rise" href="https://github.com/apophisss/minion"><b>MIT</b>Open source, zero dependencies<svg class="ic" aria-hidden="true"><use href="#i-arrow"/></svg></a>
+<h1 id="hero-h" class="rise" style="--d:1">Give every AI agent <span class="grad">its own computer.</span></h1>
+<p class="lead rise" style="--d:2">Featherweight Linux desktops for any agent, over MCP, function calling, HTTP, a CLI, Python or TypeScript. Agents read the screen as text with stable <span class="at">@ids</span>, act in batches or in code, and use any program or website.</p>
+<div class="cta rise" style="--d:3">
+<a class="btn btn-p" href="#install">Get started<svg class="ic" aria-hidden="true"><use href="#i-arrow"/></svg></a>
+<a class="btn btn-s" href="https://github.com/apophisss/minion"><svg class="ic" aria-hidden="true"><use href="#i-gh"/></svg>GitHub</a>
+</div>
+<ul class="meta rise" style="--d:4">
+<li><span><b>~1.5 s</b> to a ready desktop</span></li>
+<li><span><b>54–105 MB</b> idle RAM</span></li>
+<li><span><b>0% CPU</b> when frozen</span></li>
+</ul>
+<figure class="replay rise" style="--d:5" data-replay>
+<div class="rp">
+<div class="rp-bar">
+<svg class="lg" aria-hidden="true"><use href="#logo"/></svg>
+<span class="rp-t"><strong>research</strong> desktop</span>
+<span class="rp-live" aria-hidden="true">REPLAY</span>
+<span class="rp-n" aria-hidden="true"><span data-n>1</span> / 6</span>
+<button class="rp-play" type="button" aria-label="Pause the replay"><svg class="ic i-pause" aria-hidden="true"><use href="#i-pause"/></svg><svg class="ic i-play" aria-hidden="true"><use href="#i-play"/></svg></button>
+</div>
+<div class="rp-body">
+<div class="rp-screen">
+<img class="on" src="assets/site/replay-1.webp" width="720" height="450" alt="Firefox showing the Wikipedia main page on a Minion research desktop" fetchpriority="high">
+<template>
+<img src="assets/site/replay-2.webp" width="720" height="450" alt="The agent has typed Ada Lovelace into the Wikipedia search box" decoding="async">
+<img src="assets/site/replay-3.webp" width="720" height="450" alt="The Wikipedia article on Ada Lovelace has loaded" decoding="async">
+<img src="assets/site/replay-4.webp" width="720" height="450" alt="The agent has scrolled further down the article" decoding="async">
+<img src="assets/site/replay-5.webp" width="720" height="450" alt="Firefox's find bar highlights the phrase first computer program in the article" decoding="async">
+<img src="assets/site/replay-6.webp" width="720" height="450" alt="The find bar is closed and the phrase stays highlighted" decoding="async">
+</template>
+</div>
+<ol class="rp-steps">
+<li><button type="button" aria-current="step"><span class="k">open:</span> firefox-esr https://en.wikipedia.org<i></i></button></li>
+<li><button type="button"><span class="k">act:</span> filled entry "Search Wikipedia" (468,118) with 12 chars · pressed Return<i></i></button></li>
+<li><button type="button"><span class="k">act:</span> waited 3.0s for "Analytical Engine" to appear<i></i></button></li>
+<li><button type="button"><span class="k">act:</span> scrolled down ×5<i></i></button></li>
+<li><button type="button"><span class="k">act:</span> pressed ctrl+f · typed 22 chars · pressed Return<i></i></button></li>
+<li><button type="button"><span class="k">act:</span> pressed Escape<i></i></button></li>
+</ol>
+<p class="rp-cap" aria-hidden="true"></p>
+</div>
+</div>
+<figcaption>An agent on a <code>research</code> desktop, step by step, as Minion's built-in flight recorder saw it.</figcaption>
+</figure>
+</div>
+</section>
+
+<section id="install" class="sec alt" aria-labelledby="install-h">
+<div class="wrap">
+<div class="sh">
+<p class="eyebrow"><span class="tag">@1</span>Install</p>
+<h2 id="install-h">Up and running in a minute.</h2>
+<p class="lead">One command installs Minion and runs <code>minion&nbsp;setup</code>, which checks Docker, prepares a desktop and connects your AI apps. Or add Minion to your app directly.</p>
+</div>
+<div class="tabs card" data-tabs>
+<div class="tablist" role="tablist" aria-label="Install for your system or app">
+<button class="tab" type="button" role="tab" id="t-unix" aria-controls="p-unix" aria-selected="true">macOS / Linux</button>
+<button class="tab" type="button" role="tab" id="t-win" aria-controls="p-win" aria-selected="false" tabindex="-1">Windows</button>
+<button class="tab" type="button" role="tab" id="t-cc" aria-controls="p-cc" aria-selected="false" tabindex="-1">Claude Code</button>
+<button class="tab" type="button" role="tab" id="t-cursor" aria-controls="p-cursor" aria-selected="false" tabindex="-1">Cursor</button>
+<button class="tab" type="button" role="tab" id="t-vscode" aria-controls="p-vscode" aria-selected="false" tabindex="-1">VS Code</button>
+<button class="tab" type="button" role="tab" id="t-cd" aria-controls="p-cd" aria-selected="false" tabindex="-1">Claude Desktop</button>
+<button class="tab" type="button" role="tab" id="t-remote" aria-controls="p-remote" aria-selected="false" tabindex="-1">ChatGPT &amp; Claude.ai</button>
+<button class="tab" type="button" role="tab" id="t-py" aria-controls="p-py" aria-selected="false" tabindex="-1">Python</button>
+</div>
+<div class="tabs-b">
+<div>
+<div class="panel" role="tabpanel" id="p-unix" aria-labelledby="t-unix" tabindex="0">
+<h3 class="ph">macOS and Linux</h3>
+<ol class="steps">
+<li><p>Install the <code>minion</code> command. No admin rights needed, and it brings uv and Python with it.</p>
+<div class="code" data-label="the install command"><pre><code><span class="cmd">curl -fsSL https://raw.githubusercontent.com/apophisss/minion/main/install.sh | sh</span></code></pre></div></li>
+<li><p>It finishes with <code>minion&nbsp;setup</code>, which checks Docker, prepares a desktop and connects your AI apps. Run it again any time.</p>
+<div class="code" data-label="minion setup"><pre><code><span class="cmd">minion setup</span></code></pre></div></li>
+</ol>
+<p class="note">Connect another app any time with <code>minion&nbsp;connect</code>: Claude Desktop, Claude Code, Cursor, VS Code, Windsurf/Devin, Gemini CLI, Codex, LM Studio and more. <a href="https://github.com/apophisss/minion/blob/main/docs/install.md">Read the install guide</a></p>
+</div>
+
+<div class="panel" role="tabpanel" id="p-win" aria-labelledby="t-win" tabindex="0">
+<h3 class="ph">Windows</h3>
+<ol class="steps">
+<li><p>Install the <code>minion</code> command from PowerShell. No admin rights needed, and it brings uv and Python with it.</p>
+<div class="code ps" data-label="the PowerShell install command"><pre><code><span class="cmd">irm https://raw.githubusercontent.com/apophisss/minion/main/install.ps1 | iex</span></code></pre></div></li>
+<li><p>It finishes with <code>minion&nbsp;setup</code>, which checks Docker, prepares a desktop and connects your AI apps. Run it again any time.</p>
+<div class="code ps" data-label="minion setup"><pre><code><span class="cmd">minion setup</span></code></pre></div></li>
+</ol>
+<p class="note">Connect another app any time with <code>minion&nbsp;connect</code>: Claude Desktop, Claude Code, Cursor, VS Code, Windsurf/Devin, Gemini CLI, Codex, LM Studio and more. <a href="https://github.com/apophisss/minion/blob/main/docs/install.md">Read the install guide</a></p>
+</div>
+
+<div class="panel" role="tabpanel" id="p-cc" aria-labelledby="t-cc" tabindex="0">
+<h3 class="ph">Claude Code</h3>
+<ol class="steps or">
+<li><p>Add the MCP server</p>
+<div class="code" data-label="the Claude Code command"><pre><code><span class="cmd">claude mcp add minion -- uvx minion-desktop mcp</span></code></pre></div></li>
+<li><p>Or install the plugin: the same tools, plus a skill that teaches efficient use.</p>
+<div class="code" data-label="the plugin commands"><pre><code><span class="cmd">claude plugin marketplace add apophisss/minion &amp;&amp; claude plugin install minion@minion</span></code></pre></div></li>
+</ol>
+<p class="note">Add <code>--scope&nbsp;user</code> to use it in every project. For the smallest context, add <code>--compact</code>: one <code>computer</code> tool, about 230 tokens of definitions instead of 2,100. <a href="https://github.com/apophisss/minion/blob/main/docs/agents.md">Agents &amp; MCP guide</a></p>
+</div>
+
+<div class="panel" role="tabpanel" id="p-cursor" aria-labelledby="t-cursor" tabindex="0">
+<h3 class="ph">Cursor</h3>
+<div class="one"><a class="btn btn-p" data-link="cursor" href="https://github.com/apophisss/minion/blob/main/docs/agents.md"><svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg>Add to Cursor</a><span>Opens Cursor and asks you to confirm. Needs <a href="https://docs.astral.sh/uv/getting-started/installation/">uv</a>.</span></div>
+<p class="steps-p">Or add this to <code>~/.cursor/mcp.json</code>, or <code>.cursor/mcp.json</code> in a project:</p>
+<div class="code x" data-label="the Cursor configuration" data-title="mcp.json"><pre><code>{
+  <span class="s">"mcpServers"</span>: {
+    <span class="s">"minion"</span>: {
+      <span class="s">"command"</span>: <span class="s">"uvx"</span>,
+      <span class="s">"args"</span>: [<span class="s">"minion-desktop"</span>, <span class="s">"mcp"</span>]
+    }
+  }
+}</code></pre></div>
+<p class="note">Or run <code>minion&nbsp;connect</code> after installing. <a href="https://github.com/apophisss/minion/blob/main/docs/agents.md">Agents &amp; MCP guide</a></p>
+</div>
+
+<div class="panel" role="tabpanel" id="p-vscode" aria-labelledby="t-vscode" tabindex="0">
+<h3 class="ph">VS Code</h3>
+<div class="one"><a class="btn btn-p" data-link="vscode" href="https://github.com/apophisss/minion/blob/main/docs/agents.md"><svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg>Install in VS Code</a><a class="btn btn-s" data-link="vscodeInsiders" href="https://github.com/apophisss/minion/blob/main/docs/agents.md">VS Code Insiders</a><span>Needs <a href="https://docs.astral.sh/uv/getting-started/installation/">uv</a>.</span></div>
+<p class="steps-p">Or add this to <code>.vscode/mcp.json</code>:</p>
+<div class="code x" data-label="the VS Code configuration" data-title=".vscode/mcp.json"><pre><code>{
+  <span class="s">"servers"</span>: {
+    <span class="s">"minion"</span>: {
+      <span class="s">"type"</span>: <span class="s">"stdio"</span>,
+      <span class="s">"command"</span>: <span class="s">"uvx"</span>,
+      <span class="s">"args"</span>: [<span class="s">"minion-desktop"</span>, <span class="s">"mcp"</span>]
+    }
+  }
+}</code></pre></div>
+<p class="note">Or run <code>minion&nbsp;connect</code> after installing. <a href="https://github.com/apophisss/minion/blob/main/docs/agents.md">Agents &amp; MCP guide</a></p>
+</div>
+
+<div class="panel" role="tabpanel" id="p-cd" aria-labelledby="t-cd" tabindex="0">
+<h3 class="ph">Claude Desktop</h3>
+<div class="one"><a class="btn btn-p" data-link="claudeDesktop" href="https://github.com/apophisss/minion/releases/latest"><svg class="ic" aria-hidden="true"><use href="#i-dl"/></svg>Download the extension</a><span>Double-click <code>minion.mcpb</code> to install it. It carries Minion itself, so you need no Python, uv or <code>minion</code> command.</span></div>
+<p class="steps-p">Or add this to <code>claude_desktop_config.json</code>:</p>
+<div class="code x" data-label="the Claude Desktop configuration" data-title="claude_desktop_config.json"><pre><code>{
+  <span class="s">"mcpServers"</span>: {
+    <span class="s">"minion"</span>: {
+      <span class="s">"command"</span>: <span class="s">"uvx"</span>,
+      <span class="s">"args"</span>: [<span class="s">"minion-desktop"</span>, <span class="s">"mcp"</span>]
+    }
+  }
+}</code></pre></div>
+<p class="note">Or run <code>minion&nbsp;connect</code> after installing. <a href="https://github.com/apophisss/minion/blob/main/docs/integrations.md">Integrations</a></p>
+</div>
+
+<div class="panel" role="tabpanel" id="p-remote" aria-labelledby="t-remote" tabindex="0">
+<h3 class="ph">ChatGPT and Claude.ai</h3>
+<p class="steps-p">Web apps can't start programs on your computer. <code>minion&nbsp;share</code> starts Minion's server with a fresh token, opens a tunnel to it and prints an HTTPS MCP URL.</p>
+<ol class="steps">
+<li><p>Share Minion from your machine</p>
+<div class="code" data-label="minion share"><pre><code><span class="cmd">minion share</span></code></pre></div></li>
+<li><p>Paste the URL into the app's connector settings. Ctrl+C stops sharing.</p></li>
+</ol>
+<p class="note">The URL contains the token, so treat it like a password. <a href="https://github.com/apophisss/minion/blob/main/docs/remote.md">Read the remote access guide</a></p>
+</div>
+
+<div class="panel" role="tabpanel" id="p-py" aria-labelledby="t-py" tabindex="0">
+<h3 class="ph">Python</h3>
+<ol class="steps">
+<li><p>Install the package. It is pure standard library, so nothing else comes with it.</p>
+<div class="code" data-label="pip install"><pre><code><span class="cmd">pip install minion-desktop</span></code></pre></div></li>
+<li><p>Drive a desktop from code</p>
+<div class="code x" data-label="the Python example" data-title="Python"><pre><code><span class="kw">from</span> minion <span class="kw">import</span> Desktop
+
+desk = Desktop.create(<span class="s">"office"</span>)
+desk.open(<span class="s">"writer"</span>)
+print(desk.see())  <span class="cm"># the screen as text, with @ids</span>
+desk.type(<span class="s">"Hello!\n"</span>)
+desk.screenshot(<span class="s">"hello.png"</span>)
+desk.remove()</code></pre></div></li>
+</ol>
+<p class="note"><a href="https://github.com/apophisss/minion/blob/main/docs/python.md">Python SDK reference</a></p>
+</div>
+</div>
+<aside class="tabs-a" aria-label="Before you start">
+<div><h3>What you need</h3><p>Docker or Podman, running: Docker Desktop, OrbStack and Colima work too. The installers bring everything else. Each profile’s image is 187–707 MB, with shared layers, and downloads the first time you use it.</p></div>
+<div><h3>Then just ask</h3><q>Create an office desktop, write a one-page brief about our Q3 numbers in Writer and save it as brief.docx.</q></div>
+</aside>
+</div>
+</div>
+</div>
+</section>
+
+<section id="see" class="sec" aria-labelledby="see-h">
+<div class="wrap">
+<div class="sh">
+<p class="eyebrow"><span class="tag">@2</span>How agents see</p>
+<h2 id="see-h">Agents read the screen as text.</h2>
+<p class="lead"><code>see</code> turns any window into a compact list of controls with stable <code>@ids</code>, taken from the accessibility tree with OCR as a fallback. Spreadsheets come out as <code>A1:&nbsp;value</code>. The text is exact, and every id is clickable.</p>
+</div>
+<div class="see">
+<figure class="shot">
+<img src="assets/site/office.webp" width="1280" height="800" loading="lazy" decoding="async" alt="LibreOffice Writer on a Minion office desktop, with a document titled Q3 Market Brief">
+<figcaption><span>What you see</span><span class="badge">screenshot · ~1,365 tokens</span></figcaption>
+</figure>
+<div class="term">
+<div class="term-h"><span>What the agent reads</span><code>see</code><span class="badge">~920 tokens</span></div>
+<pre class="out"><span class="l">Screen 1280x800 · 1 window</span><span class="l i">  [1] <span class="s">"Untitled 1 — LibreOffice Writer"</span> — libreoffice-writer <span class="st">(focused)</span> at 0,0 1280x770</span><span class="l"> </span><span class="l">UI of <span class="s">"Untitled 1 — LibreOffice Writer"</span> <span class="c">(click/fill with @id; (x,y) is the element center):</span></span><span class="l"><span class="id">@1</span> <span class="r">menu</span> <span class="s">"File"</span> <span class="c">(22,38)</span></span><span class="l"><span class="id">@2</span> <span class="r">menu</span> <span class="s">"Edit"</span> <span class="c">(62,38)</span></span><span class="l c">…</span><span class="l"><span class="id">@12</span> <span class="r">document text</span> <span class="s">"Untitled 1 - LibreOffice Document"</span> <span class="st">[editable]</span> <span class="c">(603,424)</span></span><span class="l i">  <span class="id">@13</span> <span class="r">heading</span> <span class="s">"Q3 Market Brief"</span> <span class="c">(603,247)</span></span><span class="l i">  <span class="id">@14</span> <span class="r">paragraph</span> <span class="s">"Prepared by an AI agent on a Minion desktop. No human touched the keyboard."</span> <span class="c">(603,282)</span></span></pre>
+</div>
+<div>
+<div class="term">
+<div class="term-h"><span>After typing a sentence</span><code>see(changes=true)</code><span class="badge hot">~60 tokens</span></div>
+<pre class="out"><span class="l"><span class="ok">✓</span> typed 30 chars</span><span class="l"><span class="r">→</span> screen changed &lt;1% <span class="c">(region 404,226 236x20)</span></span><span class="l">Changes since your last look 1.0s ago <span class="c">(81 elements unchanged; their @ids still work):</span></span><span class="l i">  <span class="ok">+</span> <span class="id">@84</span> <span class="r">paragraph</span> <span class="s">"Quarterly numbers look strong."</span> <span class="st">[focused]</span> <span class="c">(603,234)</span></span><span class="l i">  <span class="st">~</span> <span class="id">@80</span> <span class="r">label</span> <span class="s">"4 words, 30 characters"</span> <span class="c">(281,730)</span></span></pre>
+</div>
+<ul class="facts">
+<li><span><b>Stable ids.</b> The same control keeps its <code>@id</code> across looks, so the agent doesn't have to re-read the screen to act.</span></li>
+<li><span><b>Act and report.</b> Every action waits for the UI to settle, then says what changed: windows opened or closed, focus, the changed region.</span></li>
+<li><span><b>Text from anything.</b> GTK, Qt, Firefox, Chromium and LibreOffice expose their controls. OCR covers canvases and Wine apps.</span></li>
+</ul>
+</div>
+<figure class="shot">
+<img src="assets/site/marks.webp" width="1280" height="800" loading="lazy" decoding="async" alt="Wikipedia in Firefox, with a pink @id label drawn on every clickable element">
+<figcaption><span>When pixels matter, <code>screenshot(marks=true)</code> draws the ids.</span><button class="btn btn-s btn-sm" id="markpage" type="button" aria-pressed="false">Mark this page</button></figcaption>
+</figure>
+</div>
+</div>
+</section>
+
+<section id="tokens" class="sec alt" aria-labelledby="tokens-h">
+<div class="wrap">
+<div class="sh">
+<p class="eyebrow"><span class="tag">@3</span>Efficiency, measured</p>
+<h2 id="tokens-h">Built to save tokens.</h2>
+<p class="lead">Screenshots are the most expensive thing an agent can look at, and the model still has to guess coordinates. Minion sends text first, diffs instead of re-reads, and pixels only when they matter.</p>
+</div>
+<div class="tok">
+<figure class="card chart">
+<figcaption><h3>Tokens, measured</h3><p>Lower is better. Every bar uses the same scale.</p></figcaption>
+<table class="bars" data-bars>
+<thead><tr><th scope="col"><span class="sr">What the model receives</span></th><th scope="col"><span class="sr">Tokens</span></th></tr></thead>
+<tbody>
+<tr class="grp"><th colspan="2" scope="rowgroup">One look at the screen</th></tr>
+<tr class="base"><th scope="row">Screenshot, 1280×800<small>the baseline</small></th><td><div class="bt"><span class="bf" style="--p:.65"></span><span class="bv">~1,365</span></div></td></tr>
+<tr><th scope="row"><code>see</code> of a LibreOffice window<small>exact text plus clickable ids</small></th><td><div class="bt"><span class="bf" style="--p:.438"></span><span class="bv">~920</span></div></td></tr>
+<tr><th scope="row"><code>screenshot(detail="low")</code><small>half size</small></th><td><div class="bt"><span class="bf" style="--p:.162"></span><span class="bv">~341</span></div></td></tr>
+<tr><th scope="row"><code>act(observe="crop")</code><small>only the changed region</small></th><td><div class="bt"><span class="bf" style="--p:.095"></span><span class="bv">~200</span></div></td></tr>
+<tr><th scope="row"><code>see(changes=true)</code><small>after typing a sentence: the diff only</small></th><td><div class="bt"><span class="bf" style="--p:.029"></span><span class="bv">~60</span></div></td></tr>
+</tbody>
+<tbody>
+<tr class="grp"><th colspan="2" scope="rowgroup">Tool definitions, sent with every request</th></tr>
+<tr class="base"><th scope="row">9 tools</th><td><div class="bt"><span class="bf" style="--p:1"></span><span class="bv">~2,100</span></div></td></tr>
+<tr><th scope="row">Compact mode<small>one <code>computer</code> tool with CLI syntax</small></th><td><div class="bt"><span class="bf" style="--p:.11"></span><span class="bv">~230</span></div></td></tr>
+</tbody>
+</table>
+</figure>
+<div class="tok-side">
+<figure class="card chart">
+<figcaption><h3>Entering 5 rows in a spreadsheet</h3><p>Code mode needs no model round trip per step.</p></figcaption>
+<table class="bars" data-bars>
+<thead><tr><th scope="col"><span class="sr">Approach</span></th><th scope="col"><span class="sr">Tool calls</span></th></tr></thead>
+<tbody>
+<tr class="base"><th scope="row"><code>act</code>, one call per row</th><td><div class="bt"><span class="pills" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span><span class="bv">5 calls</span></div></td></tr>
+<tr><th scope="row"><code>script</code>, one loop</th><td><div class="bt"><span class="pills" aria-hidden="true"><i class="on"></i></span><span class="bv">1 call</span></div></td></tr>
+</tbody>
+</table>
+</figure>
+<div class="card stat">
+<h3>Teach once, replay forever</h3>
+<p class="big">0<span>model calls</span></p>
+<p>Export a finished session with <code>desktop(action="macro")</code>: a Python script that replays it with no model at all.</p>
+</div>
+</div>
+</div>
+<p class="fine">Measured on a 2-vCPU VM. Reproduce the numbers with <code>python&nbsp;scripts/bench.py</code>. A terminal costs about 50–90 tokens with <code>see</code>.</p>
+</div>
+</section>
+
+<section id="resources" class="sec band" aria-labelledby="res-h">
+<div class="wrap">
+<div class="sh">
+<p class="eyebrow"><span class="tag">@4</span>Featherweight</p>
+<h2 id="res-h">Small enough to run many.</h2>
+<p class="lead">One small container per desktop: Xvfb, a two-process window manager and taskbar, and a small agent. No VNC and no desktop environment.</p>
+</div>
+<dl class="kpis">
+<div><dt>Ready in</dt><dd><b>~1.5<small>s</small></b><span>1.2–1.8 s for every profile</span></dd></div>
+<div><dt>Idle RAM per desktop</dt><dd><b>54–105<small>MB</small></b><span>Firefox and LibreOffice add their own when open</span></dd></div>
+<div><dt>CPU when frozen</dt><dd><b>0<small>%</small></b><span>Idle desktops freeze and wake in ~0.2 s</span></dd></div>
+<div><dt>3 desktops in parallel</dt><dd><b>3.0<small>s</small></b><span>Start one per worker with <code>create&nbsp;count=N</code></span></dd></div>
+</dl>
+<ul class="why">
+<li><h3>Shared layers</h3><p>Every profile extends another, so ten desktops share one copy of the base image on disk and in the page cache.</p></li>
+<li><h3>Idle freezing</h3><p>A desktop nobody uses or watches is paused with the cgroup freezer. An optional idle stop frees its RAM and keeps its files.</p></li>
+<li><h3>Nothing runs unless asked</h3><p>The accessibility library loads on the first look, and the live view streams frames only while someone watches.</p></li>
+<li><h3>Calm pixels</h3><p>Animations, smooth scrolling and caret blinking are off. That saves CPU and makes “the screen settled” exact.</p></li>
+</ul>
+<p class="fine">Measured on a 2-vCPU VM with <code>python&nbsp;scripts/bench.py</code>.</p>
+</div>
+</section>
+
+<section id="features" class="sec" aria-labelledby="feat-h">
+<div class="wrap">
+<div class="sh">
+<p class="eyebrow"><span class="tag">@5</span>Features</p>
+<h2 id="feat-h">A real computer, built for agents.</h2>
+<p class="lead">Every desktop is a real Linux computer, tuned to skip first-run wizards, pop-ups and cookie banners, with everything an agent needs around it.</p>
+</div>
+<div class="bento">
+<article class="card f">
+<div class="fi"><svg class="ic" aria-hidden="true"><use href="#i-win"/></svg></div>
+<h3>Any program or website</h3>
+<p>Browsers, LibreOffice, IDEs, terminals, file dialogs and installers, plus Windows programs through Wine. Anything missing is one command away.</p>
+<div class="code" data-label="minion-install"><pre><code><span class="cmd">minion-install gimp</span></code></pre></div>
+<ul class="chips m"><li>apt</li><li>.deb</li><li>.AppImage</li><li>pip:</li><li>npm:</li></ul>
+</article>
+<article class="card f w4">
+<div class="fi"><svg class="ic" aria-hidden="true"><use href="#i-code"/></svg></div>
+<h3>Code mode</h3>
+<p><code>script</code> runs Python inside the desktop with <code>click</code>, <code>write</code>, <code>key</code>, <code>see</code> and <code>cells</code>. A 50-step GUI loop is one call, and only what the code prints comes back.</p>
+<div class="code x" data-label="the code mode example" data-title="desk.script(…) runs this inside the desktop"><pre><code><span class="kw">for</span> item, price <span class="kw">in</span> [(<span class="s">"Coffee"</span>, <span class="nu">3.5</span>), (<span class="s">"Bagel"</span>, <span class="nu">2.25</span>), (<span class="s">"Juice"</span>, <span class="nu">4</span>)]:
+    write(<span class="s">f"{item}\t{price}\n"</span>)  <span class="cm"># Tab moves right, Return goes down</span>
+write(<span class="s">"Total\t=SUM(B1:B3)\n"</span>)
+print(cells()[<span class="s">"B4"</span>])  <span class="cm"># only this comes back: 9.75</span></code></pre></div>
+</article>
+<article class="card f w3">
+<div class="fi"><svg class="ic" aria-hidden="true"><use href="#i-fork"/></svg></div>
+<h3>Parallel desktops and fork</h3>
+<p><code>create&nbsp;count=8</code> starts a desktop per worker, <code>fork</code> clones one before a risky step, and sessions keep agents apart. Log in once, snapshot, then fork the logged-in desktop for each task.</p>
+<div class="media"><img src="assets/site/dashboard.webp" width="1426" height="624" loading="lazy" decoding="async" alt="The Minion dashboard with live thumbnails of research, dev and browser desktops"></div>
+</article>
+<article class="card f w3">
+<div class="fi"><svg class="ic" aria-hidden="true"><use href="#i-eye"/></svg></div>
+<h3>Human hand-off and live view</h3>
+<p>Watch any desktop live in your browser and click Take control to use your own mouse and keyboard. An agent can ask you to “Please sign in”, wait until you press Done, then carry on.</p>
+<div class="media"><img src="assets/site/live-view.webp" width="1440" height="630" loading="lazy" decoding="async" alt="The live view of an office desktop with Take control, Paste, Screenshot, Replay and Freeze buttons"></div>
+</article>
+<article class="card f">
+<div class="fi"><svg class="ic" aria-hidden="true"><use href="#i-replay"/></svg></div>
+<h3>Replay and macros</h3>
+<p>Every action is recorded. Export an HTML timeline or a GIF, or turn the session into a Python script that replays it with no model at all.</p>
+<div class="code" data-label="minion replay"><pre><code><span class="cmd">minion replay -o run.html</span></code></pre></div>
+</article>
+<article class="card f">
+<div class="fi"><svg class="ic" aria-hidden="true"><use href="#i-cursor"/></svg></div>
+<h3>Native computer use</h3>
+<p>A ready environment for Claude, OpenAI and Gemini computer-use models, with screenshot scaling and coordinate mapping handled for you.</p>
+<a class="lk" href="https://github.com/apophisss/minion/blob/main/docs/computer-use.md">Computer use guide<svg class="ic" aria-hidden="true"><use href="#i-arrow"/></svg></a>
+</article>
+<article class="card f">
+<div class="fi"><svg class="ic" aria-hidden="true"><use href="#i-shield"/></svg></div>
+<h3>Secure by default</h3>
+<ul class="dots">
+<li><span>An unprivileged container per desktop, with no host mounts by default</span></li>
+<li><span>No open ports: the host reaches it through <code>docker&nbsp;exec</code></span></li>
+<li><span><code>--offline</code>, <code>--memory</code> and <code>--cpus</code> when you need limits</span></li>
+<li><span>The HTTP server binds to 127.0.0.1 and needs a random token</span></li>
+</ul>
+<a class="lk" href="https://github.com/apophisss/minion/blob/main/SECURITY.md">Security model<svg class="ic" aria-hidden="true"><use href="#i-arrow"/></svg></a>
+</article>
+</div>
+</div>
+</section>
+
+<section id="profiles" class="sec alt" aria-labelledby="prof-h">
+<div class="wrap">
+<div class="sh">
+<p class="eyebrow"><span class="tag">@6</span>Profiles</p>
+<h2 id="prof-h">A desktop for every job.</h2>
+<p class="lead">Profiles pre-install and tune the common jobs. Each one extends another, so images share layers. Start one with <code>minion&nbsp;up&nbsp;office</code>.</p>
+</div>
+<ul class="profiles">
+<li class="card pc"><h3><span><svg class="ic" aria-hidden="true"><use href="#i-globe"/></svg></span>browser</h3><p>Firefox with uBlock Origin against ads, trackers, cookie banners and newsletter pop-ups. Downloads go straight to <code>~/Downloads</code>.</p><dl><div><dt>Download</dt><dd>352 MB</dd></div><div><dt>Idle RAM</dt><dd>~55–100 MB</dd></div></dl></li>
+<li class="card pc"><h3><span><svg class="ic" aria-hidden="true"><use href="#i-doc"/></svg></span>office</h3><p>LibreOffice Writer, Calc and Impress, a text editor, a file manager and Firefox. Saves Microsoft formats by default.</p><dl><div><dt>Download</dt><dd>511 MB</dd></div><div><dt>Idle RAM</dt><dd>~85 MB</dd></div></dl></li>
+<li class="card pc"><h3><span><svg class="ic" aria-hidden="true"><use href="#i-term"/></svg></span>dev</h3><p>git, Python, Node.js, build tools, the Geany IDE, a real terminal that <code>see</code> can read, Firefox and Chromium.</p><dl><div><dt>Download</dt><dd>703 MB</dd></div><div><dt>Idle RAM</dt><dd>~55 MB</dd></div></dl></li>
+<li class="card pc"><h3><span><svg class="ic" aria-hidden="true"><use href="#i-search"/></svg></span>research</h3><p>Firefox with <code>pdftotext</code>, pandoc, a notes editor, and Python with requests and BeautifulSoup.</p><dl><div><dt>Download</dt><dd>410 MB</dd></div><div><dt>Idle RAM</dt><dd>~55 MB</dd></div></dl></li>
+<li class="card pc"><h3><span><svg class="ic" aria-hidden="true"><use href="#i-chart"/></svg></span>data</h3><p>Everything in <code>office</code>, plus pandas, NumPy, SciPy, matplotlib, seaborn, openpyxl and SQLite.</p><dl><div><dt>Download</dt><dd>662 MB</dd></div><div><dt>Idle RAM</dt><dd>~105 MB</dd></div></dl></li>
+<li class="card pc"><h3><span><svg class="ic" aria-hidden="true"><use href="#i-wine"/></svg></span>windows</h3><p>Wine 10 for 64- and 32-bit Windows <code>.exe</code> and <code>.msi</code> programs, plus Firefox to download them. Needs an x86&#8209;64 host.</p><dl><div><dt>Download</dt><dd>707 MB</dd></div><div><dt>Idle RAM</dt><dd>~56 MB</dd></div></dl></li>
+<li class="card pc"><h3><span><svg class="ic" aria-hidden="true"><use href="#i-layers"/></svg></span>base</h3><p>An X server, a window manager, a terminal and the agent. The foundation every other profile builds on.</p><dl><div><dt>Download</dt><dd>188 MB</dd></div><div><dt>Idle RAM</dt><dd>~65 MB</dd></div></dl></li>
+<li class="card pc own"><h3><span><svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg></span>your own</h3><p>A short TOML file in <code>~/.config/minion/profiles/</code>, built the first time you use it.</p>
+<div class="code x" data-label="the profile example" data-title="designer.toml"><pre><code>extends = <span class="s">"browser"</span>
+packages = [<span class="s">"gimp"</span>]</code></pre></div></li>
+</ul>
+<p class="fine">Missing an app? Add it at runtime with <code>minion-install</code>, or write your own profile. <a class="lk" href="https://github.com/apophisss/minion/blob/main/docs/profiles.md">All about profiles<svg class="ic" aria-hidden="true"><use href="#i-arrow"/></svg></a></p>
+</div>
+</section>
+
+<section id="agents" class="sec" aria-labelledby="agents-h">
+<div class="wrap">
+<div class="sh">
+<p class="eyebrow"><span class="tag">@7</span>Integrations</p>
+<h2 id="agents-h">Works with every agent.</h2>
+<p class="lead">One toolset, defined once and served everywhere. Errors come back as readable results, so an agent loop never crashes on a bad click.</p>
+</div>
+<ul class="paths card">
+<li><div><h3>MCP</h3><p>Apps, IDEs and agent frameworks</p></div><div class="code" data-label="the MCP command"><pre><code>uvx minion-desktop mcp</code></pre></div><ul class="chips"><li>Claude Code</li><li>Claude Desktop</li><li>Cursor</li><li>VS Code</li><li>Windsurf/Devin</li><li>Codex</li><li>Gemini CLI</li><li>LM Studio</li><li>OpenAI Agents SDK</li><li>LangChain</li><li>LlamaIndex</li><li>CrewAI</li><li>smolagents</li><li>Pydantic AI</li><li>Google ADK</li><li>AutoGen</li></ul></li>
+<li><div><h3>Remote MCP</h3><p>Chat apps without a terminal</p></div><div class="code" data-label="minion share"><pre><code>minion share</code></pre></div><ul class="chips"><li>ChatGPT</li><li>Claude.ai</li><li>Le Chat</li></ul></li>
+<li><div><h3>Function calling</h3><p>Any model API, local models too</p></div><div class="code" data-label="the toolkit call"><pre><code>Toolkit().definitions(<span class="s">"openai"</span>)</code></pre></div><ul class="chips"><li>OpenAI</li><li>Anthropic</li><li>Gemini</li><li>Mistral</li><li>Ollama</li><li>vLLM</li><li>LM Studio</li><li>Groq</li><li>OpenRouter</li></ul></li>
+<li><div><h3>HTTP and OpenAPI</h3><p>Any language, no-code tools</p></div><div class="code" data-label="minion serve"><pre><code>minion serve</code></pre></div><ul class="chips"><li>n8n</li><li>Dify</li><li>GPT Actions</li><li>any language</li></ul></li>
+<li><div><h3>CLI and Agent Skills</h3><p>Agents with a shell</p></div><div class="code" data-label="minion skill"><pre><code>minion skill --install</code></pre></div><ul class="chips"><li>Claude Code</li><li>Codex CLI</li><li>Aider</li><li>Open Interpreter</li><li>Goose</li><li>Cursor</li><li>Gemini CLI</li><li>Copilot</li></ul></li>
+<li><div><h3>SDKs</h3><p>Your own code and agent loops</p></div><div class="code" data-label="the Python import"><pre><code><span class="kw">from</span> minion <span class="kw">import</span> Desktop</code></pre></div><ul class="chips"><li>Python</li><li>TypeScript</li><li>Vercel AI SDK</li></ul></li>
+<li><div><h3>Computer use</h3><p>Models with their own computer tool</p></div><div class="code" data-label="the computer use adapter"><pre><code>MinionComputer(desk)</code></pre></div><ul class="chips"><li>Claude</li><li>OpenAI</li><li>Gemini</li></ul></li>
+</ul>
+<p class="more"><a class="lk" href="https://github.com/apophisss/minion/blob/main/docs/integrations.md">Framework recipes<svg class="ic" aria-hidden="true"><use href="#i-arrow"/></svg></a><a class="lk" href="https://github.com/apophisss/minion/blob/main/docs/agents.md">Agents &amp; MCP<svg class="ic" aria-hidden="true"><use href="#i-arrow"/></svg></a><a class="lk" href="https://github.com/apophisss/minion/blob/main/docs/http-api.md">HTTP API<svg class="ic" aria-hidden="true"><use href="#i-arrow"/></svg></a><a class="lk" href="https://github.com/apophisss/minion/blob/main/docs/cli.md">CLI reference<svg class="ic" aria-hidden="true"><use href="#i-arrow"/></svg></a></p>
+</div>
+</section>
+
+<section id="faq" class="sec alt" aria-labelledby="faq-h">
+<div class="wrap faq">
+<div class="sh">
+<p class="eyebrow"><span class="tag">@8</span>FAQ</p>
+<h2 id="faq-h">Questions, answered.</h2>
+<p class="lead">Can't find yours? Read the <a class="lk" href="https://github.com/apophisss/minion/blob/main/docs/faq.md">full FAQ</a> or the <a class="lk" href="https://github.com/apophisss/minion/blob/main/docs/design.md">design notes</a>.</p>
+</div>
+<div class="qa">
+<details open><summary>Does it work on macOS and Windows?</summary><div class="a"><p>Yes, with Docker Desktop (or OrbStack, Colima or Podman). Desktops are Linux containers and the <code>minion</code> command is pure Python. Images are published for <code>amd64</code> and <code>arm64</code>, so Apple Silicon runs them natively. The exception is the <code>windows</code> profile, which is <code>amd64</code> only because Wine runs x86 programs only on x86&#8209;64.</p></div></details>
+<details><summary>Do I need Docker?</summary><div class="a"><p>On Linux, no: <code>MINION_BACKEND=local</code> runs desktops as native Xvfb sessions with the apps installed on the host. They start faster but are not isolated from your user account. On macOS and Windows, desktops run in Docker or Podman.</p></div></details>
+<details><summary>How is this different from a VM or a VNC desktop image?</summary><div class="a"><p>Minion is built for agents rather than people. It gives them a text view of the screen with clickable ids, actions that wait for the UI to settle and report what changed, desktops tuned to avoid pop-ups, snapshots and forks, idle freezing, and MCP, SDK and HTTP interfaces. There is no VNC server and no desktop environment, so each desktop is ready in about 1.5 s and stays small.</p></div></details>
+<details><summary>How is it different from browser automation like Playwright or browser-use?</summary><div class="a"><p>Those drive a browser through the DOM. Minion drives a whole computer: browsers, office apps, terminals, IDEs, file dialogs, downloads, and anything you <code>apt-get&nbsp;install</code>. The two combine well: run your Playwright script inside a <code>dev</code> desktop and watch the same browser in the live view.</p></div></details>
+<details><summary>Which models and agents work?</summary><div class="a"><p>Any model with tool use. <code>see</code> and <code>act</code> are text, so text-only models work too, and vision models can also take screenshots. Small and local models do best with the compact <code>computer</code> tool. Models trained for computer use (Claude, OpenAI, Gemini) can drive desktops natively.</p></div></details>
+<details><summary>How many desktops can I run at once?</summary><div class="a"><p>As many as memory allows. An idle desktop uses 54–105 MB, and apps add their usual footprint: Firefox and LibreOffice need a few hundred MB each while open. Frozen desktops use no CPU. Cap each one with <code>--memory</code> and <code>--cpus</code>, and start several at once with <code>minion&nbsp;up&nbsp;-c&nbsp;8</code>.</p></div></details>
+<details><summary>Is it safe to let an agent use a desktop?</summary><div class="a"><p>It is safer than letting it use your computer. Each desktop is an isolated, unprivileged container. Treat what's on screen as untrusted input, keep secrets out, hand off to a human for sign-ins, and use <code>--offline</code> for untrusted files. <a href="https://github.com/apophisss/minion/blob/main/SECURITY.md">Read the security model</a>.</p></div></details>
+</div>
+</div>
+</section>
+
+<section class="sec final" aria-labelledby="final-h">
+<div class="wrap">
+<svg class="lg" aria-hidden="true"><use href="#logo"/></svg>
+<h2 id="final-h">Give your agent a computer.</h2>
+<p class="lead">Free and open source under the MIT license. Install it in a minute, connect any agent and watch it work.</p>
+<div class="cta">
+<a class="btn btn-p" href="#install">Get started<svg class="ic" aria-hidden="true"><use href="#i-arrow"/></svg></a>
+<a class="btn btn-s" href="https://github.com/apophisss/minion"><svg class="ic" aria-hidden="true"><use href="#i-gh"/></svg>Star on GitHub</a>
+</div>
+</div>
+</section>
+</main>
+
+<footer class="ft">
+<div class="wrap">
+<div class="ft-g">
+<div><a class="brand" href="./" aria-label="Minion home"><svg aria-hidden="true"><use href="#logo"/></svg>minion</a><p>Instant, featherweight desktops for AI agents. Give every agent its own computer.</p></div>
+<nav aria-labelledby="ft-docs"><h2 id="ft-docs">Docs</h2><ul class="two">
+<li><a href="https://github.com/apophisss/minion/blob/main/docs/install.md">Install</a></li>
+<li><a href="https://github.com/apophisss/minion/blob/main/docs/agents.md">Agents &amp; MCP</a></li>
+<li><a href="https://github.com/apophisss/minion/blob/main/docs/integrations.md">Integrations</a></li>
+<li><a href="https://github.com/apophisss/minion/blob/main/docs/remote.md">Remote access</a></li>
+<li><a href="https://github.com/apophisss/minion/blob/main/docs/cli.md">CLI</a></li>
+<li><a href="https://github.com/apophisss/minion/blob/main/docs/python.md">Python</a></li>
+<li><a href="https://github.com/apophisss/minion/blob/main/docs/http-api.md">HTTP API</a></li>
+<li><a href="https://github.com/apophisss/minion/blob/main/docs/computer-use.md">Computer use</a></li>
+<li><a href="https://github.com/apophisss/minion/blob/main/docs/profiles.md">Profiles</a></li>
+<li><a href="https://github.com/apophisss/minion/blob/main/docs/windows-apps.md">Windows apps</a></li>
+<li><a href="https://github.com/apophisss/minion/blob/main/docs/design.md">Design</a></li>
+<li><a href="https://github.com/apophisss/minion/blob/main/docs/faq.md">FAQ</a></li>
+</ul></nav>
+<nav aria-labelledby="ft-proj"><h2 id="ft-proj">Project</h2><ul>
+<li><a href="https://github.com/apophisss/minion">GitHub</a></li>
+<li><a href="https://github.com/apophisss/minion/releases">Releases</a></li>
+<li><a href="https://pypi.org/project/minion-desktop/">PyPI</a></li>
+<li><a href="https://github.com/apophisss/minion/blob/main/CHANGELOG.md">Changelog</a></li>
+<li><a href="https://github.com/apophisss/minion/blob/main/CONTRIBUTING.md">Contributing</a></li>
+<li><a href="https://github.com/apophisss/minion/blob/main/SECURITY.md">Security</a></li>
+</ul></nav>
+</div>
+<div class="ft-b"><p>© 2026 Minion contributors. Released under the <a href="https://github.com/apophisss/minion/blob/main/LICENSE">MIT license</a>.</p><p>Desktops contain open-source software under their own licenses.</p></div>
+</div>
+</footer>
+<div id="live" class="sr" aria-live="polite"></div>
+
+<script>
+(function () {
+  "use strict";
+
+  /* ==========================================================================
+     INSTALL LINKS: the one place to edit the one-click install URLs.
+     Every element with data-link="<key>" gets LINKS[key] as its href. Without
+     JavaScript those buttons keep their fallback href (the matching docs page).
+     The curl / irm install commands are plain text in the macOS / Linux and
+     Windows tab panels above.
+     ========================================================================== */
+  var LINKS = {
+    // Cursor: https://cursor.com/install-mcp?name=NAME&config=BASE64(JSON) shows "Redirecting to Cursor" and opens
+    // the app. The bare deeplink also works:
+    //   cursor://anysphere.cursor-deeplink/mcp/install?name=minion&config=eyJjb21tYW5kIjoidXZ4IiwiYXJncyI6WyJtaW5pb24tZGVza3RvcCIsIm1jcCJdfQ%3D%3D
+    // config = base64 of {"command":"uvx","args":["minion-desktop","mcp"]}
+    cursor: "https://cursor.com/install-mcp?name=minion&config=eyJjb21tYW5kIjoidXZ4IiwiYXJncyI6WyJtaW5pb24tZGVza3RvcCIsIm1jcCJdfQ%3D%3D",
+    // VS Code: https://insiders.vscode.dev/redirect/mcp/install?name=NAME&config=URL-ENCODED(JSON)
+    vscode: "https://insiders.vscode.dev/redirect/mcp/install?name=minion&config=%7B%22command%22%3A%22uvx%22%2C%22args%22%3A%5B%22minion-desktop%22%2C%22mcp%22%5D%7D",
+    // the same link with &quality=insiders opens VS Code Insiders
+    vscodeInsiders: "https://insiders.vscode.dev/redirect/mcp/install?name=minion&config=%7B%22command%22%3A%22uvx%22%2C%22args%22%3A%5B%22minion-desktop%22%2C%22mcp%22%5D%7D&quality=insiders",
+    // Claude Desktop extension (MCP bundle) from the latest GitHub release
+    claudeDesktop: "https://github.com/apophisss/minion/releases/latest/download/minion.mcpb"
+  };
+
+  function $(s, r) { return (r || document).querySelector(s); }
+  function $$(s, r) { return Array.prototype.slice.call((r || document).querySelectorAll(s)); }
+  var root = document.documentElement, live = $("#live");
+  function say(msg) { live.textContent = ""; setTimeout(function () { live.textContent = msg; }, 60); }
+
+  $$("[data-link]").forEach(function (a) { var u = LINKS[a.getAttribute("data-link")]; if (u) a.href = u; });
+
+  /* theme: follows the system until the visitor picks one */
+  var KEY = "minion-theme", dq = window.matchMedia("(prefers-color-scheme: dark)"), tbtn = $("#theme");
+  var metas = $$('meta[name="theme-color"]');
+  function theme() { return root.getAttribute("data-theme") || (dq.matches ? "dark" : "light"); }
+  function syncTheme() {
+    var dark = theme() === "dark", fixed = root.hasAttribute("data-theme");
+    tbtn.setAttribute("aria-label", dark ? "Switch to light theme" : "Switch to dark theme");
+    metas.forEach(function (m, i) { m.setAttribute("content", fixed ? (dark ? "#070a18" : "#ffffff") : (i ? "#070a18" : "#ffffff")); });
+  }
+  tbtn.addEventListener("click", function () {
+    var next = theme() === "dark" ? "light" : "dark";
+    try {
+      if ((next === "dark") === dq.matches) { root.removeAttribute("data-theme"); localStorage.removeItem(KEY); }
+      else { root.setAttribute("data-theme", next); localStorage.setItem(KEY, next); }
+    } catch (e) { root.setAttribute("data-theme", next); }
+    syncTheme();
+    refreshMarks();
+  });
+  if (dq.addEventListener) dq.addEventListener("change", syncTheme);
+  syncTheme();
+
+  /* tabs (WAI-ARIA tabs pattern, automatic activation) */
+  $$("[data-tabs]").forEach(function (box) {
+    var tabs = $$('[role="tab"]', box), list = $('[role="tablist"]', box);
+    function select(tab, focus) {
+      tabs.forEach(function (t) {
+        var on = t === tab;
+        t.setAttribute("aria-selected", on ? "true" : "false");
+        t.tabIndex = on ? 0 : -1;
+        document.getElementById(t.getAttribute("aria-controls")).hidden = !on;
+      });
+      if (focus) tab.focus();
+      else {
+        // on narrow screens the tab row scrolls sideways: keep the selected tab in view
+        var x = tab.offsetLeft - list.offsetLeft;
+        if (x < list.scrollLeft || x + tab.offsetWidth > list.scrollLeft + list.clientWidth - 44) list.scrollLeft = x - 8;
+      }
+      refreshMarks();
+    }
+    tabs.forEach(function (t, i) {
+      t.addEventListener("click", function () { select(t); });
+      t.addEventListener("keydown", function (e) {
+        var j = { ArrowRight: i + 1, ArrowLeft: i - 1, Home: 0, End: tabs.length - 1 }[e.key];
+        if (j === undefined) return;
+        e.preventDefault();
+        select(tabs[(j + tabs.length) % tabs.length], true);
+      });
+    });
+    var ua = (navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || navigator.userAgent || "";
+    select(/\bwin/i.test(ua) ? $("#t-win") : tabs[0]);
+    box.classList.add("ready");
+  });
+
+  /* copy buttons */
+  function copyText(text) {
+    if (navigator.clipboard && window.isSecureContext) return navigator.clipboard.writeText(text);
+    return new Promise(function (ok, fail) {
+      var ta = document.createElement("textarea");
+      ta.value = text; ta.setAttribute("readonly", ""); ta.style.cssText = "position:fixed;top:0;left:0;opacity:0";
+      document.body.appendChild(ta); ta.select();
+      var done = false;
+      try { done = document.execCommand("copy"); } catch (e) { /* not supported */ }
+      ta.remove();
+      if (done) ok(); else fail();
+    });
+  }
+  $$(".code").forEach(function (box) {
+    var b = document.createElement("button"), label = "Copy " + (box.getAttribute("data-label") || "the code"),
+      title = box.getAttribute("data-title"), bar = box;
+    if (title) {
+      bar = document.createElement("div");
+      bar.className = "code-h";
+      bar.appendChild(document.createElement("span")).textContent = title;
+      box.insertBefore(bar, box.firstChild);
+    }
+    b.type = "button"; b.className = "copy"; b.setAttribute("aria-label", label);
+    b.innerHTML = '<svg class="ic n" aria-hidden="true"><use href="#i-copy"/></svg><svg class="ic y" aria-hidden="true"><use href="#i-check"/></svg><span class="y">Copied</span>';
+    b.addEventListener("click", function () {
+      copyText($("pre", box).innerText.replace(/\n+$/, "")).then(function () {
+        b.classList.add("done"); b.setAttribute("aria-label", "Copied"); say("Copied to the clipboard");
+        clearTimeout(b._t);
+        b._t = setTimeout(function () { b.classList.remove("done"); b.setAttribute("aria-label", label); }, 2000);
+      }, function () { say("Copying failed. Select the text and copy it yourself."); });
+    });
+    bar.appendChild(b);
+  });
+
+  /* replay player: frames from the demo GIF, captions from the flight recorder */
+  var rp = $("[data-replay]");
+  if (rp) {
+    var screen = $(".rp-screen", rp), tpl = $("template", screen), imgs = $$("img", screen),
+      steps = $$(".rp-steps button", rp), cap = $(".rp-cap", rp), num = $("[data-n]", rp),
+      play = $(".rp-play", rp), list = $(".rp-steps", rp), cur = 0, inView = true, focused = false,
+      held = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    function sync() {
+      rp.classList.toggle("paused", held || focused || !inView || document.hidden);
+      play.setAttribute("aria-label", held ? "Play the replay" : "Pause the replay");
+    }
+    // frames 2-6 wait in an inert <template> until the page has loaded
+    function loadFrames() {
+      if (!tpl) return;
+      screen.appendChild(tpl.content.cloneNode(true));
+      tpl.remove();
+      tpl = null;
+      imgs = $$("img", screen);
+    }
+    function go(n) {
+      var was = cur;
+      cur = (n + steps.length) % steps.length;
+      steps.forEach(function (s, i) { if (i === cur) s.setAttribute("aria-current", "step"); else s.removeAttribute("aria-current"); });
+      imgs.forEach(function (im, i) {
+        im.classList.toggle("was", i === was && i !== cur);  // stays opaque under the incoming frame: no dip to black
+        im.classList.toggle("on", i === cur);
+        im.setAttribute("aria-hidden", i === cur ? "false" : "true");
+      });
+      cap.textContent = steps[cur].textContent;
+      num.textContent = cur + 1;
+    }
+    function ready(im) { return im && im.complete && im.naturalWidth > 0; }
+    if (document.readyState === "complete") loadFrames(); else window.addEventListener("load", loadFrames);
+    rp.addEventListener("animationend", function (e) {
+      if (e.target.tagName !== "I") return;
+      loadFrames();
+      var next = imgs[(cur + 1) % steps.length];
+      if (ready(next)) go(cur + 1);
+      else next.addEventListener("load", function () { go(cur + 1); }, { once: true });
+    });
+    steps.forEach(function (s, i) { s.addEventListener("click", function () { held = true; sync(); loadFrames(); go(i); }); });
+    play.addEventListener("click", function () { held = !held; sync(); });
+    // like a carousel: hold still while keyboard focus is on the steps
+    list.addEventListener("focusin", function () { focused = true; sync(); });
+    list.addEventListener("focusout", function (e) { if (!list.contains(e.relatedTarget)) { focused = false; sync(); } });
+    if ("IntersectionObserver" in window) {
+      new IntersectionObserver(function (es) { inView = es[0].isIntersecting; sync(); }).observe(rp);
+    }
+    document.addEventListener("visibilitychange", sync);
+    go(0);
+    sync();
+  }
+
+  /* bar charts grow in when they scroll into view */
+  var charts = $$("[data-bars]");
+  if ("IntersectionObserver" in window) {
+    var io = new IntersectionObserver(function (es) {
+      es.forEach(function (e) { if (e.isIntersecting) { e.target.classList.add("in"); io.unobserve(e.target); } });
+    }, { threshold: 0.3 });
+    charts.forEach(function (c) { io.observe(c); });
+  } else charts.forEach(function (c) { c.classList.add("in"); });
+
+  /* "Mark this page": what screenshot(marks=true) does, applied to this page */
+  var mbtn = $("#markpage"), layer = null, rt;
+  function drawMarks() {
+    if (layer) { layer.remove(); layer = null; }
+    if (!mbtn || mbtn.getAttribute("aria-pressed") !== "true") return 0;
+    layer = document.createElement("div");
+    layer.className = "marks"; layer.setAttribute("aria-hidden", "true");
+    var n = 0, sx = window.scrollX, sy = window.scrollY;
+    $$("main a[href], main button, main summary, main [tabindex='0'], footer a[href]").forEach(function (el) {
+      var r = el.getBoundingClientRect();
+      if (!r.width || !r.height) return;
+      var m = document.createElement("span");
+      m.className = "mk"; m.setAttribute("data-id", "@" + (++n));
+      m.style.cssText = "left:" + (r.left + sx) + "px;top:" + (r.top + sy) + "px;width:" + r.width + "px;height:" + r.height + "px";
+      layer.appendChild(m);
+    });
+    document.body.appendChild(layer);
+    return n;
+  }
+  function refreshMarks() { if (layer) drawMarks(); }
+  if (mbtn) mbtn.addEventListener("click", function () {
+    var on = mbtn.getAttribute("aria-pressed") !== "true";
+    mbtn.setAttribute("aria-pressed", on ? "true" : "false");
+    mbtn.textContent = on ? "Remove the marks" : "Mark this page";
+    var n = drawMarks();
+    say(on ? n + " controls on this page now carry an @id" : "Marks removed");
+  });
+  window.addEventListener("resize", function () { clearTimeout(rt); rt = setTimeout(refreshMarks, 150); });
+  document.addEventListener("toggle", refreshMarks, true);
+})();
+</script>
+</body>
+</html>

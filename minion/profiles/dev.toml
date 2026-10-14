@@ -1,0 +1,47 @@
+name = "dev"
+title = "Developer"
+icon = "🛠️"
+extends = "browser"
+description = "A coding workstation: git, Python, Node.js and build tools, the Geany IDE, a real terminal, plus Firefox and Chromium for testing web apps."
+memory = "4g"
+shm = "1g"
+packages = [
+  "chromium",
+  "lxterminal",
+  "geany",
+  "git",
+  "build-essential",
+  "python3-venv",
+  "python3-pip",
+  "python3-pytest",
+  "python3-dev",
+  "nodejs",
+  "npm",
+  "jq",
+  "ripgrep",
+  "sqlite3",
+  "unzip",
+  "zip",
+  "wget",
+  "openssh-client",
+  "make",
+]
+env = { MINION_TERMINAL = "lxterminal" }
+setup = ["install -d -o agent -g agent /home/agent/work"]
+apps = [
+  { name = "Terminal", id = "terminal", command = "lxterminal" },
+  { name = "Geany", id = "geany", command = "geany" },
+  { name = "Chromium", id = "chromium", command = "chromium" },
+]
+tips = """
+Work in ~/work. Prefer `run` for shell commands (git, npm, tests): it is faster and returns exact output.
+For Python packages use a virtualenv (`python3 -m venv .venv && .venv/bin/pip install ...`); system pip is managed by Debian.
+Use the GUI for what needs eyes: run your app (`run` with background=true), then `open http://localhost:PORT` and look.
+The Terminal exposes its text to `see`. Chromium runs with accessibility on, so web pages are readable in both browsers.
+"""
+
+[files]
+"/etc/chromium.d/minion" = '''
+# Added by Minion: agent-friendly defaults (the container is the sandbox).
+export CHROMIUM_FLAGS="$CHROMIUM_FLAGS --no-sandbox --test-type --force-renderer-accessibility --no-first-run --no-default-browser-check --disable-dev-shm-usage --password-store=basic --disable-features=Translate,MediaRouter --disable-session-crashed-bubble --hide-crash-restore-bubble"
+'''

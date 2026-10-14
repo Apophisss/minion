@@ -1,0 +1,24 @@
+name = "data"
+title = "Data"
+icon = "📊"
+extends = "office"
+description = "The office desktop plus a Python data stack (pandas, NumPy, SciPy, matplotlib, seaborn, openpyxl) and SQLite, for spreadsheets, analysis and charts."
+memory = "4g"
+shm = "1g"
+packages = [
+  "python3-pandas",
+  "python3-numpy",
+  "python3-scipy",
+  "python3-matplotlib",
+  "python3-seaborn",
+  "python3-openpyxl",
+  "python3-tk",
+  "sqlite3",
+]
+apps = [
+  { name = "Python", id = "python", command = "lxterminal -e python3" },
+]
+tips = """
+Analyse with Python via `run` (pandas, numpy, matplotlib are installed), save charts to ~/Documents and open them
+or embed them in Calc/Writer/Impress. Spreadsheets open with `open ~/Documents/data.xlsx` (Calc).
+"""

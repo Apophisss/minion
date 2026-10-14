@@ -1,0 +1,101 @@
+name: Release
+
+# Tag vX.Y.Z (the VERSION in minion/agent/__init__.py) to publish:
+#   - PyPI: minion-desktop (trusted publishing; environment "pypi")
+#   - GitHub release: wheel, sdist and the Claude Desktop extension (minion.mcpb)
+#   - npm: minion-desktop, the TypeScript client (trusted publishing, or an NPM_TOKEN secret for the very first
+#     release; environment "npm")
+#   - the official MCP Registry: server.json (GitHub OIDC, no secret)
+# Desktop images are published by images.yml for the same tag.
+# One-time setup: on pypi.org and npmjs.com, add this repository as a trusted publisher (workflow: release.yml).
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      contents: write # the GitHub release
+      id-token: write # PyPI trusted publishing
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - name: The tag matches VERSION everywhere
+        run: |
+          VERSION=$(python3 -c 'import runpy; print(runpy.run_path("minion/agent/__init__.py")["VERSION"])')
+          test "$GITHUB_REF_NAME" = "v$VERSION" || { echo "::error::tag $GITHUB_REF_NAME but VERSION $VERSION"; exit 1; }
+          test "$(jq -r .version clients/typescript/package.json)" = "$VERSION" || { echo "::error::clients/typescript/package.json is not $VERSION"; exit 1; }
+          test "$(jq -r .version plugins/minion/.claude-plugin/plugin.json)" = "$VERSION" || { echo "::error::plugin.json is not $VERSION"; exit 1; }
+      - run: uv build
+      - uses: pypa/gh-action-pypi-publish@release/v1
+      # Build the extension after the PyPI upload, which takes everything in dist/ (and rejects a .mcpb).
+      - name: Claude Desktop extension
+        run: python3 scripts/build_mcpb.py --smoke --stage "$RUNNER_TEMP/mcpb"
+      - name: Check it with the official MCPB CLI
+        run: |
+          npx -y @anthropic-ai/mcpb@2.1.2 validate "$RUNNER_TEMP/mcpb"
+          npx -y @anthropic-ai/mcpb@2.1.2 info dist/minion.mcpb
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true
+
+  npm:
+    needs: release
+    runs-on: ubuntu-latest
+    environment: npm
+    permissions:
+      contents: read
+      id-token: write # npm trusted publishing (and provenance)
+    defaults:
+      run:
+        working-directory: clients/typescript
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          registry-url: "https://registry.npmjs.org"
+      - run: npm install -g npm@^11.5.1 # trusted publishing needs npm 11.5.1+
+      - run: npm ci
+      - run: npm test
+      - run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }} # only for the first release; afterwards OIDC is used
+
+  mcp-registry:
+    needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # mcp-publisher login github-oidc
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install mcp-publisher
+        run: curl -fsSL https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_linux_amd64.tar.gz | tar xz mcp-publisher
+      - name: Version, and the extension as a second package
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          URL="https://github.com/$GITHUB_REPOSITORY/releases/download/$GITHUB_REF_NAME/minion.mcpb"
+          curl -fsSL -o "$RUNNER_TEMP/minion.mcpb" "$URL"
+          SHA256=$(sha256sum "$RUNNER_TEMP/minion.mcpb" | cut -d' ' -f1)
+          jq --arg v "$VERSION" --arg url "$URL" --arg sha "$SHA256" '
+            .version = $v | .packages[0].version = $v
+            | .packages += [{registryType: "mcpb", identifier: $url, version: $v, fileSha256: $sha, transport: {type: "stdio"}}]
+          ' server.json > "$RUNNER_TEMP/server.json"
+          mv "$RUNNER_TEMP/server.json" server.json
+      - run: ./mcp-publisher validate
+      - run: ./mcp-publisher login github-oidc
+      - name: Publish (retries while PyPI starts serving the new version)
+        run: |
+          for _ in 1 2 3 4 5 6; do
+            ./mcp-publisher publish && exit 0
+            sleep 30
+          done
+          exit 1

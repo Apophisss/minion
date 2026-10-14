@@ -1,0 +1,19 @@
+name: Bug report
+description: Something doesn't work as documented
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What you ran, what you expected, what you got. A flight-recorder export (`minion replay -o bug.html`) helps a lot.
+    validations: { required: true }
+  - type: textarea
+    id: doctor
+    attributes:
+      label: "`minion doctor` output"
+      render: text
+  - type: input
+    id: profile
+    attributes:
+      label: Profile and app (e.g. office / LibreOffice Calc)

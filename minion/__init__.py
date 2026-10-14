@@ -1,8 +1,18 @@
-"""Minion - a self-improving, self-hosted AI agent platform.
+"""Minion: instant, featherweight Linux desktops for AI agents.
 
-Minion runs a Claude "brain" that orchestrates MCP servers, agent containers
-(OpenClaw, Hermes, ...), a built-in desktop, user/AI-written tools, scheduled
-automations, and its own source code (self-evolution + self-update).
+    from minion import Desktop
+
+    with Desktop.create("office") as desk:
+        desk.open("writer")
+        desk.type("Hello from an agent!")
+        print(desk.see())
+
+Everything here is pure standard-library Python; desktops run in Docker
+(or natively on Linux with the "local" backend).
 """
 
-__version__ = "0.1.0"
+from .agent import VERSION as __version__
+from .desktop import Desktop, Observation, RunResult, Screenshot
+from .errors import MinionError
+
+__all__ = ["Desktop", "Observation", "RunResult", "Screenshot", "MinionError", "__version__"]

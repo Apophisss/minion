@@ -9,14 +9,9 @@ venv/
 build/
 dist/
 
-# Minion runtime state (never commit)
-data/
-.env
-*.db
-*.db-wal
-*.db-shm
-
-# Editors / OS
+# Local artifacts
+*-replay.html
+*.log
+.DS_Store
 .idea/
 .vscode/
-.DS_Store
