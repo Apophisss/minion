@@ -38,6 +38,67 @@ class Recorder:
         self.thumb_width = thumb_width
         self.started = time.time()
         self.lock = threading.Lock()
+        self.macro: deque[tuple[str, dict]] = deque(maxlen=2000)  # replayable steps
+
+    def add_macro(self, action: str, params: dict) -> None:
+        if self.enabled:
+            with self.lock:
+                self.macro.append((action, dict(params)))
+
+    def export_script(self, title: str = "") -> str:
+        """The recorded steps as a Minion script: replay them with no model in the loop."""
+        with self.lock:
+            steps = list(self.macro)
+        lines = [
+            f"# {title or 'Minion session'} — recorded {time.strftime('%Y-%m-%d %H:%M')}",
+            "# Replay: minion script this.py   (or the `script` tool). Edit freely.",
+            "",
+        ]
+        r = repr
+        for action, p in steps:
+            t = p.get("target")
+            if action == "click":
+                extra = ""
+                if p.get("button", "left") != "left":
+                    extra += f", button={r(p['button'])}"
+                if int(p.get("count") or 1) != 1:
+                    extra += f", count={int(p['count'])}"
+                if p.get("modifiers"):
+                    extra += f", modifiers={r(p['modifiers'])}"
+                lines.append(f"click({r(t)}{extra})")
+            elif action == "type":
+                lines.append(f"write({r(p.get('text', ''))})")
+            elif action == "paste":
+                lines.append(f"paste({r(p.get('text', ''))})")
+            elif action == "fill":
+                lines.append(f"fill({r(t)}, {r(p.get('text', ''))})")
+            elif action == "key":
+                rep = int(p.get("repeat") or 1)
+                lines.append(f"key({r(p.get('keys'))}{f', repeat={rep}' if rep > 1 else ''})")
+            elif action == "scroll":
+                lines.append(
+                    f"scroll({r(p.get('direction', 'down'))}, {int(p.get('amount') or 3)}"
+                    f"{f', target={r(t)}' if t is not None else ''})"
+                )
+            elif action == "drag":
+                lines.append(f"drag({r(p.get('from'))}, {r(p.get('to'))})")
+            elif action == "move":
+                lines.append(f"move({r(t)})")
+            elif action == "wait":
+                lines.append(f"wait({float(p.get('seconds') or 1)})")
+            elif action == "wait_for":
+                lines.append(f"wait_for({r(p.get('text'))}, timeout={float(p.get('timeout') or 10)})")
+            elif action == "focus":
+                lines.append(f"focus({r(p.get('window'))})")
+            elif action == "open":
+                lines.append(f"launch({r(p.get('target'))})")
+            elif action == "run":
+                lines.append(f"run({r(p.get('command'))})")
+            elif action == "script":
+                lines.append("# --- script ---")
+                lines.extend(str(p.get("code", "")).splitlines())
+                lines.append("# --- end script ---")
+        return "\n".join(lines) + "\n"
 
     def add(self, kind: str, detail: str, frame: Image.Image | None = None, ok: bool = True) -> None:
         if not self.enabled:
@@ -57,6 +118,7 @@ class Recorder:
     def clear(self) -> None:
         with self.lock:
             self.steps.clear()
+            self.macro.clear()
             self.started = time.time()
 
     def info(self) -> dict:

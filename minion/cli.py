@@ -518,6 +518,8 @@ def cmd_replay(args) -> int:
     out = args.output or f"{d.name}-replay.html"
     if out.endswith(".gif"):
         d.recording("gif", out)
+    elif out.endswith(".py"):
+        d.recording("script", out)
     else:
         d.recording("html", out)
     ok(f"flight recorder → {out}")
@@ -805,8 +807,8 @@ def build_parser() -> argparse.ArgumentParser:
     sp = add("view", cmd_view, "open the live view in your browser (watch and take over)")
     sp.add_argument("--no-open", action="store_true", help="just print the URL")
 
-    sp = add("replay", cmd_replay, "export the flight recorder (HTML timeline or GIF)")
-    sp.add_argument("-o", "--output", help="file.html (default) or file.gif")
+    sp = add("replay", cmd_replay, "export the flight recorder: HTML timeline, GIF, or a replayable .py script")
+    sp.add_argument("-o", "--output", help="file.html (default), file.gif, or file.py (replay with `minion script`)")
     sp.add_argument("--open", action="store_true")
 
     sp = add("script", cmd_script, "run Python inside the desktop with the GUI API (FILE, - or code)")

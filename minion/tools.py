@@ -57,7 +57,8 @@ TOOLS: list[dict] = [
             "Create and manage Linux desktops (isolated computers with GUI apps). Actions: create (profile, "
             "name, size, count for several at once), list, profiles, remove, freeze (0% CPU; any later call "
             "wakes it), thaw, fork (clone disk state into a new desktop to try something risky), snapshot, "
-            "restore, replay (HTML timeline of everything done). Profiles: browser (Firefox, blocks ads and "
+            "restore, replay (HTML timeline of everything done), macro (the actions so far as a Python script that "
+            "replays them with the script tool, no model needed). Profiles: browser (Firefox, blocks ads and "
             "cookie banners), office (LibreOffice + Firefox), dev (git, Python, Node.js, Chromium, IDE), "
             "research (Firefox + PDF/notes tools), data (office + pandas/matplotlib), base (minimal)."
         ),
@@ -77,6 +78,7 @@ TOOLS: list[dict] = [
                         "snapshot",
                         "restore",
                         "replay",
+                        "macro",
                         "info",
                     ],
                 },
@@ -595,6 +597,9 @@ class Toolkit:
             path = Path(tempfile.gettempdir()) / f"minion-{d.name}-replay.html"
             d.recording("html", path)
             return [_text(f"Timeline of everything done on {d.name}: {path}")]
+        if action == "macro":
+            code = d.recording("script")
+            return [_text("Replayable script (run it with the script tool on a desktop of this profile):\n\n" + code)]
         raise ToolError(f"unknown action {action!r}")
 
     def _create(self, args: dict, progress) -> list:
@@ -838,7 +843,7 @@ class Toolkit:
             return [_text(f"Current desktop: {rest}")]
         if verb in ("remove", "rm"):
             return self.t_desktop({"action": "remove", "desktop": rest or None}, progress)
-        if verb in ("freeze", "thaw", "fork", "snapshot", "restore", "replay"):
+        if verb in ("freeze", "thaw", "fork", "snapshot", "restore", "replay", "macro"):
             key = "tag" if verb in ("snapshot", "restore") else "name"
             return self.t_desktop({"action": verb, key: rest or None}, progress)
         if verb == "see":

@@ -635,6 +635,24 @@ class Agent:
             return f"opened {res['command']}" + (f' → "{w["title"]}"' if w else "")
         raise RpcError(f"unknown action {action!r}")
 
+    def _portable(self, params: dict) -> dict:
+        """Step parameters with @ids replaced by what they pointed at (a label or x,y), so a
+        recorded macro still works in another session."""
+        out = dict(params)
+        for key in ("target", "from", "to"):
+            v = out.get(key)
+            if isinstance(v, str) and re.fullmatch(r"\s*@\d+\s*", v):
+                el = self.perception.registry.get(int(v.strip()[1:]))
+                if el is None:
+                    continue
+                label = getattr(el, "text", "") if not hasattr(el, "label") else el.label()
+                if label and len(label) <= 80:
+                    out[key] = label
+                else:
+                    cx, cy = el.center
+                    out[key] = f"{cx},{cy}"
+        return out
+
     def m_act(self, p: dict) -> dict:
         steps = p.get("actions")
         if steps is None:
@@ -671,8 +689,10 @@ class Agent:
                     )
                     continue
                 try:
+                    portable = self._portable(params)  # before the action: @ids describe the old screen
                     detail = self._do(action, params)
                     results.append({"action": action, "ok": True, "detail": detail})
+                    self.recorder.add_macro(action, portable)
                     if i < len(parsed) - 1:
                         # Let the app process the event before the next one, like a person would.
                         time.sleep(0.2 if action in ("fill", "open", "focus") else 0.06)
@@ -944,6 +964,7 @@ class Agent:
     def m_open(self, p: dict) -> dict:
         with self.input_lock:
             res = self._open(p.get("target"), wait=float(p.get("wait") or 12.0))
+        self.recorder.add_macro("open", {"target": p.get("target")})
         self.recorder.add("open", res["command"], self.screen.grab(), ok="error" not in res)
         return res
 
@@ -971,6 +992,7 @@ class Agent:
         stdin = p.get("input")
         res = run_captured(["bash", "-lc", command], cwd, timeout, stdin.encode() if stdin is not None else None)
         self.recorder.add("run", f"$ {command[:200]} → exit {res['code']}")
+        self.recorder.add_macro("run", {"command": command})
         return res
 
     def m_script(self, p: dict) -> dict:
@@ -1098,6 +1120,8 @@ class Agent:
         if action == "html":
             title = p.get("title") or f"Minion · {self.info.get('name') or 'desktop'}"
             return {"html": self.recorder.export_html(title)}
+        if action == "script":
+            return {"script": self.recorder.export_script(p.get("title") or f"Minion · {self.info.get('name') or ''}")}
         if action == "gif":
             try:
                 data = self.recorder.export_gif(

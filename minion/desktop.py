@@ -618,7 +618,13 @@ class Desktop:
         return d
 
     def recording(self, format: str = "html", path: str | os.PathLike | None = None):
-        """The flight recorder: every action with a thumbnail, as HTML (str) or GIF (bytes)."""
+        """The flight recorder: every action with a thumbnail, as HTML (str) or GIF (bytes), or the
+        actions as a replayable Python script (format="script"; run it with `script()`)."""
+        if format == "script":
+            code = self.call("record", {"action": "script", "title": f"Minion · {self.name}"})["script"]
+            if path:
+                Path(path).write_bytes(code.encode("utf-8"))
+            return code
         if format == "gif":
             data = base64.b64decode(self.call("record", {"action": "gif"}, timeout=120)["data"])
             if path:
