@@ -132,7 +132,7 @@ Other images in [docs/assets](../assets/):
 | [demo.gif](../assets/demo.gif) | 720×480 | An agent on a `research` desktop searching Wikipedia, made by `minion replay -o demo.gif` |
 | [marks.png](../assets/marks.png) | 1280×800 | A Wikipedia page with an `@id` drawn on every clickable element (`screenshot --marks`) |
 | [live-view.png](../assets/live-view.png) | 1440×784 | The live view of an `office` desktop, with *Take control*, Paste, Screenshot, Replay and Freeze |
-| [dashboard.png](../assets/dashboard.png) | 1440×784 | The `minion serve` dashboard with four live desktops. Its header says "v0.1.0": retake it before using it in launch posts |
+| [dashboard.png](../assets/dashboard.png) | 1440×784 | The `minion serve` dashboard with four live desktops. |
 | [office.png](../assets/office.png), [research.png](../assets/research.png), [dev.png](../assets/dev.png) | 1280×800 | Full-size desktops: a Writer document, Wikipedia in Firefox, Geany with a Minion script |
 | [packaging/mcpb/icon.png](../../packaging/mcpb/icon.png) | 512×512 | The square icon, for the Product Hunt thumbnail and avatars |
 

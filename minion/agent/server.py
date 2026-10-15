@@ -1073,7 +1073,11 @@ class Agent:
                 wins_after = self.windows.list(with_states=False)
             except WindowError:
                 wins_after = []
-            acted = [a for a, _ in parsed[: len(results)] if a in ("click", "double_click", "key", "fill", "select")]
+            acted = [  # (a busy app can take in a burst of typing and only repaint after the screen looked settled)
+                a
+                for a, _ in parsed[: len(results)]
+                if a in ("click", "double_click", "key", "fill", "select", "type", "paste", "menu", "path")
+            ]
             if (
                 acted
                 and p.get("settle", True) is not False

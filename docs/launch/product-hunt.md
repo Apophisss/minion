@@ -40,7 +40,6 @@ publish.
 | 6 | [office.png](../assets/office.png) | Office desktops save Microsoft formats by default and type exactly what the agent sends. |
 | 7 | [dashboard.png](../assets/dashboard.png) | One dashboard with live thumbnails of every desktop (`minion serve`). |
 
-Retake [dashboard.png](../assets/dashboard.png) before using it: its header shows "v0.1.0", and the release is 1.0.0.
 
 ## Maker's first comment
 
