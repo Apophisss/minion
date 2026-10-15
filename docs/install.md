@@ -17,6 +17,7 @@ Minion runs each desktop in a container on your computer, and your agent app rea
 | **Claude Desktop** | [Download `minion.mcpb`](https://github.com/apophisss/minion/releases/latest/download/minion.mcpb) and double-click it. Nothing else to install ([details](#claude-desktop)) |
 | **Claude Code** | `claude plugin marketplace add apophisss/minion && claude plugin install minion@minion` ([details](#claude-code)) |
 | **Cursor, VS Code, Visual Studio, LM Studio, Goose, Kiro** | Its button above. The buttons start Minion with `uvx`, so they need [uv](#what-you-need) |
+| **An app or a guide that uses `npx`** | The command `npx -y minion-desktop mcp` ([details](#with-npx)). It needs [uv](#what-you-need) or pipx too |
 | **Several apps, or any other app** | The [one-line installer](#install-the-minion-command), which ends with [`minion setup`](#minion-setup) |
 | **ChatGPT or Claude.ai on the web** | [`minion share`](#chatgpt-and-claudeai-on-the-web) |
 
@@ -68,6 +69,7 @@ uv tool install minion-desktop      # recommended: an isolated install, and uv b
 pipx install minion-desktop         # with pipx
 pip install minion-desktop          # into an active virtual environment (Python 3.11+)
 uvx minion-desktop mcp              # no install: run the MCP server straight from PyPI
+npx -y minion-desktop mcp           # the same through npm, for apps that expect npx (needs uv or pipx)
 uv tool install git+https://github.com/apophisss/minion   # the latest code from GitHub
 ```
 
@@ -252,6 +254,21 @@ LangChain, CrewAI and others) are covered in [integrations.md](integrations.md).
 Minion is also in the official [MCP Registry](https://registry.modelcontextprotocol.io/v0.1/servers?search=io.github.apophisss/minion)
 as `io.github.apophisss/minion`, for apps and directories that install from it.
 
+### With npx
+
+For apps and guides that expect an npx command, the npm package `minion-desktop` starts the same server. It is a
+small launcher: it runs Minion from PyPI, in the same version as the npm package, with `uvx`, else `pipx run`, else
+an installed `minion`. So it needs [uv](#what-you-need) or pipx, and Docker for the desktops, like every other way.
+
+```json
+{ "mcpServers": { "minion": { "command": "npx", "args": ["-y", "minion-desktop", "mcp"] } } }
+```
+
+`-y` lets npx install the package without asking. Options such as `"--compact"` go after `"mcp"`, and
+`"env": {"MINION_SPEC": "git+https://github.com/apophisss/minion"}` runs another version or a fork. The launcher
+also finds `uvx` in `~/.local/bin` and `~/.cargo/bin`, where uv's installer puts it, but the app has to find `npx`:
+if it can't, use the full path from `which npx` (`where npx` on Windows).
+
 ## ChatGPT and Claude.ai on the web
 
 Web apps can't start programs on your computer, so they can't run a stdio server. Instead, `minion share` starts
@@ -269,6 +286,7 @@ minion share
 |---|---|---|
 | Claude Desktop extension | Install the new `minion.mcpb` | Remove Minion desktops in Settings → Extensions |
 | `uvx` (buttons, most configs) | `uvx minion-desktop@latest --version`, then restart the app | `minion connect --remove`, or delete the entry |
+| `npx` | Restart the app: npx looks for a newer `minion-desktop` when it starts | Delete the entry |
 | uv | `uv tool upgrade minion-desktop` | `minion connect --remove`, then `uv tool uninstall minion-desktop` |
 | pipx | `pipx upgrade minion-desktop` | `minion connect --remove`, then `pipx uninstall minion-desktop` |
 | pip | `pip install -U minion-desktop` | `minion connect --remove`, then `pip uninstall minion-desktop` |

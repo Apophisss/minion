@@ -43,6 +43,21 @@ Each section below has the snippet to add by hand. In each one, replace `/path/t
 `which minion` (macOS, Linux) or `where minion` (Windows). Without an installed Minion, use the full path of
 `uvx` as the command, with the arguments `["minion-desktop", "mcp"]`.
 
+Apps that expect an npx command can use the npm package `minion-desktop` instead, with the arguments
+`["-y", "minion-desktop", "mcp"]`. It is a launcher that runs Minion of the same version with uvx or pipx, so one
+of them must be installed, and the desktops still need Docker. In Claude Desktop, for example:
+
+```json
+{
+  "mcpServers": {
+    "minion": { "command": "npx", "args": ["-y", "minion-desktop", "mcp"] }
+  }
+}
+```
+
+If the app can't find `npx`, use its full path (`which npx`, or `where npx` on Windows). See
+[install.md](install.md#with-npx).
+
 ### Claude Desktop
 
 | OS | Config file |
@@ -250,8 +265,8 @@ See [Goose configuration files](https://goose-docs.ai/docs/guides/config-files/)
 
 ### Anything else
 
-Any MCP client can start Minion as a stdio server: the command `/path/to/minion` with the argument `mcp`. For
-agent frameworks, see [integrations.md](integrations.md).
+Any MCP client can start Minion as a stdio server: the command `/path/to/minion` with the argument `mcp`, or
+`npx -y minion-desktop mcp` (see above). For agent frameworks, see [integrations.md](integrations.md).
 
 ## Troubleshooting
 
