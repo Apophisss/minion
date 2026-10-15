@@ -131,6 +131,8 @@ def recognize(
             timeout=timeout,
             env=env,
         )
+    except subprocess.TimeoutExpired:
+        return []  # a very busy machine: no OCR text this time (callers treat OCR as best-effort)
     finally:
         try:
             os.unlink(path)

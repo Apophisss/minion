@@ -128,6 +128,24 @@ def sources(app: dict) -> list[str]:
     raise InstallError(f"{app.get('name', app['id'])} cannot be installed here")
 
 
+def install_name(app: dict) -> str:
+    """What minion-install should call a download: the command an AppImage becomes ("obsidian"), or
+    the ~/apps folder an archive is unpacked to (as the app's command expects)."""
+    exe = shlex.split(app["command"])[0]
+    if "/" not in exe:
+        return exe
+    m = re.match(r"(?:~|\$HOME)/apps/([^/]+)/", exe)
+    return m.group(1) if m else app["id"]
+
+
+def install_app(app: dict, timeout: float = INSTALL_TIMEOUT) -> tuple[float, str]:
+    """Install a catalog app; returns (seconds, log path)."""
+    targets = sources(app)
+    if not app.get("apt"):
+        targets = ["--name", install_name(app), *targets]
+    return install(targets, timeout)
+
+
 def _runtime() -> Path:
     return Path(os.environ.get("MINION_RUNTIME_DIR", "/tmp/minion"))
 
@@ -153,7 +171,9 @@ def install(targets: list[str], timeout: float = INSTALL_TIMEOUT) -> tuple[float
     if res.returncode != 0:
         tail = log_path.read_text(errors="replace").strip().splitlines()[-3:]
         hint = " ".join(tail)
-        if re.search(r"Temporary failure resolving|Could not resolve|Network is unreachable|urlopen error", hint):
+        if re.search(
+            r"Temporary failure resolving|Could not resolve|Network is unreachable|Name or service not known", hint
+        ):
             hint = "this desktop has no internet access (was it created with --offline?)"
         raise InstallError(f"installing failed: {hint[-300:]} (log: {log_path})")
     return time.monotonic() - t0, str(log_path)

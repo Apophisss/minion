@@ -1219,6 +1219,12 @@ class Agent:
         path = os.path.expanduser(t)
         if os.path.exists(path):
             return self._file_opener(path), "file"
+        try:
+            first = os.path.expanduser(shlex.split(t)[0]) if t else ""
+        except ValueError:
+            first = ""
+        if first and os.path.isfile(first) and os.access(first, os.X_OK):
+            return t, "command"  # a program by its path, with arguments: ~/apps/postman/Postman --no-sandbox
         if t.startswith(("~", "/", "./", "../")) and " " not in t.split("/")[0]:
             raise RpcError(f"no such file in the desktop: {t} (list the folder with run('ls'))")
         return t, "command"
@@ -1250,7 +1256,7 @@ class Agent:
             if not install:
                 raise RpcError(f"{name} is not installed here; open it with install allowed (the default) to add it")
             try:
-                secs, _ = catalog.install(catalog.sources(app))
+                secs, _ = catalog.install_app(app)
             except catalog.InstallError as e:
                 raise RpcError(f"{name} is not installed and {e}") from e
             notes["installed"] = f"{name} ({secs:.0f}s)"
@@ -1318,6 +1324,15 @@ class Agent:
         extra: dict = {}
         if kind == "command":
             cmd, kind, extra = self._from_catalog(str(target).strip(), install)
+        if kind == "url" and cmd.startswith("xdg-open ") and install:  # no browser here (the base profile)
+            browser = catalog.find("firefox")
+            if browser is not None and not catalog.installed(browser):
+                try:
+                    secs, _ = catalog.install_app(browser)
+                except catalog.InstallError as e:
+                    raise RpcError(f"this desktop has no web browser and {e}") from e
+                extra["installed"] = f"{browser.get('name', 'Firefox')} ({secs:.0f}s)"
+                cmd = self._browser() + cmd[len("xdg-open") :]
         try:
             before = {w.id: w for w in self.windows.list(with_states=False)}
         except WindowError:

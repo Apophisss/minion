@@ -171,3 +171,48 @@ def test_cli_maps_this_machines_home_to_the_desktops(monkeypatch):
     assert cli.desktop_path("/Users/adam/x.pdf") == "/Users/adam/x.pdf"
     assert cli.desktop_path("/tmp/x.pdf") == "/tmp/x.pdf"
     assert cli.desktop_path("~/x.pdf") == "~/x.pdf"
+
+
+def test_downloads_are_named_and_typed_like_what_they_are(tmp_path, monkeypatch):
+    from minion.agent import install
+
+    class Response(io.BytesIO):
+        def __init__(self, data, final, headers):
+            super().__init__(data)
+            self.final, self.headers = final, headers
+
+        def geturl(self):
+            return self.final
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+    responses = {
+        "https://x/latest/stable": Response(b"!<arch>\ndebian-binary...", "https://cdn/code_1.99_amd64.deb", {}),
+        "https://x/dl?platform=linux": Response(b"\x1f\x8b...", "https://x/dl?platform=linux", {}),
+        "https://x/get": Response(
+            b"zip", "https://x/get", {"Content-Disposition": 'attachment; filename="App-1.2.zip"'}
+        ),
+    }
+    monkeypatch.setattr(install.urllib.request, "urlopen", lambda req, timeout: responses[req.full_url])
+    assert install.download("https://x/latest/stable", tmp_path).name == "code_1.99_amd64.deb"  # the redirect's name
+    assert install.download("https://x/get", tmp_path).name == "App-1.2.zip"  # Content-Disposition
+    plain = install.download("https://x/dl?platform=linux", tmp_path)
+    assert plain.name == "dl" and install.sniff(plain).name == "dl.tar.gz"  # no name at all: by its first bytes
+    image = tmp_path / "Obsidian"
+    image.write_bytes(b"\x7fELF\x02\x01\x01\x00AI\x02" + b"\x00" * 60)
+    assert install.sniff(image).name == "Obsidian.AppImage"
+    other = tmp_path / "notes"
+    other.write_bytes(b"just text")
+    assert install.sniff(other) == other
+
+
+def test_catalog_downloads_get_the_name_their_command_expects():
+    assert catalog.install_name({"id": "obsidian", "command": "obsidian --no-sandbox"}) == "obsidian"
+    assert (
+        catalog.install_name({"id": "postman", "command": "~/apps/postman/Postman/Postman --no-sandbox"}) == "postman"
+    )
+    assert catalog.install_name({"id": "x", "command": "/opt/x/bin/x"}) == "x"
