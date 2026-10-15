@@ -4,7 +4,7 @@ minion-install gimp inkscape                       # Debian packages (apt)
 minion-install https://example.com/tool.deb        # a .deb from the web
 minion-install https://example.com/App.AppImage    # an AppImage (runs without FUSE)
 minion-install https://example.com/tool.tar.gz     # an archive: unpacked to ~/apps/<name>
-minion-install pip:yt-dlp                          # a Python CLI in its own virtualenv
+minion-install pip:yt-dlp                          # a Python CLI or library in its own virtualenv (importable)
 minion-install npm:prettier                        # a Node.js CLI (installs Node if needed)
 minion-install --name obsidian https://…/App.AppImage   # choose the command (or ~/apps folder) name
 """
@@ -114,8 +114,20 @@ def wrapper(name: str, command: str) -> Path:
 
 
 def install_apt(packages: list[str]) -> int:
+    """apt-get, quietly: its progress goes to a log; only what went wrong (and a last line) is printed."""
     quoted = " ".join(shlex.quote(p) for p in packages)
-    return sh(f"sudo apt-get update -qq && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y {quoted}")
+    log = Path(os.environ.get("MINION_RUNTIME_DIR", "/tmp")) / "minion-install-apt.log"
+    t0 = time.monotonic()
+    code = sh(
+        f"(sudo apt-get update -qq && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -q {quoted}) "
+        f"> {shlex.quote(str(log))} 2>&1"
+    )
+    if code != 0:
+        tail = log.read_text(errors="replace").strip().splitlines()[-8:] if log.exists() else []
+        print("\n".join(tail))
+    else:
+        print(f"installed {' '.join(packages)} ({time.monotonic() - t0:.0f}s)")
+    return code
 
 
 def install_url(url: str, as_name: str = "") -> int:
@@ -172,6 +184,17 @@ def install_pip(pkg: str) -> int:
         f"python3 -m venv {shlex.quote(str(venv))} && {shlex.quote(str(venv))}/bin/pip install -q {shlex.quote(pkg)}"
     )
     if code == 0:
+        # A library (openpyxl, python-docx, pandas) is for `import` in the desktop's own python3: point its user
+        # site-packages at the virtualenv's (a .pth file), so it imports without touching the system's Python.
+        site = subprocess.run(
+            ["python3", "-c", "import site; print(site.getusersitepackages())"], capture_output=True, text=True
+        ).stdout.strip()
+        found = sorted(venv.glob("lib/python3*/site-packages"))
+        if site and found:
+            Path(site).mkdir(parents=True, exist_ok=True)
+            # (appended to sys.path, so the system's own packages keep their place before the virtualenv's)
+            (Path(site) / f"minion-{venv.name}.pth").write_text(f"import sys; sys.path.append({str(found[-1])!r})\n")
+            print(f"importable from python3: {pkg}")
         ensure_bin()
         for exe in (venv / "bin").iterdir():
             if exe.name in ("python", "python3", "pip", "pip3") or exe.name.lower().startswith(

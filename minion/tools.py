@@ -20,6 +20,7 @@ from __future__ import annotations
 import copy
 import json
 import os
+import re
 import shlex
 import tempfile
 import threading
@@ -59,7 +60,8 @@ Use the `computer` tool, one command per call:
   see [--changes] [--full] [--ocr] [--lang=heb]  -> the screen as text; act on the @ids it lists
   click|dclick|rclick TARGET · type TEXT · key KEYS · fill TARGET TEXT · select TARGET OPTION · scroll up|down [N]
   menu File > Save As · path FILE [--overwrite] (in a file dialog) · see --menus (all menu commands)
-  wait-for TEXT · open APP|URL|FILE · run SHELL · script PYTHON · screenshot [--marks] [--low]
+  wait-for TEXT · scroll-to TEXT (on a long page) · close [WINDOW] · copy TARGET (its text to the clipboard)
+  open APP|URL|FILE · run SHELL · script PYTHON · screenshot [--marks] [--low]
   read FILE (any document as text) · convert FILE FORMAT · list · use NAME · remove NAME · fork · view [MESSAGE]
 TARGET is @12 (from see), exact visible text ("Save"), button:Save, or x,y. open installs apps it doesn't
 have (open gimp). Prefer see to screenshots, and see --changes after acting. For loops, use script.
@@ -189,13 +191,17 @@ TOOLS: list[dict] = [
             "drag (from, to), type (text; \\n = Enter, \\t = Tab), paste (text), fill (target, text: replace a "
             "field's content), select (target, option: pick a dropdown option by its text), key (keys: "
             '"ctrl+s", "Return", or a sequence "Tab Tab Return"; repeat), scroll '
-            "(direction, amount, target), wait (seconds), wait_for (text, timeout; gone=true), focus (window), "
+            "(direction, amount, target), wait (seconds), wait_for (text, timeout; gone=true), scroll_to (text: "
+            "brings it into view wherever it is on a long page, loading more of a feed), focus (window), close "
+            "(window, like its X button), copy (target: its whole text to the clipboard), goto (target: a URL in the "
+            "browser's current tab), "
             'menu (item: a menu path like "File > Export as PDF"; see(menus=true) lists them), path (path: fill the '
             "open Open/Save/Export dialog with a full file path and confirm; overwrite=true replaces a file), "
             "mouse_down/mouse_up (target: press/release for custom drags), hold_key (keys, seconds). Targets: "
             '"@12" from your latest see (best), exact visible text ("Save"; fails if not on screen), a kind and a '
             'label ("button:Save", "link:Docs", "field:Email", "tab:Settings"), or "x,y". '
-            "Web pages may still load after a click: add wait_for on text you expect."
+            "The reply says what changed: windows, a page's alert/confirm dialog, files saved or downloaded; it "
+            'waits while the app shows "Loading…". A page may still fill in after a click: wait_for text you expect.'
         ),
         "input_schema": {
             "type": "object",
@@ -223,7 +229,11 @@ TOOLS: list[dict] = [
                                     "scroll",
                                     "wait",
                                     "wait_for",
+                                    "scroll_to",
                                     "focus",
+                                    "close",
+                                    "copy",
+                                    "goto",
                                     "mouse_down",
                                     "mouse_up",
                                     "hold_key",
@@ -235,7 +245,7 @@ TOOLS: list[dict] = [
                                 "type": "string",
                                 "description": 'Required for clicks, move and fill: "@12", exact visible text, or "x,y".',
                             },
-                            "text": {"type": "string", "description": "type/paste/fill/wait_for: the text."},
+                            "text": {"type": "string", "description": "type/paste/fill/wait_for/scroll_to: the text."},
                             "option": {"type": "string", "description": "select: the option's visible text."},
                             "keys": {
                                 "type": "string",
@@ -250,7 +260,7 @@ TOOLS: list[dict] = [
                             "seconds": {"type": "number", "description": "wait/hold_key: seconds."},
                             "timeout": {"type": "number", "description": "wait_for: seconds (default 10)."},
                             "gone": {"type": "boolean", "description": "wait_for: wait until the text disappears."},
-                            "window": {"type": "string", "description": "focus: a window title or app name."},
+                            "window": {"type": "string", "description": "focus/close: a window title or app name."},
                             "item": {"type": "string", "description": 'menu: the menu path, e.g. "File > Save As".'},
                             "path": {"type": "string", "description": "path: the full file path for the dialog."},
                             "overwrite": {"type": "boolean", "description": "path: replace an existing file."},
@@ -261,9 +271,11 @@ TOOLS: list[dict] = [
                 "desktop": DESKTOP_PROP,
                 "observe": {
                     "type": "string",
-                    "enum": ["summary", "changes", "see", "screenshot", "crop"],
-                    "description": "What to return after acting: summary (default), changes (+ the changed UI as "
-                    "text), see (the whole screen as text), screenshot, crop (an image of just the changed region).",
+                    "enum": ["auto", "summary", "changes", "see", "screenshot", "crop"],
+                    "description": "What to return after acting: auto (default: the summary, plus the changed UI as "
+                    "text when a page, window or dialog changed or the app finished working), summary, changes (+ the "
+                    "changed UI as text), see (the whole screen as text), screenshot, crop (an image of just the "
+                    "changed region).",
                 },
             },
             "required": ["actions"],
@@ -322,7 +334,8 @@ TOOLS: list[dict] = [
             'cells() (visible spreadsheet cells {"A1": ...}), click(target), double_click, right_click, '
             "write(text), paste(text), key(keys), scroll(dir, n), fill(target, text), drag(a, b), wait(s), "
             'wait_for(text, timeout) -> bool, menu("File > Save"), menus(), path(file), read(file) -> text, '
-            "convert(file, to) -> path, launch(app_or_url), run(cmd) -> dict, windows(), focus(title), "
+            "convert(file, to) -> path, launch(app_or_url), run(cmd) -> dict, windows(), focus(title), scroll_to(text), "
+            "close(window), copy(target), "
             "clipboard(text=None). Targets as in act. Errors raise MinionScriptError."
         ),
         "input_schema": {
@@ -391,7 +404,8 @@ COMPUTER_TOOL = {
         "create [profile] [--name NAME] [--count N] · "
         "list · use NAME · remove [NAME] · see [--changes] [--ocr] [--lang=X] [--full] · screenshot [--marks] [--low] "
         "[--zoom x,y,w,h] · click TARGET · dclick TARGET · rclick TARGET · type TEXT · key KEYS · "
-        "scroll up|down [N] · fill TARGET TEXT · select TARGET OPTION · drag FROM TO · wait-for TEXT [--timeout N] · "
+        "scroll up|down [N] · scroll-to TEXT · fill TARGET TEXT · select TARGET OPTION · drag FROM TO · "
+        "wait-for TEXT [--timeout N] · close [WINDOW] · copy TARGET · goto URL · "
         "menu File > Save As · path FILE [--overwrite] · see --menus · read FILE · convert FILE FORMAT · "
         "focus WINDOW · windows · open TARGET (any app by name; installed the first time) · run SHELL... · "
         "script PYTHON... · view [MESSAGE]. Targets: @id from see, visible text (quote it), button:Save, or x,y. "
@@ -558,7 +572,13 @@ def _unquote(text: str) -> str:
     return text
 
 
+# A Windows path (C:\\users\\x.txt, no second ":") keeps its backslashes, as in the desktop's act steps.
+WINDOWS_PATH = re.compile(r"[A-Za-z]:\\[^:\n\t]*")
+
+
 def _escapes(text: str) -> str:
+    if WINDOWS_PATH.fullmatch(text) and "\\\\" not in text:  # (C:\\\\temp: the escape convention, as before)
+        return text[:-2] + "\n" if text.endswith("\\n") else text
     return text.replace("\\\\", "\0").replace("\\n", "\n").replace("\\t", "\t").replace("\0", "\\")
 
 
@@ -1040,7 +1060,7 @@ class Toolkit:
             if isinstance(step, dict):
                 _check_step(i, {k: v for k, v in step.items() if v is not None})
         d = self.desk(args)
-        observe = args.get("observe") or "summary"
+        observe = args.get("observe") or "auto"
         if not self.images and observe in ("screenshot", "crop"):
             observe = "changes"  # this client gets text only
         res = d.act(actions, observe=observe, check=False)
@@ -1068,16 +1088,17 @@ class Toolkit:
         first = f"Installed {res['installed']}. " if res.get("installed") else ""
         tips = f"\nTips: {res['tips']}" if res.get("tips") else ""
         w = res.get("window")
+        if "error" in res:
+            raise ToolError(first + res["error"])
         if w:
             also = f" Also opened: {', '.join(repr(t) for t in res['also'])}." if res.get("also") else ""
+            look = f"\n{res['look']}" if res.get("look") else ""
             return [
                 _text(
                     f'{first}Opened {res["command"]} → window "{w["title"]}" ({w["app"]}).{also} '
-                    f"Use see() to read it.{tips}"
+                    f"{'It opened on a dialog:' if look else 'Use see() to read it.'}{tips}{look}"
                 )
             ]
-        if "error" in res:
-            raise ToolError(first + res["error"])
         return [
             _text(f"{first}Launched {res['command']}; no new window yet (it may still be loading — check see()).{tips}")
         ]
@@ -1364,6 +1385,22 @@ class Toolkit:
                     text_words.append(w)
             step["text"] = " ".join(text_words)
             return self.t_act({"actions": [step]}, progress)
+        if verb in ("scroll-to", "scroll_to", "find"):
+            if not rest.strip():
+                raise ToolError(
+                    'scroll-to TEXT: brings it into view wherever it is on the page, e.g. scroll-to "Entry 87"'
+                )
+            return self.t_act({"actions": [{"action": "scroll_to", "text": _unquote(rest.strip())}]}, progress)
+        if verb == "goto":
+            if not rest.strip():
+                raise ToolError("goto URL: load it in the browser's current tab")
+            return self.t_act({"actions": [{"action": "goto", "target": _unquote(rest.strip())}]}, progress)
+        if verb == "close":
+            return self.t_act(
+                {"actions": [{"action": "close", **({"window": _unquote(rest)} if rest else {})}]}, progress
+            )
+        if verb == "copy":
+            return self.t_act({"actions": [{"action": "copy", "target": target(plain)}]}, progress)
         if verb == "open":
             target_ = " ".join(w for w in words if w != "--no-install") if "--no-install" in flags else rest
             return self.t_open({"target": target_, "install": "--no-install" not in flags}, progress)

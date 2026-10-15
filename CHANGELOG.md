@@ -17,7 +17,7 @@ The first release of Minion: instant desktops that any AI agent can use.
 **Seeing**
 - `see`: the screen as text with **stable** `@ids` from the accessibility tree, with OCR as a fallback.
 - `see` covers web pages (including text inside cells, divs and inline code), editors (numbered lines with indentation),
-  terminals, dropdowns with their value and options, and spreadsheet cells as `A1: value (=formula)`, with failed
+  terminals, dropdowns with their value and options, and spreadsheet cells row by row (`row 2: @14 A2 North · @15 B2 120 (=B1*2)`), with failed
   formulas as `#ERROR`.
 - `see(changes=true)` returns only what changed since the last look at that window, including new terminal output and
   changed editor lines. Moves and truncation don't count as changes. Long diffs fall back to the full view and say why.
@@ -49,7 +49,39 @@ The first release of Minion: instant desktops that any AI agent can use.
 - **Code mode** (`script`): Python runs inside the desktop with a GUI API, so loops cost one call.
 - **Macros**: export the recorded session as a Python script that replays it without a model.
 
+**Everyday work** (found by AI agents doing 93 ordinary computer tasks, from "what's the date?" to "total the
+attachment of Dana's email and reply with it"; see [docs/scenarios.md](docs/scenarios.md))
+- An action's reply says what happened, not just that keys were sent: a web page's alert/confirm/prompt dialog
+  (listed first by `see`, with @ids for its field and buttons), files saved, downloaded or deleted, a pop-up over
+  the button a click was meant for (the click isn't sent), and a drag whose card didn't move. After a click or a key that
+  changed the screen, it includes what changed, so the agent rarely needs another look. It waits while the app
+  shows "Loading…" or "Generating…".
+- `scroll-to TEXT` (`find`) brings text into view anywhere on a long page or list, loading more of an endless feed
+  until it shows up. A web form that goes on below the fold is listed to its end, so one `act` fills all of it.
+  `wait-for` counts text that is on the page but out of view.
+- Fewer tokens for the same screen: tables, spreadsheet rows and toolbars one row per line, no labels repeating
+  their control, no OCR of text accessibility already has (terminals, editors, form labels), no "picture with no
+  text" notes on plain pages. Controls that share a label say where they are (`button "Empty" in "Spam"`).
+- Rich text editors, unnamed check boxes and terminal programs that fill the screen (vim, htop) come out whole.
+- `select` works on autocomplete fields and makes web pages react; `fill` sets sliders and date fields and says
+  what a field shows if the page reformatted it. Typing is exact in every app and language (é, ש, 東, emoji), and
+  in LibreOffice it no longer races the app. `goto` (a URL in the current tab), `close`, `copy` (an element's text to the clipboard),
+  `rclick` and `dclick` work inside `act`, and a text target waits a moment for a control that is still appearing;
+  Alt+F4 closes any window, Windows programs included.
+- Windows programs: `path` fills Wine's file dialogs (Windows paths too), `open notepad FILE` opens the file, and
+  OCR reads selected rows, lone buttons and digits that look like letters.
+- `read` shows what text alone doesn't: bold cells, frozen panes, conditional formats and charts in a sheet; a
+  table of contents, tracked changes, comments, images and page setup in a docx; and what a picture without text is.
+  `convert` names its result (`convert a.csv b.xlsx`), takes several files, and turns web pages into documents.
+- `run` no longer hangs on a command that leaves a server running (`(cd app && server &)`), and keeps only the
+  ends of huge output instead of running the desktop out of memory.
+- Images: `file`, `zip`, `htop` and `vim` in every desktop; openpyxl and python-docx in the office ones; `pip:`
+  libraries from `minion-install` import in `python3`. The file manager lists files as a table, Firefox navigates to
+  a typed URL instead of searching for it, and GIMP skips its welcome dialog.
+
 **Measured**
+- 93 everyday tasks done by AI agents, before and after the everyday-work fixes: 31% fewer calls, half the calls
+  that failed, a third fewer screenshots and 36% fewer output tokens ([docs/scenarios.md](docs/scenarios.md)).
 - Five real tasks cost an agent 4,356 tokens with Minion and 50,505 with a screenshot agent: 11.6× fewer
   ([docs/benchmarks.md](docs/benchmarks.md), `python scripts/bench_tasks.py`).
 - A one-minute demo video: one job in a browser, a spreadsheet and a word processor in 12 tool calls and 2,372 tokens

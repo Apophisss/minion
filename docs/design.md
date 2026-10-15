@@ -23,7 +23,7 @@ and the model still has to guess coordinates. Minion reads the screen the way a 
 
 | Technique | What it saves |
 |---|---|
-| **`see`**: the accessibility tree (GTK, Qt, Firefox, Chromium, LibreOffice) as a compact list of controls with `@ids`, collapsing wrappers, twins and browser chrome; spreadsheet cells as `A1: value` | Exact text. Often fewer tokens than a screenshot (a terminal is about 50 tokens instead of 1,365) |
+| **`see`**: the accessibility tree (GTK, Qt, Firefox, Chromium, LibreOffice) as a compact list of controls with `@ids`, collapsing wrappers, twins and browser chrome; spreadsheet cells row by row (`row 2: @14 A2 North · @15 B2 120`) | Exact text. Often fewer tokens than a screenshot (a terminal is about 50 tokens instead of 1,365) |
 | **Stable `@ids`**: the same control keeps its id across looks | The agent doesn't have to re-read the screen to act |
 | **`see(changes=true)` / `act(observe="changes")`**: only what changed since the last look | After typing a sentence, about 60 tokens instead of about 900 |
 | **Act-and-report**: every action waits for the UI to settle, then says what changed (windows opened or closed, focus, changed region) | A separate "did it work?" look is usually unnecessary |

@@ -85,8 +85,12 @@ def read(path: str, max_chars: int = 200_000) -> tuple[str, str]:
         data = p.read_bytes()[: max_chars * 4]
         if b"\x00" in data[:8192]:
             raise DocError(
-                f"{path} is a binary file this reader doesn't know ({ext or 'no extension'}): "
-                "use run('file …') to see what it is"
+                f"{path} is a binary file this reader doesn't know ({ext or 'no extension'})"
+                + (
+                    ": for its length, size and streams: run('ffprobe …') (minion-install ffmpeg)"
+                    if ext in (".mp4", ".mkv", ".webm", ".mov", ".avi", ".mp3", ".wav", ".ogg", ".m4a", ".flac")
+                    else ": run('od -c FILE | head') or install `file` (minion-install file) to see what it is"
+                )
             )
         kind, text = "text", data.decode("utf-8", errors="replace")
     if kind != "text":  # (text files come back exactly as they are)
@@ -123,14 +127,42 @@ def _rels(z: zipfile.ZipFile, name: str) -> dict[str, str]:
 # Word ------------------------------------------------------------------------------------
 def _docx(p: Path) -> str:
     with zipfile.ZipFile(p) as z:
-        body = _xml(z, "word/document.xml").find(f"{W}body")
+        doc = _xml(z, "word/document.xml")
+        body = doc.find(f"{W}body")
         lines: list[str] = []
-        for block in list(body if body is not None else []):
-            if block.tag == f"{W}p":
-                lines.append(_docx_paragraph(block))
-            elif block.tag == f"{W}tbl":
-                lines.extend(_docx_table(block))
-                lines.append("")
+
+        def blocks(parent) -> None:
+            for block in list(parent if parent is not None else []):
+                if block.tag == f"{W}p":
+                    lines.append(_docx_paragraph(block))
+                elif block.tag == f"{W}tbl":
+                    lines.extend(_docx_table(block))
+                    lines.append("")
+                elif block.tag == f"{W}sdt":  # a content control: a table of contents, a cover page
+                    blocks(block.find(f"{W}sdtContent"))
+
+        blocks(body)
+        # What the text alone doesn't show, but a task may be about: tracked changes, comments, the page.
+        notes = []
+        ins, dels = len(list(doc.iter(f"{W}ins"))), len(list(doc.iter(f"{W}del")))
+        if ins or dels:
+            notes.append(f"Tracked changes not yet accepted: {ins} insertions, {dels} deletions")
+        if "word/comments.xml" in z.namelist():
+            for c in _xml(z, "word/comments.xml").iter(f"{W}comment"):
+                text = " ".join(_docx_paragraph(par) for par in c.iter(f"{W}p")).strip()
+                notes.append(f"Comment by {c.get(f'{W}author', '?')}: {text}")
+        sect = body.find(f"{W}sectPr") if body is not None else None
+        if sect is not None:
+            size, margins = sect.find(f"{W}pgSz"), sect.find(f"{W}pgMar")
+            if size is not None:
+                w, h = int(size.get(f"{W}w", 0) or 0), int(size.get(f"{W}h", 0) or 0)
+                page = f"Page: {w / 567:.1f} x {h / 567:.1f} cm" + (" (landscape)" if w > h else " (portrait)")
+                if margins is not None:
+                    m = [int(margins.get(f"{W}{k}", 0) or 0) / 567 for k in ("top", "right", "bottom", "left")]
+                    page += ", margins " + " / ".join(f"{v:.2f}" for v in m) + " cm (top/right/bottom/left)"
+                notes.append(page)
+        if notes:
+            lines += ["", "---", *notes]
         return "\n".join(lines)
 
 
@@ -143,6 +175,8 @@ def _docx_paragraph(par: ET.Element) -> str:
             parts.append("\t")
         elif node.tag in (f"{W}br", f"{W}cr"):
             parts.append("\n")
+        elif node.tag == f"{W}drawing" or node.tag.endswith("}pict"):
+            parts.append("[image]")
     text = "".join(parts)
     style = par.find(f"{W}pPr/{W}pStyle")
     level = re.match(r"(?i)heading\s*(\d)", style.get(f"{W}val", "")) if style is not None else None
@@ -178,18 +212,82 @@ def _xlsx(p: Path) -> str:
             for si in _xml(z, "xl/sharedStrings.xml").iter(f"{S}si"):
                 shared.append("".join(t.text or "" for t in si.iter(f"{S}t")))
         rels = _rels(z, "xl/workbook.xml")
+        bold, fills = _xlsx_styles(z) if "xl/styles.xml" in names else (set(), [])
         out, budget = [], MAX_CELLS
         for sheet in _xml(z, "xl/workbook.xml").iter(f"{S}sheet"):
             target = rels.get(sheet.get(f"{R}id", ""), "")
             if target not in names:
                 continue
-            text, used = _xlsx_sheet(_xml(z, target), shared, budget)
+            root = _xml(z, target)
+            text, used = _xlsx_sheet(root, shared, budget)
             budget -= used
-            out.append(f"## Sheet: {sheet.get('name', '?')}\n{text}")
+            notes = _xlsx_notes(z, target, root, bold, fills)
+            out.append(f"## Sheet: {sheet.get('name', '?')}\n{text}" + ("\n" + "\n".join(notes) if notes else ""))
             if budget <= 0:
                 out.append("… [more cells not shown]")
                 break
         return "\n\n".join(out)
+
+
+def _xlsx_styles(z: zipfile.ZipFile) -> tuple[set, list]:
+    """(the cell styles that are bold, the fill colour of each conditional format style)."""
+    st = _xml(z, "xl/styles.xml")
+    fonts = []
+    for f in st.iter(f"{S}font"):
+        b = f.find(f"{S}b")
+        fonts.append(b is not None and b.get("val", "1") not in ("0", "false"))
+    xfs = st.find(f"{S}cellXfs")
+    bold = {
+        i
+        for i, xf in enumerate(list(xfs) if xfs is not None else [])
+        if int(xf.get("fontId", 0) or 0) < len(fonts) and fonts[int(xf.get("fontId", 0) or 0)]
+    }
+    fills = []
+    dxfs = st.find(f"{S}dxfs")
+    for dxf in list(dxfs) if dxfs is not None else []:
+        color = dxf.find(f".//{S}fill//{S}bgColor")
+        if color is None:  # (an element without children is falsy: no `or` here)
+            color = dxf.find(f".//{S}fill//{S}fgColor")
+        font = dxf.find(f".//{S}font/{S}color")
+        parts = []
+        if color is not None and color.get("rgb"):
+            parts.append("fill #" + color.get("rgb")[-6:])
+        if font is not None and font.get("rgb"):
+            parts.append("text #" + font.get("rgb")[-6:])
+        fills.append(", ".join(parts))
+    return bold, fills
+
+
+def _xlsx_notes(z: zipfile.ZipFile, target: str, root: ET.Element, bold: set, fills: list) -> list[str]:
+    """What a sheet's values don't show: bold cells, frozen panes, conditional formats, charts."""
+    notes = []
+    bolds = [c.get("r", "") for c in root.iter(f"{S}c") if c.get("s", "").isdigit() and int(c.get("s")) in bold]
+    if bolds:
+        notes.append("Bold: " + ", ".join(bolds[:30]) + (f" … ({len(bolds)} cells)" if len(bolds) > 30 else ""))
+    pane = root.find(f".//{S}sheetView/{S}pane")
+    if pane is not None and pane.get("state") in ("frozen", "frozenSplit"):
+        notes.append(f"Frozen panes: rows and columns before {pane.get('topLeftCell', '?')} stay in view")
+    for cf in root.iter(f"{S}conditionalFormatting"):
+        for rule in cf.iter(f"{S}cfRule"):
+            what = rule.get("operator") or rule.get("type", "")
+            formula = "; ".join(f.text or "" for f in rule.iter(f"{S}formula"))
+            dxf = int(rule.get("dxfId", -1) or -1)
+            style = fills[dxf] if 0 <= dxf < len(fills) and fills[dxf] else "no format"
+            notes.append(f"Conditional format: {cf.get('sqref', '?')} {what} {formula} → {style}")
+    folder, name = target.rsplit("/", 1)
+    rels = _rels(z, target) if f"{folder}/_rels/{name}.rels" in z.namelist() else {}
+    for drawing in (t for t in rels.values() if "drawings/" in t and t in z.namelist()):
+        for chart in _rels(z, drawing).values():
+            if chart in z.namelist() and "charts/" in chart:
+                plot = _xml(z, chart).find(".//{http://schemas.openxmlformats.org/drawingml/2006/chart}plotArea")
+                kinds = [
+                    el.tag.split("}")[1] for el in list(plot if plot is not None else []) if el.tag.endswith("Chart")
+                ]
+                refs = [
+                    f.text for f in _xml(z, chart).iter("{http://schemas.openxmlformats.org/drawingml/2006/chart}f")
+                ][:3]
+                notes.append(f"Chart: {', '.join(kinds) or 'chart'}" + (f" of {', '.join(refs)}" if refs else ""))
+    return notes
 
 
 def _xlsx_sheet(root: ET.Element, shared: list[str], budget: int) -> tuple[str, int]:
@@ -211,6 +309,8 @@ def _xlsx_sheet(root: ET.Element, shared: list[str], budget: int) -> tuple[str, 
             f = c.find(f"{S}f")
             if f is not None and f.text:
                 formulas.append(f"{ref} ={f.text}")
+                if v is None:  # written by a library: no result stored until a spreadsheet app recalculates it
+                    value = "(not calculated yet)"
             if value != "":
                 cells.append(f"{ref}: {value}")
                 used += 1
@@ -464,7 +564,11 @@ def _ocr(p: Path) -> str:
         raise DocError("OCR needs tesseract: run('minion-install tesseract-ocr')")
     with Image.open(p) as img:
         img.load()
-        return ocr.page_text(img, ocr.ensure(ocr.langs_for(p.stem))[0])[0]
+        text = ocr.page_text(img, ocr.ensure(ocr.langs_for(p.stem))[0])[0]
+        about = f"[{img.format or p.suffix.lstrip('.').upper()} image, {img.width}x{img.height}"
+    if sum(ch.isalnum() for ch in text) < 4:  # a photo or a drawing: say what it is, not a stray "y"
+        return about + ": no text in it that OCR could read. To see it, open it and take a screenshot]"
+    return text
 
 
 def office_profile() -> str:
@@ -483,12 +587,18 @@ def _soffice() -> str:
     return tool
 
 
+WEB_EXT = {".html", ".htm", ".xhtml"}
+SHEET_OUT = {"xlsx", "xls", "ods", "csv"}
+
+
 def _office_convert(src: Path, fmt: str, outdir: Path, timeout: float = 180) -> Path:
     tool = _soffice()
     outdir.mkdir(parents=True, exist_ok=True)
     cmd = [tool, f"-env:UserInstallation={office_profile()}", "--headless", "--norestore", "--convert-to", fmt]
-    res = subprocess.run([*cmd, "--outdir", str(outdir), str(src)], capture_output=True, timeout=timeout)
     ext = fmt.split(":", 1)[0]
+    if src.suffix.lower() in WEB_EXT:  # a web page opens in Writer/Web, which can't save docx/odt: import it
+        cmd.append("--infilter=" + ("HTML (StarCalc)" if ext in SHEET_OUT else "HTML (StarWriter)"))
+    res = subprocess.run([*cmd, "--outdir", str(outdir), str(src)], capture_output=True, timeout=timeout)
     out = outdir / f"{src.stem}.{ext}"
     if not out.exists():
         detail = (res.stderr or res.stdout).decode("utf-8", "replace").strip()
@@ -513,16 +623,28 @@ IMAGE_FORMATS = {"png", "jpg", "webp", "bmp", "gif", "tiff"}
 
 def convert(path: str, to: str, outdir: str | None = None) -> str:
     """Convert a document or image to another format; returns the new file's path. `to` is an extension
-    ("pdf", "docx", "xlsx", "csv", "png", "md", ...). The output goes next to the input unless `outdir` is given."""
+    ("pdf", "docx", "xlsx", "csv", "png", "md", ...), or the new file's name or path ("sales_sorted.xlsx",
+    "~/out/report.pdf"). The output goes next to the input unless `outdir` is given."""
     src = Path(os.path.expanduser(path))
     if not src.is_file():
         raise DocError(f"no such file: {path}")
+    if "/" in to or ("." in to.strip(".") and not to.startswith(".")):  # a file name or path, not a format
+        dest = Path(os.path.expanduser(to))
+        if not dest.is_absolute():
+            dest = (Path(os.path.expanduser(outdir)) if outdir else src.parent) / dest
+        if not dest.suffix:
+            raise DocError(f"{to}: give the new file an extension (.pdf, .xlsx, ...), or just a format")
+        with tempfile.TemporaryDirectory() as tmp:
+            made = Path(convert(path, dest.suffix.lstrip("."), tmp).split(" (and ")[0])
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            shutil.move(str(made), dest)
+        return str(dest)
     fmt = ALIASES.get(to.lower().lstrip("."), to.lower().lstrip("."))
     dest_dir = Path(os.path.expanduser(outdir)) if outdir else src.parent
     dest_dir.mkdir(parents=True, exist_ok=True)
     ext = src.suffix.lower().lstrip(".")
-    if fmt == ext:
-        raise DocError(f"{src.name} is already .{fmt}")
+    if fmt == ext and dest_dir.resolve() == src.parent.resolve():
+        raise DocError(f"{src.name} is already .{fmt} (give a new file name to save a recalculated copy)")
     if ext in IMAGE_FORMATS | {"jpeg", "tif"} and fmt in IMAGE_FORMATS | {"pdf"}:
         from PIL import Image
 

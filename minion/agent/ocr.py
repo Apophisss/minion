@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -303,7 +304,7 @@ def parse_tsv(tsv: str, scale: float = 1.0, offset: tuple[int, int] = (0, 0), mi
         cols = row.split("\t")
         if len(cols) < 12 or cols[0] != "5":
             continue
-        text = cols[11].translate(_BIDI_MARKS).strip()
+        text = _digits(cols[11].translate(_BIDI_MARKS).strip())
         if not text:
             continue
         try:
@@ -347,6 +348,19 @@ def parse_tsv(tsv: str, scale: float = 1.0, offset: tuple[int, int] = (0, 0), mi
     lines.conf = sum(confs) / len(confs) if confs else 0.0
     lines.words = len(confs)
     return lines
+
+
+_LOOKALIKE = str.maketrans({"i": "1", "I": "1", "l": "1", "|": "1", "o": "0", "O": "0"})
+_NUMBERISH = re.compile(r"^[(\[$€£₪]?[\d.,:/-]*[iIl|oO][\diIl|oO.,:/-]*[)\]%]?$")
+
+
+def _digits(text: str) -> str:
+    """A number OCR misread with a lookalike letter ("7i" for 71, "2O26" for 2026): mostly digits, and its only
+    letters are ones that look like digits."""
+    digits = sum(ch.isdigit() for ch in text)
+    if digits and _NUMBERISH.match(text) and digits * 2 >= sum(ch.isalnum() for ch in text):
+        return text.translate(_LOOKALIKE)
+    return text
 
 
 def _is_rtl(text: str) -> bool:
@@ -429,7 +443,7 @@ def _has_colour(img: Image.Image) -> bool:
     """Enough clear colour for light text on it to be worth its own pass: a good share of the picture, or a few
     boxes' worth of it in a big picture (a coloured slide inside a white web page)."""
     share = _colourful(img)
-    return share >= COLOURFUL or share * img.width * img.height >= 15_000
+    return share >= COLOURFUL or share * img.width * img.height >= 4_000  # (a selected row in a list: ~4,000 px)
 
 
 def _overlaps(a, b) -> bool:
@@ -474,12 +488,13 @@ COLOURFUL = 0.08  # the share of strong colour above which light text on colour 
 _cache: OrderedDict[tuple, Lines] = OrderedDict()
 
 
-def _merge(lines: Lines, more: list[Line], better: bool = False) -> Lines:
+def _merge(lines: Lines, more: list[Line], better: bool = False, short_ok: bool = False) -> Lines:
     """`lines` and the lines of another pass: those where nothing was read yet, and with better=True those that
-    read the same place with clearly more confidence."""
+    read the same place with clearly more confidence. short_ok lets in sure two-letter words ("OK")."""
     out = list(lines)
     for ln in more:
-        if sum(ch.isalnum() for ch in ln.text) < 3:
+        alnum = sum(ch.isalnum() for ch in ln.text)
+        if alnum < 2 or (alnum == 2 and not (short_ok and ln.conf >= 85)):
             continue
         clash = [o for o in out if any(_overlaps(w, v) for w in ln.words for v in o.words)]
         if not clash:
@@ -493,11 +508,13 @@ def _merge(lines: Lines, more: list[Line], better: bool = False) -> Lines:
     return merged
 
 
-def _read_lines(img: Image.Image, langs: list[str], timeout: float) -> Lines:
+def _read_lines(img: Image.Image, langs: list[str], timeout: float, ui: bool = False) -> Lines:
     """All the passes that read a picture well (measured on 24 photographed slides: word recall 0.94):
     - 2x, for normal and small text; if English reads poorly, the script is detected and read again;
     - 1x, for large text (titles), which Tesseract misses when it is too big: its lines replace weaker ones;
-    - light text on colour, when there is colour."""
+    - light text on colour, when there is colour (a selected row too);
+    - with ui=True (a whole window without accessibility: a Windows program), a sparse pass that finds lone
+      words a layout pass skips, such as the OK, Cancel and Apply of a dialog."""
     lang = "+".join(langs)
     lines = recognize(img, lang=lang, timeout=timeout)
     if langs == ["eng"] and lines.words >= 5 and lines.conf < DOUBTFUL:  # probably another language
@@ -509,17 +526,21 @@ def _read_lines(img: Image.Image, langs: list[str], timeout: float) -> Lines:
     lines = _merge(lines, recognize(img, lang=lang, upscale=1.0, timeout=timeout, min_conf=60), better=True)
     if _has_colour(img):
         lines = _merge(lines, _light_text(img, lang, 2.0, lines, timeout), better=True)
+    if ui:
+        lines = _merge(lines, list(recognize(img, lang=lang, timeout=timeout, psm=11, min_conf=60)), short_ok=True)
     return lines
 
 
-def read(img: Image.Image, langs: list[str], offset: tuple[int, int] = (0, 0), timeout: float = 45.0) -> Lines:
+def read(
+    img: Image.Image, langs: list[str], offset: tuple[int, int] = (0, 0), timeout: float = 45.0, ui: bool = False
+) -> Lines:
     """The text of a part of the screen that shows a page, a slide or a picture, line by line in reading order
     (see _read_lines). The same picture always gives the same answer, from a cache, so looking again costs
     nothing."""
-    key = (hashlib.blake2b(img.tobytes(), digest_size=16).hexdigest(), img.size, "+".join(langs))
+    key = (hashlib.blake2b(img.tobytes(), digest_size=16).hexdigest(), img.size, "+".join(langs), ui)
     lines = _cache.get(key)
     if lines is None:
-        lines = _read_lines(img, langs, timeout)
+        lines = _read_lines(img, langs, timeout, ui)
         _cache[key] = lines
         while len(_cache) > 64:
             _cache.popitem(last=False)

@@ -95,8 +95,9 @@ it prints comes back. If it fails, the error names the line of your script that 
 | `write(text)` · `paste(text)` · `key(keys, repeat=1)` · `hold_key(keys, seconds)` | `write("a\tb\n")`: Tab and Return are key presses |
 | `fill(target, text)` · `select(target, option)` · `scroll(direction, amount, target)` | |
 | `menu(item)` · `menus() -> list[str]` · `path(file, overwrite=False)` | Menu commands by path (`"File > Save As"`), the app's menus with shortcuts, and the open file dialog |
-| `read(file) -> str` · `convert(file, to, outdir=None) -> str` | Any document as text, and format conversion (`"pdf"`, `"docx"`, `"xlsx"`, `"csv"`, `"png"`…) |
+| `read(file) -> str` · `convert(file, to, outdir=None) -> str` | Any document as text, and format conversion (`"pdf"`, `"docx"`, `"xlsx"`, `"csv"`, `"png"`…, or a file name such as `"~/out/sales.xlsx"`) |
 | `wait(seconds)` · `wait_for(text, timeout=10, gone=False) -> bool` | |
+| `scroll_to(text, timeout=20) -> str` · `close(window=None)` · `copy(target)` | Bring text into view anywhere on a long page (loading more of a feed); close a window like its X button; put an element's whole text on the clipboard |
 | `launch(target, wait=12, install=True) -> dict` | An app (installed the first time), URL or file; waits for its window (and for a web page to load) |
 | `run(command, timeout=60, input=None) -> dict` | A shell command (with optional stdin text): `code`, `stdout`, `stderr` |
 | `screenshot(path="/tmp/screenshot.png", region=None, marks=False) -> str` | Saved inside the desktop |

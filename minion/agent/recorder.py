@@ -97,6 +97,14 @@ class Recorder:
                 lines.append(f"wait_for({r(p.get('text'))}, timeout={float(p.get('timeout') or 10)})")
             elif action == "focus":
                 lines.append(f"focus({r(p.get('window'))})")
+            elif action == "scroll_to":
+                lines.append(f"scroll_to({r(p.get('text'))})")
+            elif action == "close":
+                lines.append(f"close({r(p.get('window'))})" if p.get("window") else "close()")
+            elif action == "copy":
+                lines.append(f"copy({r(t)})")
+            elif action == "goto":
+                lines.append(f'act({{"action": "goto", "target": {r(t)}}})')
             elif action == "open":
                 lines.append(f"launch({r(p.get('target'))})")
             elif action == "run":

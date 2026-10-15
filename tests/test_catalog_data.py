@@ -9,7 +9,7 @@ from minion.agent.catalog_data import APPS
 METHODS = ("apt", "deb", "github", "url", "unavailable")
 INSTALL_METHODS = ("apt", "deb", "github")
 ARCHES = {"amd64", "arm64"}
-KEYS = {"id", "name", "aliases", "command", "tips", "size_mb", "alternatives", *METHODS}
+KEYS = {"id", "name", "aliases", "command", "tips", "size_mb", "alternatives", "files", *METHODS}
 ID_RE = re.compile(r"^[a-z0-9-]+$")
 DEBIAN_PACKAGE_RE = re.compile(r"^[a-z0-9][a-z0-9+.-]+$")
 GITHUB_REPO_RE = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")

@@ -15,7 +15,9 @@ packages = [
   "mousepad",
   "pcmanfm",
   "poppler-utils",
-  "unzip",
+  # Python can write documents directly too (a script is often the fastest way to a spreadsheet or a report).
+  "python3-openpyxl",
+  "python3-docx",
 ]
 env = { SAL_USE_VCLPLUGIN = "gtk3" }
 apps = [
@@ -32,11 +34,17 @@ Menus: `menu File > Export As > Export as PDF...` (see --menus lists every comma
 dialog, `path ~/Documents/report.docx` types the full path. Read any document as text with `files read` (xlsx gives
 values and formulas) and convert with `files convert` (e.g. docx to pdf, xlsx to csv), even while LibreOffice is open.
 Keys: ctrl+s save, ctrl+shift+s save as, ctrl+1/2/3 heading styles, ctrl+b/i/u. In Calc, act "type value\\tvalue\\n" fills a row
-(Tab moves right, Return goes to the next row); `see` lists visible cells as A1: value; use `script` for many rows.
+(Tab moves right, Return goes to the next row); `see` lists visible cells row by row (row 2: @14 A2 North · @15 B2 120); use `script` for many rows.
 Typing is exact: AutoCorrect, smart quotes and AutoInput are off.
 """
 
 [files]
+# The file manager lists files as a table, which accessibility reads exactly (its icon view exposes no names).
+"/etc/xdg/pcmanfm/default/pcmanfm.conf" = '''
+[ui]
+view_mode=list
+show_hidden=0
+'''
 "/usr/lib/libreoffice/share/registry/minion.xcd" = '''<?xml version="1.0" encoding="UTF-8"?>
 <oor:data xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:oor="http://openoffice.org/2001/registry">
   <dependency file="main"/>

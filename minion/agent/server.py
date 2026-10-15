@@ -10,6 +10,7 @@ import base64
 import json
 import os
 import re
+import selectors
 import shlex
 import shutil
 import signal
@@ -31,6 +32,29 @@ from .windows import WindowError, Windows
 from .xinput import InputError, XInput, normalize_modifiers
 
 PASSIVE = {"hello", "status", "frame", "record", "cursor"}
+# What apps show while they work: "Loading…", "Generating report...", "Please wait", a progress bar.
+BUSY_WORDS = re.compile(
+    r"\b(loading|generating|processing|please wait|saving|uploading|downloading|searching|calculating|preparing|"
+    r"connecting|signing in|logging in|exporting|importing|converting|rendering|working on it|in progress)\b",
+    re.I,
+)
+
+
+BUSY_ROLES = {"status", "alert", "notification", "info bar", "static", "label", "paragraph", "section", "text", "panel"}
+
+
+def busy_text(role: str, text: str) -> str | None:
+    """The text, if it says the app is busy: short, a busy word, and an ellipsis ("Loading…") or a status role.
+    Headings, links and buttons ("Uploading files" as a title) never count, nor a plain "Processing" or
+    "In progress" (an order's status, a task list): those can stay for good."""
+    t = " ".join((text or "").split())
+    if role not in BUSY_ROLES or not t or len(t) > 80 or not BUSY_WORDS.search(t):
+        return None
+    if "..." in t or "…" in t or role in ("status", "alert", "notification"):
+        return t
+    return None
+
+
 MAX_OUTPUT = 64 * 1024
 URL_RE = re.compile(r"^[a-zA-Z][a-zA-Z0-9+.-]*://\S+$")
 DOMAIN_RE = re.compile(r"^(www\.)?[\w-]+(\.[\w-]+)*\.[a-zA-Z]{2,}(:\d+)?(/\S*)?$")
@@ -45,7 +69,9 @@ def run_captured(
     err_limit: int = MAX_OUTPUT,
 ) -> dict:
     """Run a process and capture its output without being held hostage by children that keep
-    stdout open (daemons, `xclip`): we wait for the process itself, then drain briefly."""
+    stdout open (daemons, `xclip`, `(cd app && server &)`): we wait for the process itself, read
+    what is already in the pipes for a moment, and stop. One thread, non-blocking pipes: nothing
+    is left blocked on a pipe a background child still holds."""
     t0 = time.monotonic()
     proc = subprocess.Popen(
         argv,
@@ -55,32 +81,29 @@ def run_captured(
         stderr=subprocess.PIPE,
         start_new_session=True,
     )
-    chunks: dict[str, list[bytes]] = {"out": [], "err": []}
-
-    def drain(stream, key: str) -> None:
-        try:
-            for chunk in iter(lambda: stream.read1(65536), b""):
-                chunks[key].append(chunk)
-        except (OSError, ValueError):
-            pass
-
-    readers = [
-        threading.Thread(target=drain, args=(proc.stdout, "out"), daemon=True),
-        threading.Thread(target=drain, args=(proc.stderr, "err"), daemon=True),
-    ]
-    for r in readers:
-        r.start()
+    out_fd, err_fd = proc.stdout.fileno(), proc.stderr.fileno()
+    # Only the start and the end of each stream are kept: a command that prints gigabytes (`find -L` in a
+    # symlink loop, `yes`) must not take the desktop's memory with it.
+    keep = {out_fd: out_limit // 2, err_fd: err_limit // 2}
+    heads: dict[int, bytearray] = {out_fd: bytearray(), err_fd: bytearray()}
+    tails: dict[int, bytearray] = {out_fd: bytearray(), err_fd: bytearray()}
+    dropped: dict[int, int] = {out_fd: 0, err_fd: 0}
+    sel = selectors.DefaultSelector()
+    for fd in (out_fd, err_fd):
+        os.set_blocking(fd, False)
+        sel.register(fd, selectors.EVENT_READ)
+    pending = memoryview(stdin or b"")
     if stdin is not None:
-        try:
-            proc.stdin.write(stdin)
+        if pending:
+            os.set_blocking(proc.stdin.fileno(), False)
+            sel.register(proc.stdin.fileno(), selectors.EVENT_WRITE)
+        else:
             proc.stdin.close()
-        except OSError:
-            pass
+    deadline = t0 + timeout
     timed_out = False
-    try:
-        proc.wait(timeout=timeout)
-    except subprocess.TimeoutExpired:
-        timed_out = True
+    stop_at = None  # set once the process has ended: then only what is already in the pipes is read
+
+    def kill() -> None:
         try:
             os.killpg(proc.pid, signal.SIGKILL)
         except OSError:
@@ -89,18 +112,72 @@ def run_captured(
             proc.wait(timeout=5)
         except subprocess.TimeoutExpired:
             pass
-    for r in readers:
-        r.join(0.5)  # output still held by a background child is not waited for
-    for f in (proc.stdout, proc.stderr):
+
+    while sel.get_map():
+        now = time.monotonic()
+        if stop_at is None:
+            if proc.poll() is not None:
+                stop_at = now + 0.3
+            elif now >= deadline:
+                timed_out = True
+                kill()
+                stop_at = time.monotonic() + 0.3
+        if stop_at is not None and now >= stop_at:
+            break
+        for key, events in sel.select(timeout=0.05):
+            fd = key.fd
+            if events & selectors.EVENT_WRITE:
+                try:
+                    pending = pending[os.write(fd, pending[:65536]) :]
+                except BlockingIOError:
+                    continue
+                except OSError:  # the process doesn't read its input (or has ended)
+                    pending = pending[:0]
+                if not pending:
+                    sel.unregister(fd)
+                    proc.stdin.close()
+                continue
+            try:
+                data = os.read(fd, 65536)
+            except BlockingIOError:
+                continue
+            except OSError:
+                data = b""
+            if data:
+                head, tail = heads[fd], tails[fd]
+                room = keep[fd] - len(head)
+                if room > 0:
+                    head += data[:room]
+                    data = data[room:]
+                tail += data
+                if len(tail) > keep[fd]:
+                    dropped[fd] += len(tail) - keep[fd]
+                    del tail[: len(tail) - keep[fd]]
+            else:
+                sel.unregister(fd)
+    sel.close()
+    if proc.poll() is None and not timed_out:  # it closed its output but is still running
         try:
-            f.close()
-        except OSError:
-            pass
+            proc.wait(timeout=max(0.0, deadline - time.monotonic()))
+        except subprocess.TimeoutExpired:
+            timed_out = True
+            kill()
+    for f in (proc.stdin, proc.stdout, proc.stderr):
+        if f is not None:
+            try:
+                f.close()
+            except OSError:
+                pass
+
+    def text(fd: int) -> str:
+        middle = f"\n… [{dropped[fd]} bytes omitted] …\n".encode() if dropped[fd] else b""
+        return (bytes(heads[fd]) + middle + bytes(tails[fd])).decode("utf-8", "replace")
+
     return {
         "code": proc.returncode,
         "timed_out": timed_out,
-        "stdout": _trim(b"".join(chunks["out"]).decode("utf-8", "replace"), out_limit),
-        "stderr": _trim(b"".join(chunks["err"]).decode("utf-8", "replace"), err_limit),
+        "stdout": text(out_fd),
+        "stderr": text(err_fd),
         "elapsed": round(time.monotonic() - t0, 3),
     }
 
@@ -140,6 +217,9 @@ ACTIONS = {
     "middle_click": ("click", {"button": "middle"}),
     "double_click": ("click", {"count": 2}),
     "triple_click": ("click", {"count": 3}),
+    "rclick": ("click", {"button": "right"}),
+    "dclick": ("click", {"count": 2}),
+    "tclick": ("click", {"count": 3}),
     "move": ("move", {}),
     "mouse_move": ("move", {}),
     "hover": ("move", {}),
@@ -162,7 +242,14 @@ ACTIONS = {
     "wait": ("wait", {}),
     "sleep": ("wait", {}),
     "wait_for": ("wait_for", {}),
+    "scroll_to": ("scroll_to", {}),
+    "find": ("scroll_to", {}),
     "focus": ("focus", {}),
+    "close": ("close", {}),
+    "close_window": ("close", {}),
+    "goto": ("goto", {}),
+    "navigate": ("goto", {}),
+    "copy": ("copy", {}),
     "open": ("open", {}),
     "menu": ("menu", {}),
     "path": ("path", {}),
@@ -176,6 +263,9 @@ MAIN_PARAM = {
     "middle_click": "target",
     "double_click": "target",
     "triple_click": "target",
+    "rclick": "target",
+    "dclick": "target",
+    "tclick": "target",
     "move": "target",
     "mouse_move": "target",
     "hover": "target",
@@ -188,7 +278,14 @@ MAIN_PARAM = {
     "wait": "seconds",
     "sleep": "seconds",
     "wait_for": "text",
+    "scroll_to": "text",
+    "find": "text",
     "focus": "window",
+    "close": "window",
+    "close_window": "window",
+    "goto": "target",
+    "navigate": "target",
+    "copy": "target",
     "open": "target",
     "hold_key": "keys",
     "menu": "item",
@@ -237,8 +334,16 @@ def _unquote(text: str) -> str:
     return text
 
 
+# A Windows path, C:\\users\\agent\\note.txt or C:\\temp (no second ":" in it, which a row of
+# "X:\\t5\\tY:\\t7" has): its backslashes are not escapes.
+WINDOWS_PATH = re.compile(r"[A-Za-z]:\\[^:\n\t]*")
+
+
 def _escapes(text: str) -> str:
-    """\\n is Return, \\t is Tab and \\\\ is a backslash, as in write() in scripts."""
+    """\\n is Return, \\t is Tab and \\\\ is a backslash, as in write() in scripts. A Windows path keeps its
+    backslashes (C:\\users\\note.txt has no Return in it), apart from a \\n at its very end."""
+    if WINDOWS_PATH.fullmatch(text) and "\\\\" not in text:  # (C:\\\\temp: the escape convention, as before)
+        return text[:-2] + "\n" if text.endswith("\\n") else text
     return text.replace("\\\\", "\0").replace("\\n", "\n").replace("\\t", "\t").replace("\0", "\\")
 
 
@@ -267,8 +372,16 @@ def parse_step(step) -> tuple[str, dict]:
         canon = ACTIONS[verb][0]
         if canon in ("type", "paste"):  # the rest of the step, verbatim: quotes and spacing are kept
             return canon, {**ACTIONS[verb][1], "text": _escapes(_unquote(rest.strip()))}
-        if canon == "wait_for":
-            return canon, {**ACTIONS[verb][1], "text": _unquote(rest.strip())}
+        if canon == "wait_for":  # wait_for Saved · wait_for "Report ready" 60 · wait_for Loading --gone
+            text, extra = rest.strip(), {}
+            if text.endswith(" --gone"):
+                text, extra["gone"] = text[: -len(" --gone")].rstrip(), True
+            m = re.match(r"""^(["'])(.*)\1\s+(\d+(?:\.\d+)?)$""", text, re.S)
+            if m:  # a timeout after a quoted text
+                text, extra["timeout"] = m.group(1) + m.group(2) + m.group(1), float(m.group(3))
+            return canon, {**ACTIONS[verb][1], "text": _unquote(text), **extra}
+        if canon == "scroll_to":
+            return canon, {"text": _unquote(rest.strip())}
         if canon == "fill":
             target, text = _first_word(rest)
             if not target:
@@ -288,7 +401,7 @@ def parse_step(step) -> tuple[str, dict]:
             return canon, {"path": _unquote(text), **({"overwrite": True} if overwrite else {})}
         args = split_words(rest)
         params: dict = {}
-        if canon in ("click", "move"):
+        if canon in ("click", "move", "copy"):
             if args:
                 params["target"] = " ".join(args)
         elif canon in ("key", "hold_key"):
@@ -313,6 +426,10 @@ def parse_step(step) -> tuple[str, dict]:
             params["from"], params["to"] = args
         elif canon in ("focus", "open"):
             params["window" if canon == "focus" else "target"] = " ".join(args)
+        elif canon == "close" and args:
+            params["window"] = " ".join(args)
+        elif canon == "goto" and args:
+            params["target"] = args[0]
         verb_defaults = ACTIONS[verb][1]
         return canon, {**verb_defaults, **params}
     if not isinstance(step, dict):
@@ -377,6 +494,8 @@ class Agent:
         self.perception.xi = self.xi  # for the LibreOffice coordinate nudge
         self.recorder = Recorder(enabled=os.environ.get("MINION_RECORD", "1") != "0")
         self.input_lock = threading.RLock()
+        self._stuck_busy: dict = {}  # window id -> busy texts that stayed past the wait (not real work)
+        self._covered = False  # the last act's click landed on a pop-up
         self.started = time.time()
         self.last_activity = time.time()
         self.last_view = 0.0
@@ -613,7 +732,9 @@ class Agent:
                 if action in ("focus", "activate", "raise"):
                     self.windows.activate(win.id)
                 elif action == "close":
-                    self.windows.close(win.id)
+                    said = self._close(win=win)
+                    if said.startswith("asked"):
+                        return {"ok": True, "window": win.to_dict(), "note": said}
                 elif action == "maximize":
                     self.windows.maximize(win.id, True)
                 elif action in ("restore", "unmaximize"):
@@ -657,6 +778,13 @@ class Agent:
                 where = f"({x},{y})"
             else:
                 t = r(p["target"])
+                covered = a11y.cover(t.element, t.x, t.y) if isinstance(t.element, a11y.Element) else ""
+                if covered:  # a pop-up or a banner is on top: the click would go to it (an ad, "Subscribe")
+                    self._covered = True
+                    raise RpcError(
+                        f"{t.desc} is covered by {covered}: close that first (to click there anyway, give the "
+                        f"point: {t.x},{t.y})"
+                    )
                 self.xi.click(t.x, t.y, button, count, mods)
                 where = t.desc
             kind = {1: "click", 2: "double-click", 3: "triple-click"}[count]
@@ -669,8 +797,22 @@ class Agent:
             return f"moved to {t.desc}"
         if action == "drag":
             a, b = r(p.get("from")), r(p.get("to"))
+            source = (
+                a.element
+                if isinstance(a.element, a11y.Element)
+                and a.element.node is not None
+                and a.element.in_doc
+                and a.element.role not in ("slider", "scroll bar", "spin button", "canvas", "image")
+                else None
+            )
+            box = a11y.refresh(source) if source is not None else None
             self.xi.drag(a.x, a.y, b.x, b.y, self._mods(p), button=(p.get("button") or "left"))
-            return f"dragged {a.desc} → {b.desc}"
+            done = f"dragged {a.desc} → {b.desc}"
+            if box is not None:
+                time.sleep(0.3)
+                if a11y.refresh(source) == box:  # (a moved card, a slider's knob: their box changes)
+                    done += " (but it is still where it was: the drop may not have taken; look, then try again)"
+            return done
         if action in ("mouse_down", "mouse_up"):
             if p.get("target") is not None:
                 t = r(p["target"])
@@ -694,28 +836,36 @@ class Agent:
             text = str(text)
             if len(text) > 20000:
                 raise RpcError("text is too long to type (max 20000 characters); use paste or a file")
-            focused = self.windows.focused()
-            if not text.isascii() and focused is not None and re.search(r"libreoffice|soffice", focused.app, re.I):
-                self._type_via_clipboard(text)
+            fast = self._in_browser()
+            if not text.isascii() or (not fast and len(text) > 200):
+                # Characters outside ASCII (é, ש, 東, emoji) are typed through a remapped spare key, and many
+                # apps (Firefox, LibreOffice) drop some of them: paste those lines instead, which is exact. Long
+                # text in an app is pasted too (minutes of typing at a person's pace; an editor's auto-indent).
+                self._type_via_clipboard(text, paste_all=not fast)
             else:
-                self.xi.type(text, int(p.get("delay_ms") or 8))
+                # Only web pages take typing at full speed. Apps lose keys typed faster than a person: LibreOffice
+                # reorders them while it switches modes ("Nmbusi"), and a calculator drops a key that follows an
+                # operator or repeats the last one ("7006652" became 70652). A steadier hand costs a little time.
+                self.xi.type(
+                    text,
+                    int(p.get("delay_ms") or (8 if fast else 30)),
+                    key_pause=0.0 if fast else 0.08,
+                    repeat_pause=0.0 if fast else 0.12,
+                )
             return f"typed {len(text)} chars"
         if action == "paste":
             text = str(p.get("text") or "")
             focused = self.windows.focused()
-            app = focused.app if focused is not None else ""
-            if re.fullmatch(r"(u?xterm|u?rxvt.*)", app, re.I):  # xterm has no paste shortcut for CLIPBOARD
-                self._clip_set(text, primary=True)
-                self.xi.key("shift+Insert")
-            else:
-                self._clip_set(text)
-                term = re.search(r"term|konsole|kitty|alacritty|tilix|terminator", app, re.I)
-                self.xi.key("ctrl+shift+v" if term else "ctrl+v")
+            self._paste_keys(text, focused.app if focused is not None else "")
             return f"pasted {len(text)} chars"
         if action == "fill":
             text = str(p.get("text") if p.get("text") is not None else "")
             t = r(p.get("target"), prefer_input=True)
             el = t.element
+            if isinstance(el, a11y.Element) and el.role in ("slider", "scroll bar", "level bar") and text.strip():
+                return self._set_value(t, el, text.strip())
+            if isinstance(el, a11y.Element) and el.role == "date editor" and text.strip():
+                return self._fill_date(t, el, text.strip())
             if isinstance(el, a11y.Element) and not a11y.is_editable(el) and el.role != "panel":
                 # (a named panel may hold an editor the app doesn't expose, e.g. LibreOffice's style box:
                 # clicking it focuses that editor)
@@ -735,24 +885,54 @@ class Agent:
             native = isinstance(el, a11y.Element) and not el.in_doc
             if native and len(text) > 40 and a11y.set_text(el, text):
                 return f"filled {t.desc} with {len(text)} chars"
-            self.xi.click(t.x, t.y)
+            x, y = t.x, t.y
+            if isinstance(el, a11y.Element) and el.role == "spin button" and el.w > 2 * el.h:
+                # A spin box's middle is where its text meets its arrows (LibreOffice's margins: the click
+                # missed the text): aim at the text part.
+                box = a11y.refresh(el) or (el.x, el.y, el.w, el.h)
+                if box[0] >= 0 and box[0] + box[2] <= self.size[0]:  # (only when the whole box is on screen)
+                    x = box[0] + min(box[2] // 3, 30)
+            self.xi.click(x, y)
             time.sleep(0.08)
+            if isinstance(el, a11y.Element) and not el.in_doc and a11y.is_focused(el) is False:
+                a11y.grab_focus(el)  # the click didn't give it the focus: typing must not go to the last field
+                time.sleep(0.1)
             self.xi.key("ctrl+a")
-            if text:
+            if text and not text.isascii():
+                self._type_via_clipboard(text)  # (see type: remapped keys lose characters)
+            elif text:
                 self.xi.type(text)
             else:
                 self.xi.key("BackSpace")
             if isinstance(el, a11y.Element) and el.role == "panel":
                 self.xi.key("Return")  # a toolbar box (LibreOffice's style, font, size) applies on Return
                 return f"filled {t.desc} with {len(text)} chars and pressed Return to apply it"
-            return f"filled {t.desc} with {len(text)} chars"
+            done = f"filled {t.desc} with {len(text)} chars"
+            if isinstance(el, a11y.Element) and text and "\n" not in text:
+
+                def plain(v: str) -> str:
+                    return " ".join(v.translate(a11y._INVISIBLE).split())
+
+                now = None
+                for _ in range(6):  # (a page's field reports its new text a moment later)
+                    time.sleep(0.1)
+                    now = a11y.field_text(el)
+                    if now is None or plain(now) == plain(text):
+                        break
+                if now is not None and plain(now) != plain(text):
+                    # The page reformatted it ("4242424242424242" → "4242 4242 4242 4242"), cut it to its
+                    # maximum length, or an autocomplete took over: say what the field really holds.
+                    done += f'; the field now shows "{now[:120]}"'
+            return done
         if action == "select":
             option = str(p.get("option") or p.get("text") or p.get("value") or "")
             if not option:
                 raise RpcError("select needs an option (its visible text)")
             t = r(p.get("target"))
             el = t.element
-            if isinstance(el, a11y.Element):
+            if isinstance(el, a11y.Element) and not el.in_doc:
+                # A native app's dropdown takes the choice through accessibility. A web page's doesn't count:
+                # its value changes, but the page's "change" handlers never run (a shop's sort order stays put).
                 try:
                     chosen = a11y.select_option(el, option)
                 except ValueError as e:
@@ -760,19 +940,50 @@ class Agent:
                 if chosen is not None:
                     time.sleep(0.2)
                     now, _ = a11y.combo_value(el.node)
-                    if not now or now == chosen:
+                    if now == chosen:
                         return f'selected "{chosen}" in {t.desc}'
-            # The keyboard way: open it, type the option's text (type-ahead finds it), confirm.
+                    if not now:  # (the app took the choice but doesn't tell accessibility its value)
+                        return f'selected "{chosen}" in {t.desc}; its value can\'t be read back: look to confirm'
+            if isinstance(el, a11y.Element) and el.in_doc and el.role in ("combo box", "list box"):
+                options = a11y.options(el)  # (all of them: a look shows the first dozen)
+                low = option.casefold().strip()
+                if options and not any(o.casefold() == low or o.casefold().startswith(low) for o in options):
+                    raise RpcError(f'no option "{option}" in {t.desc}; options: {" | ".join(options[:20])}')
+            # The keyboard way: open it, type the option's text (type-ahead finds it), confirm. An autocomplete
+            # field (a JS combo box) shows its suggestions as you type: click the one that matches.
             self.xi.click(t.x, t.y)
             time.sleep(0.3)
+            if isinstance(el, a11y.Element) and a11y.is_editable(el):
+                self.xi.key("ctrl+a")
             self.xi.type(option)
-            time.sleep(0.15)
+            focused = self.windows.focused()
+            aw = a11y.window_for(focused) if focused is not None and a11y.AVAILABLE else None
+            deadline = time.monotonic() + 2.5
+            while aw is not None and time.monotonic() < deadline:
+                time.sleep(0.35)
+                hit = a11y.suggestion(aw, option, near=(t.x, t.y))
+                if hit is not None:
+                    x, y = hit.center
+                    self.xi.click(x, y)
+                    typed_in = isinstance(el, a11y.Element) and a11y.is_editable(el)
+                    return f'selected "{hit.label()}" ' + (
+                        f"from the suggestions of {t.desc}" if typed_in else f"in {t.desc}"
+                    )
             self.xi.key("Return")
-            return f'selected "{option}" in {t.desc} (by typing it)'
+            if isinstance(el, a11y.Element) and el.node is not None and el.role in ("combo box", "list box"):
+                time.sleep(0.2)
+                now, _ = a11y.combo_value(el.node)
+                if now and now.casefold() != option.casefold() and not now.casefold().startswith(option.casefold()):
+                    raise RpcError(f'tried to select "{option}" in {t.desc}, but it shows "{now}"')
+                if not now:  # (some apps' dropdowns don't tell accessibility their value)
+                    return f'typed "{option}" into {t.desc} and pressed Return; its value can\'t be read back: look'
+            return f'selected "{option}" in {t.desc}'
         if action == "key":
             keys = p.get("keys")
             if not keys:
                 raise RpcError('key needs keys, e.g. "ctrl+s" or "Return"')
+            if re.fullmatch(r"\s*alt\+f4\s*", str(keys), re.I):
+                return self._close(None)  # the window manager's close: Windows programs (Wine) ignore a sent Alt+F4
             repeat = max(1, min(int(p.get("repeat") or 1), 100))
             sent = self.xi.key(str(keys), repeat)
             return f"pressed {sent}" + (f" ×{repeat}" if repeat > 1 else "")
@@ -802,12 +1013,54 @@ class Agent:
             if gone:
                 return f'"{text}" is gone (after {elapsed:.1f}s)'
             return f'"{text}" appeared after {elapsed:.1f}s' + (f": {where}" if where else "")
+        if action == "close":
+            return self._close(p.get("window") or p.get("target"))
+        if action == "goto":  # a URL in the browser's current tab (open URL makes a new one)
+            url = str(p.get("target") or p.get("text") or p.get("url") or "").strip()
+            if not url:
+                raise RpcError("goto needs a URL")
+            focused = self.windows.focused()
+            if focused is None or not self.BROWSER_APPS.search(focused.app or ""):
+                raise RpcError("goto works in a browser window: open the URL instead (open example.com)")
+            title = focused.title
+            self.xi.key("ctrl+l")
+            time.sleep(0.15)
+            if url.isascii():
+                self.xi.type(url)
+            else:
+                self._paste_keys(url, focused.app or "")  # (typing drops 東 and 都)
+                time.sleep(0.2)
+            self.xi.key("Return")
+            end = time.monotonic() + 15.0  # the new page's title first, then until it has loaded
+            while time.monotonic() < end:
+                time.sleep(0.25)
+                now = self.windows.focused()
+                if now is not None and now.title != title:
+                    break
+            self._wait_page_loaded(timeout=max(1.0, end - time.monotonic()), grace=0.6)
+            return f"went to {url}"
+        if action == "copy":
+            # An element's whole text onto the clipboard (to paste it elsewhere: it needn't pass through you).
+            t = r(p.get("target"))
+            el = t.element
+            text = a11y.full_text(el) if isinstance(el, a11y.Element) else str(getattr(el, "text", "") or "")
+            if not text.strip():
+                raise RpcError(f"{t.desc} has no text to copy")
+            self._clip_set(text)
+            return f"copied {len(text)} characters of {t.desc} to the clipboard"
+        if action == "scroll_to":
+            text = str(p.get("text") or "").strip()
+            if not text:
+                raise RpcError("scroll_to needs the text to look for")
+            return self._scroll_to(text, max(1.0, min(float(p.get("timeout") or 20.0), 120.0)))
         if action == "focus":
             win = self.windows.find(p.get("window"))
             self.windows.activate(win.id)
             return f'focused "{win.title}"'
         if action == "open":
-            res = self._open(p.get("target"), wait=float(p.get("wait") or 12.0), install=p.get("install", True))
+            res = self._open(  # (no look here: the act's own reply shows what changed)
+                p.get("target"), wait=float(p.get("wait") or 12.0), install=p.get("install", True), look=False
+            )
             if res.get("error"):
                 raise RpcError(res["error"])
             w = res.get("window")
@@ -841,7 +1094,7 @@ class Agent:
         if aw is None:
             raise RpcError(f'"{focused.title}" shows no menus to accessibility: use its keyboard shortcuts or click it')
         try:
-            nodes = a11y.find_menu_path(aw, parts)
+            nodes = a11y.find_menu_path(aw, parts, check_enabled=False)
         except ValueError as e:
             raise RpcError(str(e)) from e
         label = " > ".join(parts)
@@ -850,10 +1103,11 @@ class Agent:
             before = {w.id for w in self.windows.list(with_states=False)} if dialog else set()
         except WindowError:
             dialog = False
-        if a11y.press_menu(nodes):
-            if dialog:
-                self._wait_new_window(before)
-            return f"chose {label}"
+        # Some apps (LibreOffice) update whether a command is available only when its menu opens: a command
+        # that reads as greyed out is checked again with its menus open.
+        stale = not a11y.enabled(nodes[-1])
+        if not stale and a11y.press_menu(nodes):
+            return f"chose {label}" + self._dialog_note(dialog, before)
         # This app needs its menus opened: click through them like a person.
         for node in nodes:
             box = None
@@ -865,12 +1119,20 @@ class Agent:
             if box is None:
                 self.xi.key("Escape")
                 raise RpcError(f"could not open the menus to reach {label}: click them, or use the app's shortcut")
+            if node is nodes[-1] and not a11y.enabled(node):
+                for _ in nodes:
+                    self.xi.key("Escape")
+                raise RpcError(f'"{label}" is greyed out right now (disabled), even with its menu open')
             x, y, w, h = box
             self.xi.click(x + w // 2, y + h // 2)
             time.sleep(0.3)
-        if dialog:
-            self._wait_new_window(before)
-        return f"chose {label} (clicked through the menus)"
+        return f"chose {label} (clicked through the menus)" + self._dialog_note(dialog, before)
+
+    def _dialog_note(self, dialog: bool, before: set) -> str:
+        """A command whose label ends in "…" opens a dialog: wait for it, and say so if it doesn't come."""
+        if not dialog or self._wait_new_window(before, timeout=8.0):
+            return ""
+        return " (its dialog hasn't opened yet: look again in a moment)"
 
     def _wait_new_window(self, before: set, timeout: float = 4.0) -> bool:
         """Wait for a window that wasn't open before (the dialog a "Chart…" command opens takes a moment)."""
@@ -915,7 +1177,10 @@ class Agent:
             if focused is not None:
                 first = first or focused.id
                 aw = a11y.window_for(focused) if a11y.AVAILABLE else None
-                if (aw or {}).get("role") != "frame" or focused.id != first:  # a dialog, or the focus moved on
+                if aw is None:  # (a Windows program: no accessibility to tell a dialog by, but its title says)
+                    if focused.id != first or self.FILE_DIALOG.search(focused.title or ""):
+                        return
+                elif aw.get("role") != "frame" or focused.id != first:  # a dialog, or the focus moved on
                     return
             time.sleep(0.2)
 
@@ -923,11 +1188,20 @@ class Agent:
         """Type a full path into the open file dialog (Open, Save As, Export, Upload, ...) and confirm."""
         if not path.strip():
             raise RpcError("path needs a file path, e.g. path ~/Documents/report.pdf")
-        full = os.path.normpath(os.path.expanduser(path.strip()))
-        if not os.path.isabs(full):
+        windows_path = re.match(r"^[A-Za-z]:[\\/]", path.strip()) is not None  # C:\users\agent\x.txt
+        full = path.strip() if windows_path else os.path.normpath(os.path.expanduser(path.strip()))
+        if not windows_path and not os.path.isabs(full):
             full = os.path.join(self.home, full)
         self._await_dialog()
         field, focused = self._path_field()
+        wine = focused is not None and self._is_wine(focused)
+        if field is None and wine and self.FILE_DIALOG.search(focused.title):
+            return self._wine_file_dialog(focused, full, overwrite)
+        if windows_path and not wine:
+            raise RpcError(
+                f"{full} is a Windows path, and this is a Linux program: use a Linux path such as ~/Documents/x "
+                "(in Wine, C:\\users\\agent is the desktop's home ~)"
+            )
         if field is None:  # GTK's Open dialog has no path box until ctrl+L asks for one
             self.xi.key("ctrl+l")
             time.sleep(0.5)
@@ -946,7 +1220,7 @@ class Agent:
         time.sleep(0.15)
         self.xi.key("Delete")  # drop a selected auto-completion suffix, so Return takes exactly this path
         self.xi.key("Return")
-        if not self._focus_leaves(focused.id, 3.0):
+        if not self._focus_leaves(focused.id, 8.0):  # (inserting a big image can keep the dialog up for seconds)
             raise RpcError(
                 f"entered {full}, but the file dialog is still open: if that is a folder it opened it; "
                 "otherwise check its file type list or see what it says"
@@ -956,6 +1230,36 @@ class Agent:
         if problem:
             raise RpcError(f"the file dialog refused {full}: {problem}")
         return f"entered {full} in the file dialog" + done
+
+    def _wine_file_dialog(self, focused, full: str, overwrite: bool) -> str:
+        """A Windows program's Open/Save dialog (Wine: no accessibility): its "File name" box takes a full
+        path. Alt+N goes to that box in Windows' common dialogs; Wine reads the Linux root as drive Z:."""
+        typed = full if re.match(r"^[A-Za-z]:[\\/]", full) else "Z:" + full.replace("/", "\\")
+        self.xi.key("alt+n")
+        time.sleep(0.15)
+        self.xi.key("ctrl+a")
+        self.xi.type(typed)
+        time.sleep(0.15)
+        self.xi.key("Return")
+        if not self._focus_leaves(focused.id, 6.0):
+            raise RpcError(
+                f"typed {typed} into the Windows file dialog, but it is still open: if that is a folder it opened "
+                "it; otherwise look at what the dialog says"
+            )
+        time.sleep(0.3)
+        try:
+            now = self.windows.focused()
+        except WindowError:
+            now = None
+        done = ""
+        if now is not None and self._is_wine(now) and re.search(r"save as|confirm|replace|exist", now.title, re.I):
+            # "x already exists. Do you want to replace it?": Yes is Alt+Y, No is Alt+N
+            if not overwrite:
+                self.xi.key("alt+n")
+                raise RpcError(f"{full} already exists: use overwrite=true (path ... --overwrite) to replace it")
+            self.xi.key("alt+y")
+            done = " (replaced the existing file)"
+        return f"entered {full} in the Windows file dialog" + done
 
     def _focus_leaves(self, wid: str, timeout: float) -> bool:
         """Wait until window `wid` is no longer focused (closed, or a confirmation came up over it)."""
@@ -1064,7 +1368,15 @@ class Agent:
         t0 = time.monotonic()
         results = []
         error = None
+        self._covered = False
+        will_wait = (
+            p.get("settle", True) is not False
+            and p.get("wait_busy", True) is not False
+            and any(a in ("click", "double_click", "key", "type", "fill", "select", "menu") for a, _ in parsed)
+        )
         with self.input_lock:
+            files_before = self._files_state()
+            known_busy = self._known_busy() if will_wait else None  # (a look costs time: only if it will be used)
             before_frame = self.screen.grab()
             before = thumb(before_frame)
             try:
@@ -1093,8 +1405,20 @@ class Agent:
                     results.append({"action": action, "ok": True, "detail": detail})
                     self.recorder.add_macro(action, portable)
                     if i < len(parsed) - 1:
-                        # Let the app process the event before the next one, like a person would.
-                        time.sleep(0.3 if action == "paste" else 0.2 if action in ("fill", "open", "focus") else 0.06)
+                        # Let the app process the event before the next one, like a person would. Typing that
+                        # a busy app is still drawing would otherwise be overtaken by the next click (and land
+                        # in the next field), and a click that moves the focus must have moved it before typing.
+                        nxt = parsed[i + 1][0]
+                        if nxt == "wait_for" and action in ("click", "double_click", "key", "type", "fill", "select"):
+                            # A link or Return may have started loading another page: its text, not the old
+                            # page's, is what the wait is for.
+                            self._wait_page_loaded(timeout=8.0, grace=0.6)
+                        elif action in ("type", "paste", "fill") and nxt not in ("wait", "wait_for"):
+                            settle(self.screen, timeout=1.5, quiet=0.25, min_wait=0.1)
+                        elif action == "click" and nxt in ("type", "paste", "key"):
+                            settle(self.screen, timeout=1.0, quiet=0.15)
+                        else:
+                            time.sleep(0.2 if action in ("open", "focus") else 0.06)
                 except (RpcError, TargetError, InputError, WindowError, ValueError, TypeError) as e:
                     error = str(e)
                     results.append({"action": action, "ok": False, "detail": error})
@@ -1105,6 +1429,13 @@ class Agent:
                         settled, _, frame = settle(self.screen, timeout=1.5)
             else:
                 settled, frame = False, self.screen.grab()
+            busy_note = None
+            if will_wait:
+                # Work the action started ("Generating…", a spinner's text, a progress bar): wait it out, so the
+                # reply shows the result instead of the busy screen.
+                busy_note = self._wait_busy(known_busy, float(p.get("busy_timeout") or 20.0))
+                if busy_note:
+                    settled, _, frame = settle(self.screen, timeout=1.5)
             frac, bbox = diff(before, thumb(frame))
             change = describe_change(frac, bbox)
             try:
@@ -1145,7 +1476,11 @@ class Agent:
         opened = [w.to_dict() for w in wins_after if w.id not in wins_before]
         closed = [w.to_dict() for wid, w in wins_before.items() if wid not in after_ids]
         focused = next((w for w in wins_after if w.focused), None)
-        summary = self._summary(results, change, opened, closed, focused, wins_before)
+        dialog = self._page_dialog(focused) if change.get("changed") else None
+        files = self._files_changed(files_before, self._files_state())
+        if busy_note:
+            files = [busy_note, *files]
+        summary = self._summary(results, change, opened, closed, focused, wins_before, dialog, files)
         self.recorder.add(
             "act", " · ".join(r["detail"] for r in results if not r.get("skipped")), frame, ok=error is None
         )
@@ -1161,7 +1496,29 @@ class Agent:
             "opened": opened,
             "closed": closed,
         }
-        observe = set(str(p.get("observe") or "summary").replace(",", "+").split("+"))
+        observe = set(str(p.get("observe") or "auto").replace(",", "+").split("+"))
+        if "auto" in observe:
+            # What changed on screen comes along when the action took you somewhere: a new page or window, a
+            # dialog, or work it waited for. That's what the next look would be for.
+            observe.discard("auto")
+            prev = next((w for w in wins_before.values() if w.focused), None)
+            moved = focused is not None and (prev is None or prev.id != focused.id or prev.title != focused.title)
+            # A click, a key or a picked option that changed the screen (a wizard's next step, a form's result, a
+            # console's output) is also worth showing: the next thing an agent does is look at what it did.
+            committed = any(
+                a in ("click", "double_click", "key", "select", "menu", "path", "close", "scroll_to", "fill", "drag")
+                or a in ("move", "goto")
+                or (a == "type" and "\n" in str(q.get("text") or ""))
+                for a, q in parsed[: len(results)]
+            )
+            if self._covered:  # a pop-up took a click: show it, with its buttons, to close it
+                observe.add("changes")
+            if error is None and (
+                opened or closed or dialog or busy_note or moved or (committed and change.get("changed"))
+            ):
+                observe.add("changes")
+            if not observe:
+                observe.add("summary")
         if p.get("screenshot"):
             observe.add("screenshot")
         if p.get("see"):
@@ -1213,7 +1570,241 @@ class Agent:
             "region": [box[0], box[1], box[2] - box[0], box[3] - box[1]],
         }
 
-    def _summary(self, results, change, opened, closed, focused, wins_before) -> str:
+    def _busy_now(self) -> set[str]:
+        """Busy texts in the focused window right now (a quick look at what is on screen)."""
+        try:
+            focused = self.windows.focused()
+        except WindowError:
+            return set()
+        aw = a11y.window_for(focused) if focused is not None and a11y.AVAILABLE else None
+        if aw is None:
+            return set()
+        snap = a11y.snapshot(aw, max_elements=400, budget=0.6)
+        return {t for e in snap.elements if (t := busy_text(e.role, e.name or e.text))}
+
+    def _known_busy(self) -> set[str] | None:
+        """The busy texts already on screen before an action (a page that always says "Loading more…" is not
+        busy because of it): from the last look at this window, else a quick look now."""
+        try:
+            focused = self.windows.focused()
+        except WindowError:
+            return None
+        if focused is None:
+            return None
+        stuck = self._stuck_busy.get(focused.id, set())  # texts that never went away: not a sign of work
+        view = self.perception.last_views.get(focused.id)
+        if view is not None:
+            return stuck | {t for (key, *_rest) in view["items"].values() if (t := busy_text(key[0], key[1] or key[2]))}
+        return stuck | self._busy_now()
+
+    def _wait_busy(self, known: set[str] | None, timeout: float) -> str | None:
+        """If the action made the app say it is busy, wait (up to `timeout`) until it stops saying so."""
+        busy = self._busy_now() - (known or set())
+        if not busy:
+            return None
+        t0 = time.monotonic()
+        what = sorted(busy, key=len)[0]
+        while time.monotonic() - t0 < timeout:
+            time.sleep(0.5)
+            if not (self._busy_now() & busy):
+                return f'waited {time.monotonic() - t0:.1f}s while it showed "{what}"'
+        try:
+            focused = self.windows.focused()
+            if focused is not None:
+                self._stuck_busy.setdefault(focused.id, set()).update(busy)
+        except WindowError:
+            pass
+        return f'it still shows "{what}" after {timeout:g}s (still working? wait_for the result, or look)'
+
+    DATE_FORMATS = ("%Y-%m-%d", "%Y/%m/%d", "%d %B %Y", "%B %d %Y", "%d %b %Y", "%b %d %Y", "%d.%m.%Y")
+
+    def _fill_date(self, t, el, text: str) -> str:
+        """fill on a date field (Firefox's mm/dd/yyyy editor): any clear date, typed part by part in the field's
+        own order, so "2027-03-15" doesn't become 12/09/0007."""
+        import datetime as dt
+
+        day = None
+        for fmt in self.DATE_FORMATS:
+            try:
+                day = dt.datetime.strptime(text.replace(",", ""), fmt).date()
+                break
+            except ValueError:
+                continue
+        if day is None:
+            raise RpcError(f'{t.desc} is a date field: give a date like 2027-03-15 (got "{text}")')
+        parts = a11y.segments(el)
+        values = {"month": f"{day.month:02d}", "day": f"{day.day:02d}", "year": f"{day.year:04d}"}
+        typed = 0
+        for part in parts:
+            key = next((k for k in values if k in part.name.casefold()), None)
+            if key is None:
+                continue
+            x, y = part.center
+            self.xi.click(x, y)
+            time.sleep(0.05)
+            self.xi.type(values[key])
+            typed += 1
+        if typed < 3:
+            raise RpcError(f"{t.desc}: couldn't find its month, day and year parts; click it and type the digits")
+        time.sleep(0.15)
+        return f"filled {t.desc} with {day.isoformat()}"
+
+    def _set_value(self, t, el, text: str) -> str:
+        """fill on a slider: set its value (accessibility first, then the arrow keys, as a person would)."""
+        try:
+            want = float(text.rstrip("%"))
+        except ValueError:
+            raise RpcError(f"{t.desc} is a slider: fill it with a number, e.g. fill {t.desc.split()[0]} 70") from None
+        now, limits = a11y.set_value(el, want)
+        if now is not None and abs(now - want) < 1e-6:
+            return f"set {t.desc} to {now:g}"
+        if limits is None or now is None:
+            raise RpcError(f"{t.desc} doesn't say its value: click a spot on it, or use the arrow keys")
+        lo, hi, step = limits
+        if not lo <= want <= hi:
+            raise RpcError(f"{t.desc} goes from {lo:g} to {hi:g}: {want:g} is out of range")
+        a11y.grab_focus(el)
+        time.sleep(0.1)
+        now = a11y.value_of(el) if a11y.value_of(el) is not None else now  # (the set may have moved it after all)
+        presses = round(abs(want - now) / step)
+        if presses:
+            self.xi.key("Right" if want > now else "Left", min(presses, 500))
+        time.sleep(0.15)
+        got = a11y.value_of(el)
+        return f"set {t.desc} to {got:g}" if got is not None else f"moved {t.desc} {presses} steps toward {want:g}"
+
+    def _close(self, which=None, win=None) -> str:
+        """Close a window like its title bar's X button: the app may ask first ("Save changes?")."""
+        if win is None:
+            win = self.windows.find(str(which)) if which else self.windows.focused()
+        if win is None:
+            raise RpcError("no window is focused: name the window to close")
+        self.windows.close(win.id)
+        deadline = time.monotonic() + 2.0
+        while time.monotonic() < deadline:
+            time.sleep(0.2)
+            try:
+                if all(w.id != win.id for w in self.windows.list(with_states=False)):
+                    return f'closed "{win.title}"'
+            except WindowError:
+                continue
+        return f'asked "{win.title}" to close; it is still open (look: it may be asking something, e.g. to save)'
+
+    def _scroll_to(self, query: str, timeout: float) -> str:
+        """Bring text into view wherever it is in the focused window: further down a long page, or not
+        loaded yet (a feed that loads more as you scroll: scroll to its end until the text shows up)."""
+        deadline = time.monotonic() + timeout
+        focused = self.windows.focused()
+        aw = a11y.window_for(focused) if focused is not None and a11y.AVAILABLE else None
+        if aw is None:
+            raise RpcError("scroll_to needs a window whose text accessibility can read (a web page, most apps)")
+        loads, stale = 0, 0
+        while True:
+            found, last, count = a11y.search(aw, query, budget=min(3.0, max(0.5, deadline - time.monotonic())))
+            if found is not None:
+                a11y.scroll_into_view(found)
+                time.sleep(0.35)
+                x, y, w, h = a11y.refresh(found) or (found.x, found.y, found.w, found.h)
+                cx, cy = x + w // 2, y + h // 2
+                shown = " ".join(f"{found.name} {found.text}".split()) or found.value
+                more = f" (after loading more {loads} time{'s' if loads != 1 else ''})" if loads else ""
+                return f'scrolled to "{query}"{more}: {found.role} "{shown[:300]}" ({cx},{cy})'
+            if last is None or stale >= 2 or time.monotonic() >= deadline:
+                why = f"after loading more {loads} times" if loads else "on this page"
+                raise RpcError(f'"{query}" is not in the focused window ({why}); check the spelling, or look')
+            # Not there (yet): scroll to the page's end, which makes a feed load more, then look again once
+            # the page has grown (a feed fetches the next entries first).
+            _, before = a11y.page_state(aw, limit=8000)
+            a11y.scroll_into_view(last)
+            loads += 1
+            grew, until = False, min(deadline, time.monotonic() + 3.0)
+            while time.monotonic() < until:
+                time.sleep(0.4)
+                _, now = a11y.page_state(aw, limit=8000)
+                if now > before:
+                    grew = True
+                    time.sleep(0.3)  # (the rest of the batch)
+                    break
+            stale = 0 if grew else stale + 1
+
+    def _in_browser(self) -> bool:
+        try:
+            focused = self.windows.focused()
+        except WindowError:
+            return False
+        return focused is not None and bool(self.BROWSER_APPS.search(focused.app or ""))
+
+    def _page_dialog(self, focused) -> str | None:
+        """A web page's alert/confirm/prompt in the focused browser window: the window list doesn't show it."""
+        if focused is None or not a11y.AVAILABLE or not self.BROWSER_APPS.search(focused.app or ""):
+            return None
+        try:
+            aw = a11y.window_for(focused)
+            return a11y.page_dialog(aw) if aw else None
+        except Exception:
+            return None
+
+    def _files_state(self, limit: int = 4000) -> dict:
+        """The files in the home folder, two folders deep (hidden ones skipped): what an action saves or
+        downloads shows up here, and the reply can say where it went."""
+        state: dict[str, tuple[int, int]] = {}
+        budget = limit
+
+        def scan(folder: str, depth: int) -> None:
+            nonlocal budget
+            try:
+                with os.scandir(folder) as entries:
+                    for e in entries:
+                        budget -= 1
+                        if budget <= 0:
+                            return
+                        if e.name.startswith("."):
+                            continue
+                        try:
+                            if e.is_dir(follow_symlinks=False):
+                                if depth < 2:
+                                    scan(e.path, depth + 1)
+                            elif e.is_file(follow_symlinks=False):
+                                st = e.stat(follow_symlinks=False)
+                                state[e.path] = (st.st_mtime_ns, st.st_size)
+                        except OSError:
+                            continue
+            except OSError:
+                return
+
+        scan(self.home, 0)
+        if budget <= 0:
+            state["\0partial"] = (0, 0)  # (a scan that stopped early can't tell what was deleted)
+        return state
+
+    def _files_changed(self, before: dict, after: dict) -> list[str]:
+        def short(path: str) -> str:
+            return "~" + path[len(self.home) :] if path.startswith(self.home + "/") else path
+
+        def size(n: int) -> str:
+            return f"{n} bytes" if n < 1024 else f"{n / 1024:.0f} KB" if n < 1024 * 1024 else f"{n / 1048576:.1f} MB"
+
+        notes = []
+        for path, (_, n) in sorted(after.items(), key=lambda kv: -kv[1][0]):
+            if path == "\0partial":
+                continue
+            if path.endswith((".part", ".crdownload", ".tmp")) or "/.~lock." in path:
+                if path not in before and path.endswith((".part", ".crdownload")):
+                    notes.append(f"downloading {short(path.rsplit('.', 1)[0])} (not finished yet)")
+                continue
+            if path + ".part" in after or path + ".crdownload" in after:
+                continue  # the browser's placeholder for a download in progress
+            if path not in before:
+                notes.append(f"new file {short(path)} ({size(n)})")
+            elif before[path] != after[path]:
+                notes.append(f"saved {short(path)} ({size(n)})")
+        if "\0partial" not in before and "\0partial" not in after:
+            notes += [f"deleted {short(path)}" for path in before if path not in after]
+        if len(notes) > 4:
+            notes = notes[:4] + [f"{len(notes) - 4} more files changed"]
+        return notes
+
+    def _summary(self, results, change, opened, closed, focused, wins_before, dialog=None, files=()) -> str:
         parts = [
             ("✓ " if r["ok"] else ("· " if r.get("skipped") else "✗ ")) + r["detail"]
             for r in results
@@ -1231,6 +1822,9 @@ class Agent:
             tail.append(f"screen changed {amount} (region {x},{y} {w}x{h})")
         elif not waits_only:  # after a wait, "no visible change" reads like a failure
             tail.append("no visible change")
+        if dialog:
+            tail.append(f'the page opened a dialog: "{dialog}" (answer it: see lists its field and buttons)')
+        tail.extend(files)
         for w in opened[:3]:
             tail.append(f'opened "{w["title"]}"')
         for w in closed[:3]:
@@ -1257,6 +1851,19 @@ class Agent:
         for app in self.apps:
             if low in (str(app.get("name", "")).lower(), str(app.get("id", "")).lower()):
                 return app["command"], "app"
+        first, _, rest = t.partition(" ")
+        for app in self.apps if rest.strip() else []:  # "notepad C:\users\agent\notes.txt", "editor ~/a.txt"
+            if first.lower() in (str(app.get("name", "")).lower(), str(app.get("id", "")).lower()):
+                arg = _unquote(rest.strip())
+                if re.match(r"^[A-Za-z]:[\\/]", arg):  # a Windows path stays as it is, backslashes too
+                    return f"{app['command']} {shlex.quote(arg)}", "app"
+                if os.path.exists(os.path.expanduser(arg)):  # one file, spaces and all
+                    return f"{app['command']} {shlex.quote(os.path.expanduser(arg))}", "app"
+                try:  # several arguments (two files, a flag and a URL): each stays a word
+                    words = [os.path.expanduser(w) for w in shlex.split(rest)]
+                except ValueError:
+                    words = rest.split()
+                return f"{app['command']} {shlex.join(words)}", "app"
         if (
             URL_RE.match(t)
             or low.startswith(("about:", "file:", "data:"))
@@ -1365,7 +1972,7 @@ class Agent:
                     return f"{fm} {q}"
         return f"xdg-open {q}"
 
-    def _open(self, target, wait: float = 12.0, install: bool = True) -> dict:
+    def _open(self, target, wait: float = 12.0, install: bool = True, look: bool = True) -> dict:
         if not target:
             raise RpcError("open needs a target: an app name, a URL, a file path or a command")
         cmd, kind = self._resolve_open(str(target))
@@ -1452,6 +2059,16 @@ class Agent:
                 res["also"] = [w.title for w in also if not self._splash(w)]
         except WindowError:
             pass
+        problem = self._error_box(found) if found is not None and kind != "url" else None
+        if problem:  # the app opened, but only to say it couldn't open the file: that is not a success
+            res["error"] = f"it opened, but shows an error: {problem}"
+        elif found is not None and a11y.AVAILABLE and look:
+            try:  # a web page, or a question it opened on (a CSV's Text Import): what is on it comes along
+                aw = a11y.window_for(self.windows.focused() or found)
+                if kind == "url" or (aw is not None and aw.get("role") in ("dialog", "alert", "file chooser")):
+                    res["look"] = self.perception.see()["text"]
+            except (WindowError, RpcError, TargetError):
+                pass
         if found is None and code not in (None, 0):
             try:
                 with open(log_path, "rb") as f:
@@ -1462,15 +2079,41 @@ class Agent:
                 apps = ", ".join(str(a.get("id") or a.get("name", "")).lower() for a in self.apps)
                 res["error"] = (
                     f"{target!r} is not an app, URL or file here, and no such command exists. "
-                    f"Apps: {apps}. URLs need a dot (example.com) or a scheme (https://)."
+                    f"Apps: {apps}. URLs need a dot (example.com) or a scheme (https://). Other programs install "
+                    "with run('minion-install NAME') (a Debian package, or a .deb/.AppImage URL)."
                 )
             else:
                 res["error"] = f"exited with code {code}" + (f": {tail[0]}" if tail else "")
         return res
 
     BROWSER_APPS = re.compile(r"firefox|chromium|chrome|navigator|brave|vivaldi|opera|epiphany", re.I)
+    FAILURE = re.compile(
+        r"fail|error|could not|couldn't|cannot|can't|no such|not found|does(?:n't| not) exist|unable|denied", re.I
+    )
 
-    def _wait_page_loaded(self, timeout: float = 10.0, require_page: bool = False) -> bool:
+    def _error_box(self, win) -> str | None:
+        """What an error box says, if `win` is one ("GIMP Message": Opening '/x.png' failed: No such file)."""
+        if not a11y.AVAILABLE:
+            return None
+        try:
+            focused = self.windows.focused() or win
+        except WindowError:
+            focused = win
+        aw = a11y.window_for(focused)
+        if aw is None:
+            return None
+        snap = a11y.snapshot(aw, max_elements=60, budget=1.0, screen=self.size)
+        # A message box (a dialog or an alert): a document titled "Problem set 3" or a page about errors is not one.
+        if aw.get("role") not in ("alert", "dialog") and not any(el.role == "alert" for el in snap.elements):
+            return None
+        said = " ".join(
+            el.name or el.text for el in snap.elements if el.role in ("label", "static", "text", "paragraph")
+        ).strip()
+        if not self.FAILURE.search(said):
+            return None
+        return f'"{focused.title}": {" ".join(said.split())[:300]}'
+
+    def _wait_page_loaded(self, timeout: float = 10.0, require_page: bool = False, grace: float = 0.15) -> bool:
         """In a browser, wait while the page loads and its accessibility tree fills in. With require_page
         (a fresh `open`), also wait for the page to exist. True if it had to wait."""
         try:
@@ -1482,6 +2125,13 @@ class Agent:
         deadline = time.monotonic() + timeout
         waited, last = False, -1
         time.sleep(0.15)  # a navigation starts a moment after the click
+        if grace > 0.15:  # (before a wait_for: don't let the old page's text answer it)
+            until = time.monotonic() + grace - 0.15
+            while time.monotonic() < until:
+                aw = a11y.find_window(title=None, pid=focused.pid)
+                if aw and a11y.page_state(aw)[0]:
+                    break
+                time.sleep(0.1)
         while time.monotonic() < deadline:
             aw = a11y.find_window(title=None, pid=focused.pid)  # the title changes as pages load
             busy, size = a11y.page_state(aw) if aw else (None, 0)
@@ -1528,7 +2178,12 @@ class Agent:
 
     def m_open(self, p: dict) -> dict:
         with self.input_lock:
-            res = self._open(p.get("target"), wait=float(p.get("wait") or 12.0), install=p.get("install", True))
+            res = self._open(
+                p.get("target"),
+                wait=float(p.get("wait") or 12.0),
+                install=p.get("install", True),
+                look=p.get("look", True) is not False,
+            )
         if "error" not in res:
             self.recorder.add_macro("open", {"target": p.get("target")})
         detail = res["command"] + (f" (installed {res['installed']} first)" if res.get("installed") else "")
@@ -1586,28 +2241,40 @@ class Agent:
         self.recorder.add("script", f"{len(str(code).splitlines())} lines → exit {res['code']}")
         return res
 
-    def _type_via_clipboard(self, text: str) -> None:
-        """Type ASCII runs with xdotool and paste the rest (LibreOffice loses keymap-remapped
-        characters such as ü or 你). Tab and Return stay key presses. The clipboard is restored."""
+    def _type_via_clipboard(self, text: str, paste_all: bool = False) -> None:
+        """Type ASCII lines with xdotool and paste the others (apps lose keymap-remapped characters such
+        as ü, 你 or emoji), or paste every line (paste_all). Tab and Return stay key presses, so a spreadsheet
+        row still moves from cell to cell. The clipboard is restored."""
         try:
             saved = subprocess.run(["xclip", "-selection", "clipboard", "-o"], capture_output=True, timeout=3)
             previous = saved.stdout if saved.returncode == 0 else None
         except (OSError, subprocess.TimeoutExpired):
             previous = None
+        focused = self.windows.focused()
+        app = focused.app if focused is not None else ""
         for token in re.split(r"(\n|\t)", text.replace("\r\n", "\n")):
             if token in ("\n", "\t"):
                 self.xi.type(token)
-                continue
-            for run in re.findall(r"[\x00-\x7f]+|[^\x00-\x7f]+", token):
-                if run.isascii():
-                    self.xi.type(run)
-                else:
-                    self._clip_set(run)
-                    time.sleep(0.05)
-                    self.xi.key("ctrl+v")
-                    time.sleep(0.25)
+                time.sleep(0.05)
+            elif token.isascii() and not (paste_all and len(token) > 3):
+                self.xi.type(token)
+            elif token:
+                self._paste_keys(token, app)
+                time.sleep(0.25)
         if previous is not None:
             subprocess.run(["xclip", "-selection", "clipboard", "-i"], input=previous, timeout=5)
+
+    def _paste_keys(self, text: str, app: str) -> None:
+        """Put text on the clipboard and press the app's paste shortcut."""
+        if re.fullmatch(r"(u?xterm|u?rxvt.*)", app, re.I):  # xterm has no paste shortcut for CLIPBOARD
+            self._clip_set(text, primary=True)
+            time.sleep(0.05)
+            self.xi.key("shift+Insert")
+            return
+        self._clip_set(text)
+        time.sleep(0.05)
+        term = re.search(r"term|konsole|kitty|alacritty|tilix|terminator", app, re.I)
+        self.xi.key("ctrl+shift+v" if term else "ctrl+v")
 
     def _clip_set(self, text: str, primary: bool = False) -> None:
         if not shutil.which("xclip"):

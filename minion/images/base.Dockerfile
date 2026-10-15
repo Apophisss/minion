@@ -13,18 +13,21 @@ RUN printf '%s\n' \
       'path-exclude=/usr/share/lintian/*' \
       > /etc/dpkg/dpkg.cfg.d/01-minion-nodoc
 
-# OCR reads text that accessibility doesn't expose. Besides English, the data for the most-used other scripts
+# Everyday command-line tools agents reach for (file, zip, htop, vim) are here too: a missing one costs a failed
+# command and an install. OCR reads text that accessibility doesn't expose. Besides English, the data for the most-used other scripts
 # (Hebrew, Arabic, Cyrillic, Chinese, Japanese, Korean, Devanagari: 14 MB in all) is built in, so it works offline
 # from the first look. Other languages are installed the first time a screen needs them.
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
       tini sudo ca-certificates curl procps xdg-utils desktop-file-utils shared-mime-info \
+      file zip unzip less htop vim-tiny \
       xvfb xauth x11-xserver-utils x11-utils xdotool wmctrl xclip jwm xterm \
       dbus-daemon dbus-bin at-spi2-core gir1.2-atspi-2.0 \
       python3 python3-pil python3-gi \
       tesseract-ocr tesseract-ocr-eng tesseract-ocr-heb tesseract-ocr-ara tesseract-ocr-rus \
       tesseract-ocr-chi-sim tesseract-ocr-jpn tesseract-ocr-kor tesseract-ocr-hin \
       fonts-dejavu-core \
+ && ln -sf /usr/bin/vim.tiny /usr/local/bin/vim \
  && apt-get clean && rm -rf /var/lib/apt/lists/* /var/cache/debconf/*-old
 
 RUN useradd --create-home --shell /bin/bash --uid 1000 agent \
