@@ -32,6 +32,16 @@ jobs:
           test "$GITHUB_REF_NAME" = "v$VERSION" || { echo "::error::tag $GITHUB_REF_NAME but VERSION $VERSION"; exit 1; }
           test "$(jq -r .version clients/typescript/package.json)" = "$VERSION" || { echo "::error::clients/typescript/package.json is not $VERSION"; exit 1; }
           test "$(jq -r .version plugins/minion/.claude-plugin/plugin.json)" = "$VERSION" || { echo "::error::plugin.json is not $VERSION"; exit 1; }
+      # Checked before anything is published, because PyPI and npm releases can't be changed afterwards.
+      - name: The MCP Registry will accept server.json's name
+        run: |
+          NAME=$(jq -r .name server.json)
+          case "$NAME" in # the registry grants io.github.<owner>/* with the owner's exact casing
+            "io.github.$GITHUB_REPOSITORY_OWNER/"*) ;;
+            *) echo "::error::server.json's name $NAME must start with io.github.$GITHUB_REPOSITORY_OWNER/"; exit 1 ;;
+          esac
+          grep -qF "mcp-name: $NAME" README.md || { echo "::error::README.md has no 'mcp-name: $NAME' for PyPI"; exit 1; }
+          test "$(jq -r .mcpName clients/typescript/package.json)" = "$NAME" || { echo "::error::clients/typescript/package.json's mcpName is not $NAME"; exit 1; }
       - run: uv build
       - uses: pypa/gh-action-pypi-publish@release/v1
       # Build the extension after the PyPI upload, which takes everything in dist/ (and rejects a .mcpb).
@@ -65,8 +75,6 @@ jobs:
       - run: npm install -g npm@^11.5.1 # trusted publishing needs npm 11.5.1+
       - run: npm ci
       - run: npm test
-      - name: mcpName matches server.json (the MCP Registry checks it to accept the npm package)
-        run: test "$(jq -r .mcpName package.json)" = "$(jq -r .name ../../server.json)"
       - run: npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }} # only for the first release; afterwards OIDC is used
