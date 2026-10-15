@@ -1,6 +1,6 @@
 """What real tasks cost an agent: Minion (the screen as text) vs. a screenshot-based computer-use agent.
 
-Runs five everyday tasks end to end on a real office desktop, through the same toolkit an MCP client calls,
+Runs everyday tasks end to end on a real office desktop, through the same toolkit an MCP client calls,
 and counts the tokens of every tool result the agent reads. The screenshot agent is priced from the GUI
 actions the same task needs when every action returns a screenshot (the loop of Anthropic's and OpenAI's
 computer-use tools), at the providers' published image prices. No model is called, so it costs nothing to run.
@@ -141,7 +141,8 @@ TASKS = [
     {
         "name": "Read a multi-page document",
         "calls": [("files", {"action": "read", "path": "~/Documents/notes.docx"})],
-        "gui": "look · open the document",  # + a look at each page and a page-down between them (added below)
+        "gui": "look · open the document",
+        "per_page": True,  # + a look at each page and a page-down between them (added below)
     },
 ]
 
@@ -163,10 +164,9 @@ def main(argv: list[str]) -> int:
     )
     m = re.search(r"Pages:\s+(\d+)", info.text)
     pages = int(m.group(1)) if m else 3
-    TASKS[-1]["name"] = f"Read a {pages}-page document"
-    TASKS[-1]["gui"] += "".join(
-        f" · read page {i}" + (" · page down" if i < pages else "") for i in range(1, pages + 1)
-    )
+    for task in (t for t in TASKS if t.get("per_page")):
+        task["name"] = task["name"].replace("multi-page", f"{pages}-page")
+        task["gui"] += "".join(f" · read page {i}" + (" · page down" if i < pages else "") for i in range(1, pages + 1))
     print(f"desktop ready in {time.monotonic() - t0:.0f}s; tokens counted with {COUNTER}\n")
 
     results = []
@@ -204,11 +204,13 @@ def write_doc(results: list[dict]) -> None:
     total_m = sum(r["minion_tokens"] for r in results)
     total_c = sum(r["claude_screenshot_tokens"] for r in results)
     total_o = sum(r["openai_screenshot_tokens"] for r in results)
+    words = ["One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten", "Eleven", "Twelve"]
+    count = words[len(results) - 1] if len(results) <= len(words) else str(len(results))
     lines = [
         "# What tasks cost: Minion vs. screenshots",
         "",
-        "Five everyday tasks, run end to end on an `office` desktop by `python scripts/bench_tasks.py`. The **Minion** "
-        "column counts the tokens of every tool result the agent reads (the same text an MCP client gets). The "
+        f"{count} everyday tasks, run end to end on an `office` desktop by `python scripts/bench_tasks.py`. The "
+        "**Minion** column counts the tokens of every tool result the agent reads (the same text an MCP client gets). The "
         "**screenshot agent** columns price the same task done the way pixel-based computer use works: each GUI "
         f"action returns a {W}×{H} screenshot ({CLAUDE_IMAGE:,} tokens for Claude, {OPENAI_IMAGE:,} for OpenAI at high "
         "detail), plus a first look. No model is called; the step lists are in the script.",
@@ -223,7 +225,7 @@ def write_doc(results: list[dict]) -> None:
             f"{r['claude_screenshot_tokens']:,} · {r['openai_screenshot_tokens']:,} | **{ratio:.1f}×** |"
         )
     lines += [
-        f"| **All five** | {sum(r['minion_calls'] for r in results)} · **{total_m:,}** | "
+        f"| **All {count.lower()}** | {sum(r['minion_calls'] for r in results)} · **{total_m:,}** | "
         f"{sum(r['gui_steps'] for r in results)} · {total_c:,} · {total_o:,} | **{total_c / max(1, total_m):.1f}×** |",
         "",
         "Notes:",
@@ -242,7 +244,7 @@ def write_doc(results: list[dict]) -> None:
     out.write_text("\n".join(lines) + "\n")
     (ROOT / "docs" / "benchmarks.json").write_text(json.dumps(results, indent=1) + "\n")
     print(
-        f"\nall five: Minion {total_m:,} tokens vs. {total_c:,} (Claude screenshots): {total_c / max(1, total_m):.1f}x"
+        f"\nall {count.lower()}: Minion {total_m:,} tokens vs. {total_c:,} (Claude screenshots): {total_c / max(1, total_m):.1f}x"
     )
     print(f"wrote {out.relative_to(ROOT)}")
 

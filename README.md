@@ -340,8 +340,10 @@ out of desktops unless a human hands off. Read [SECURITY.md](SECURITY.md).
 
 ## Contributing
 
-Issues and pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md). Good first contributions include new
-profiles (`minion/profiles/*.toml`), better `see` output for specific apps, and integration recipes.
+Questions and ideas are welcome in [Discussions](https://github.com/apophisss/minion/discussions), and bugs in
+[issues](https://github.com/apophisss/minion/issues). To help build Minion, pick a
+[good first issue](https://github.com/apophisss/minion/labels/good%20first%20issue) (translations, apps, agent apps,
+benchmark tasks), read [CONTRIBUTING.md](CONTRIBUTING.md), and see where it's going in the [roadmap](ROADMAP.md).
 
 ## License
 
