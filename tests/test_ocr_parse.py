@@ -124,6 +124,7 @@ def test_script_detection_names_the_language(monkeypatch):
     from minion.agent import ocr
 
     monkeypatch.setattr(ocr, "installed", lambda: {"eng", "osd"})
+    monkeypatch.setattr(ocr, "available", lambda: True)  # Tesseract itself is faked below
 
     def osd(script, conf):
         out = f"Page number: 0\nOrientation in degrees: 0\nScript: {script}\nScript confidence: {conf}\n"
