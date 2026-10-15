@@ -127,10 +127,16 @@ class Session:
         # `minion-install <anything>` inside the desktop (apt names, .deb/.AppImage/archive URLs, pip:, npm:).
         bin_dir = home / ".local" / "bin"
         bin_dir.mkdir(parents=True, exist_ok=True)
-        tool = bin_dir / "minion-install"
-        if not tool.exists():
-            tool.write_text('#!/bin/sh\nexec python3 -m minion_agent.install "$@"\n')
-            tool.chmod(0o755)
+        # `minion-read FILE` prints any document as text; `minion-convert FILE pdf` converts it.
+        for name, module in (
+            ("minion-install", "minion_agent.install"),
+            ("minion-read", "minion_agent.docs"),
+            ("minion-convert", "minion_agent.docs --convert"),
+        ):
+            tool = bin_dir / name
+            if not tool.exists():
+                tool.write_text(f'#!/bin/sh\nexec python3 -m {module} "$@"\n')
+                tool.chmod(0o755)
         env = os.environ
         env["DISPLAY"] = self.display
         env["XDG_RUNTIME_DIR"] = str(xdg)

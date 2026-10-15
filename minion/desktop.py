@@ -60,6 +60,9 @@ def normalize_size(size: str | tuple | None) -> str:
     return f"{w}x{h}"
 
 
+INSTALL_TIME = 660.0  # seconds an `open` may spend installing a missing app (big apps, slow links)
+
+
 # ---------------------------------------------------------------------------
 # results
 @dataclass
@@ -424,17 +427,24 @@ class Desktop:
         max_elements: int | None = None,
         full_text: bool = False,
         changes: bool = False,
+        menus: bool = False,
     ) -> Observation:
         """The screen as text. `changes=True` returns only what changed since the previous look
-        (ids are stable across looks); `full_text=True` keeps paragraphs whole (for reading)."""
+        (ids are stable across looks); `full_text=True` keeps paragraphs whole (for reading);
+        `menus=True` adds the focused app's menu commands and their shortcuts."""
         params = {
             "ocr": ocr,
             "window": window,
             "max_elements": max_elements,
             "full_text": full_text,
             "changes": changes,
+            "menus": menus,
         }
         return _observation(self.call("see", params, timeout=90))
+
+    def menus(self) -> list[str]:
+        """The focused app's menu commands with their shortcuts, one line per menu."""
+        return self.call("see", {"menus": True, "max_elements": 1}, timeout=90).get("menus", [])
 
     def cursor(self) -> tuple[int, int]:
         pos = self.call("cursor", timeout=30)
@@ -470,7 +480,8 @@ class Desktop:
             "settle_timeout": settle_timeout,
             **kw,
         }
-        res = self.call("act", params, timeout=300)
+        opens = any("open" in (a if isinstance(a, str) else json.dumps(a)) for a in flat)
+        res = self.call("act", params, timeout=300 + (INSTALL_TIME if opens else 0))  # `open` may install the app
         out = ActResult(
             ok=res["ok"],
             summary=res["summary"],
@@ -524,6 +535,15 @@ class Desktop:
         """Pick an option of a dropdown (a <select>, a combo box) by its visible text."""
         return self.act({"action": "select", "target": target, "option": option}, **kw)
 
+    def menu(self, item: str, **kw) -> ActResult:
+        """Choose a menu command by its path: desk.menu("File > Export as PDF")."""
+        return self.act({"action": "menu", "item": item}, **kw)
+
+    def path(self, file_path: str, overwrite: bool = False, **kw) -> ActResult:
+        """Type a full path into the open file dialog (Open, Save As, Export, Upload...) and confirm it.
+        An existing file is only replaced with overwrite=True."""
+        return self.act({"action": "path", "path": file_path, "overwrite": overwrite}, **kw)
+
     def key(self, keys: str, repeat: int = 1, **kw) -> ActResult:
         return self.act({"action": "key", "keys": keys, "repeat": repeat}, **kw)
 
@@ -537,9 +557,11 @@ class Desktop:
         return self.act({"action": "wait_for", "text": text, "timeout": timeout, "gone": gone}, settle=False)
 
     # -- apps, shell, files --------------------------------------------
-    def open(self, target: str, wait: float = 12.0) -> dict:
-        """Launch a profile app ("writer"), a URL, a file in the desktop, or a shell command."""
-        return self.call("open", {"target": target, "wait": wait}, timeout=wait + 60)
+    def open(self, target: str, wait: float = 12.0, install: bool = True) -> dict:
+        """Launch an app ("writer", "gimp", "vscode", "figma"), a URL, a file in the desktop, or a shell
+        command. Apps that aren't installed are installed first (install=False to fail instead)."""
+        params = {"target": target, "wait": wait, "install": install}
+        return self.call("open", params, timeout=wait + 60 + (INSTALL_TIME if install else 0))
 
     def run(
         self,
@@ -599,6 +621,21 @@ class Desktop:
         res = self.run(f'mkdir -p -- "$(dirname -- "{target}")" && cat > "{target}"', timeout=60, input=text)
         if not res.ok:
             raise MinionError(f"could not write {path}: {(res.stderr or res.stdout).strip()[-300:]}")
+
+    def read(self, path: str, max_chars: int = 200_000) -> str:
+        """Any file's text: text files as they are, and documents converted inside the desktop: docx, xlsx
+        (values and formulas), pptx, odt/ods/odp, pdf, epub, html, images (OCR), doc/xls/ppt, ..."""
+        try:
+            return self.call("read", {"path": path, "max_chars": max_chars}, timeout=900)["text"]
+        except MinionError as e:
+            if "unknown method" not in str(e):  # (a desktop made by an older Minion reads text files only)
+                raise
+            return self.read_text(path)
+
+    def convert(self, path: str, to: str, outdir: str | None = None) -> str:
+        """Convert a document or image in the desktop ("pdf", "docx", "xlsx", "csv", "pptx", "png", "md", ...).
+        Returns the new file's path (next to the original unless outdir is given)."""
+        return self.call("convert", {"path": path, "to": to, "outdir": outdir}, timeout=900)["path"]
 
     def read_text(self, path: str) -> str:
         """A text file from the desktop. Folders and binary files are errors (download those instead)."""

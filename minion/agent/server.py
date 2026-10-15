@@ -22,7 +22,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 from PIL import ImageDraw, ImageFont
 
-from . import PROTOCOL, VERSION, a11y
+from . import PROTOCOL, VERSION, a11y, catalog, docs
 from . import ocr as ocr_mod
 from .perceive import Perception, TargetError
 from .recorder import Recorder
@@ -164,6 +164,9 @@ ACTIONS = {
     "wait_for": ("wait_for", {}),
     "focus": ("focus", {}),
     "open": ("open", {}),
+    "menu": ("menu", {}),
+    "path": ("path", {}),
+    "file_path": ("path", {}),
 }
 # shorthand {"click": "@3"} -> which parameter receives the value
 MAIN_PARAM = {
@@ -188,6 +191,9 @@ MAIN_PARAM = {
     "focus": "window",
     "open": "target",
     "hold_key": "keys",
+    "menu": "item",
+    "path": "path",
+    "file_path": "path",
 }
 
 
@@ -273,6 +279,13 @@ def parse_step(step) -> tuple[str, dict]:
             if not target or not option:
                 raise RpcError("select needs a dropdown and an option: select @12 'Title'")
             return canon, {"target": target, "option": _unquote(option)}
+        if canon == "menu":  # "menu File > Export > PDF": the rest is the menu path
+            return canon, {"item": _unquote(rest.strip())}
+        if canon == "path":  # "path ~/Documents/report.pdf [--overwrite]": a file dialog's path
+            text, overwrite = rest.strip(), False
+            if text.endswith(" --overwrite") or text.startswith("--overwrite "):
+                text, overwrite = text.replace("--overwrite", "", 1).strip(), True
+            return canon, {"path": _unquote(text), **({"overwrite": True} if overwrite else {})}
         args = split_words(rest)
         params: dict = {}
         if canon in ("click", "move"):
@@ -370,6 +383,7 @@ class Agent:
         self.inflight = 0  # non-passive calls running now (a long `run` is not "idle")
         self._inflight_lock = threading.Lock()
         self.home = os.path.expanduser("~")
+        self._tipped: set[str] = set()  # apps whose tips this session has already shown
         self.handlers = {n[2:]: getattr(self, n) for n in dir(self) if n.startswith("m_")}
 
     # -- dispatch ------------------------------------------------------
@@ -534,8 +548,42 @@ class Agent:
             )
         except WindowError as e:
             raise RpcError(str(e)) from e
+        if p.get("menus"):
+            lines = self._menu_lines()
+            res["menus"] = lines
+            res["text"] += (
+                "\n\nMenus (choose one with: menu File > Save As):\n" + "\n".join(lines)
+                if lines
+                else "\n\nThis window has no menu bar that accessibility can read (browsers hide theirs: use shortcuts)."
+            )
         self.recorder.add("see", f"{len(res['elements'])} elements, {len(res['ocr'])} OCR lines")
         return res
+
+    def _menu_lines(self) -> list[str]:
+        try:
+            _, aw = self._focused_a11y()
+        except RpcError:
+            return []
+        return a11y.format_menus(a11y.menu_items(aw)) if aw is not None else []
+
+    def m_read(self, p: dict) -> dict:
+        """A document's text: docx, xlsx, pptx, odt/ods/odp, pdf, epub, html, images (OCR), doc/xls/ppt..."""
+        try:
+            text, kind = docs.read(str(p.get("path") or ""), max_chars=int(p.get("max_chars") or 200_000))
+        except docs.DocError as e:
+            raise RpcError(str(e)) from e
+        return {"text": text, "kind": kind}
+
+    def m_convert(self, p: dict) -> dict:
+        """Convert a document or image: {"path": "~/a.docx", "to": "pdf"} -> {"path": "/home/agent/a.pdf"}."""
+        try:
+            out = docs.convert(str(p.get("path") or ""), str(p.get("to") or ""), p.get("outdir"))
+        except docs.DocError as e:
+            raise RpcError(str(e)) from e
+        except subprocess.TimeoutExpired as e:
+            raise RpcError("the conversion took too long") from e
+        self.recorder.add_macro("run", {"command": f"minion-convert {shlex.quote(str(p.get('path')))} {p.get('to')}"})
+        return {"path": out}
 
     def m_cursor(self, p: dict) -> dict:
         x, y = self.xi.position()
@@ -759,10 +807,176 @@ class Agent:
             self.windows.activate(win.id)
             return f'focused "{win.title}"'
         if action == "open":
-            res = self._open(p.get("target"), wait=float(p.get("wait") or 12.0))
+            res = self._open(p.get("target"), wait=float(p.get("wait") or 12.0), install=p.get("install", True))
+            if res.get("error"):
+                raise RpcError(res["error"])
             w = res.get("window")
-            return f"opened {res['command']}" + (f' → "{w["title"]}"' if w else "")
+            done = f"opened {res['command']}" + (f' → "{w["title"]}"' if w else "")
+            if res.get("installed"):
+                done = f"installed {res['installed']}, then {done}"
+            return done + (f". Tips: {res['tips']}" if res.get("tips") else "")
+        if action == "menu":
+            return self._menu(p.get("item") or p.get("path") or p.get("text"))
+        if action == "path":
+            return self._file_dialog(str(p.get("path") or p.get("text") or ""), bool(p.get("overwrite")))
         raise RpcError(f"unknown action {action!r}")
+
+    # -- menus and file dialogs ---------------------------------------
+    def _focused_a11y(self):
+        focused = self.windows.focused()
+        if focused is None:
+            raise RpcError("no window is focused: open an app first")
+        aw = a11y.window_for(focused) if a11y.AVAILABLE else None
+        return focused, aw
+
+    def _menu(self, item) -> str:
+        """Choose a menu command by its path ("File > Export > PDF"), as a person would, in one step."""
+        if isinstance(item, (list, tuple)):
+            parts = [str(s).strip() for s in item if str(s).strip()]
+        else:
+            parts = [s.strip() for s in re.split(r"\s*(?:>|→|›)\s*", str(item or "")) if s.strip()]
+        if not parts:
+            raise RpcError("menu needs a menu path, e.g. menu File > Save As (see --menus lists them)")
+        focused, aw = self._focused_a11y()
+        if aw is None:
+            raise RpcError(f'"{focused.title}" shows no menus to accessibility: use its keyboard shortcuts or click it')
+        try:
+            nodes = a11y.find_menu_path(aw, parts)
+        except ValueError as e:
+            raise RpcError(str(e)) from e
+        label = " > ".join(parts)
+        if a11y.press_menu(nodes):
+            return f"chose {label}"
+        # This app needs its menus opened: click through them like a person.
+        for node in nodes:
+            box = None
+            for _ in range(12):
+                box = a11y.menu_box(node)
+                if box:
+                    break
+                time.sleep(0.15)
+            if box is None:
+                self.xi.key("Escape")
+                raise RpcError(f"could not open the menus to reach {label}: click them, or use the app's shortcut")
+            x, y, w, h = box
+            self.xi.click(x + w // 2, y + h // 2)
+            time.sleep(0.3)
+        return f"chose {label} (clicked through the menus)"
+
+    PATH_LABEL = re.compile(r"^(file ?name|name|location|save as|file|path|object name|folder( name)?)\b", re.I)
+    FILE_DIALOG = re.compile(
+        r"open|save|export|import|select|choose|browse|file|folder|location|upload|attach|insert", re.I
+    )
+
+    def _path_field(self):
+        """The text box of the focused file dialog that takes a file name or path, or None."""
+        focused, aw = self._focused_a11y()
+        if aw is None:
+            return None, focused
+        snap = a11y.snapshot(aw, max_elements=400, budget=2.0, screen=self.size)
+        fields = [el for el in snap.elements if el.role in a11y.TEXT_INPUT and el.role != "terminal"]
+        named = [el for el in fields if self.PATH_LABEL.match((el.name or "").strip())]
+        if named:
+            return next((el for el in named if "focused" in el.states), named[0]), focused
+        if self.FILE_DIALOG.search(focused.title or ""):
+            return next((el for el in fields if "focused" in el.states), None), focused
+        return None, focused
+
+    def _file_dialog(self, path: str, overwrite: bool = False) -> str:
+        """Type a full path into the open file dialog (Open, Save As, Export, Upload, ...) and confirm."""
+        if not path.strip():
+            raise RpcError("path needs a file path, e.g. path ~/Documents/report.pdf")
+        full = os.path.normpath(os.path.expanduser(path.strip()))
+        if not os.path.isabs(full):
+            full = os.path.join(self.home, full)
+        field, focused = self._path_field()
+        if field is None:  # GTK's Open dialog has no path box until ctrl+L asks for one
+            self.xi.key("ctrl+l")
+            time.sleep(0.5)
+            field, focused = self._path_field()
+        if field is None:
+            raise RpcError(
+                "no file dialog is open: open one first (ctrl+o to open, ctrl+shift+s to save as), then use path"
+            )
+        typed = full
+        if re.search(r"\.(exe|msi)\b|wine", (focused.app or "") + " " + (focused.title or ""), re.I):
+            typed = "Z:" + full.replace("/", "\\")  # a Windows program (Wine) sees the Linux root as Z:
+        self.xi.click(field.center[0], field.center[1])
+        time.sleep(0.1)
+        self.xi.key("ctrl+a")
+        self.xi.type(typed)
+        time.sleep(0.15)
+        self.xi.key("Delete")  # drop a selected auto-completion suffix, so Return takes exactly this path
+        self.xi.key("Return")
+        if not self._focus_leaves(focused.id, 3.0):
+            raise RpcError(
+                f"entered {full}, but the file dialog is still open: if that is a folder it opened it; "
+                "otherwise check its file type list or see what it says"
+            )
+        done = self._confirm_replace(overwrite)
+        problem = self._dialog_error()
+        if problem:
+            raise RpcError(f"the file dialog refused {full}: {problem}")
+        return f"entered {full} in the file dialog" + done
+
+    def _focus_leaves(self, wid: str, timeout: float) -> bool:
+        """Wait until window `wid` is no longer focused (closed, or a confirmation came up over it)."""
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            time.sleep(0.2)
+            try:
+                now = self.windows.focused()
+            except WindowError:
+                continue
+            if now is None or now.id != wid:
+                time.sleep(0.3)  # let the next window draw and fill its accessibility tree
+                return True
+        return False
+
+    def _dialog_error(self) -> str:
+        """The message of an error box the app just showed (and closes it), or ""."""
+        try:
+            focused, aw = self._focused_a11y()
+        except RpcError:
+            return ""
+        if aw is None:
+            return ""
+        snap = a11y.snapshot(aw, max_elements=60, budget=1.5, screen=self.size)
+        is_alert = any(el.role == "alert" for el in snap.elements) or re.search(r"error|warning", focused.title, re.I)
+        said = [el.name or el.text for el in snap.elements if el.role in ("label", "static", "text") and el.name]
+        if not is_alert or not said:
+            return ""
+        ok = next((el for el in snap.elements if el.role in ("push button", "button")), None)
+        if ok is not None:
+            self.xi.click(*ok.center)
+        else:
+            self.xi.key("Escape")
+        return " ".join(said)[:300]
+
+    def _confirm_replace(self, overwrite: bool) -> str:
+        """Answer "a file named x already exists, replace it?" only when the caller said so."""
+        try:
+            focused, aw = self._focused_a11y()
+        except RpcError:
+            return ""
+        if aw is None:
+            return ""
+        snap = a11y.snapshot(aw, max_elements=120, budget=1.5, screen=self.size)
+        said = " ".join(f"{el.name} {el.text}" for el in snap.elements)
+        if not re.search(r"already exists|replace it|overwrite", said, re.I):
+            return ""
+        buttons = {(el.name or "").strip().lower(): el for el in snap.elements if el.role in ("push button", "button")}
+        answer = next((buttons[n] for n in ("replace", "overwrite", "yes", "ok") if n in buttons), None)
+        cancel = next((buttons[n] for n in ("cancel", "no") if n in buttons), None)
+        if overwrite and answer is not None:
+            self.xi.click(*answer.center)
+            self._focus_leaves(focused.id, 3.0)
+            return " and replaced the existing file"
+        if cancel is not None:
+            self.xi.click(*cancel.center)
+        else:
+            self.xi.key("Escape")
+        raise RpcError("that file already exists: nothing was replaced. Use path with overwrite to replace it")
 
     def _portable(self, params: dict) -> dict:
         """Step parameters with @ids replaced by what they pointed at (a label or x,y), so a
@@ -998,6 +1212,39 @@ class Agent:
             raise RpcError(f"no such file in the desktop: {t} (list the folder with run('ls'))")
         return t, "command"
 
+    def _from_catalog(self, target: str, install: bool) -> tuple[str, str, dict]:
+        """`open NAME` for apps that aren't on this desktop's profile: web apps open in the browser, apps
+        install themselves the first time (Debian packages, .debs, AppImages, GitHub releases), and apps
+        that don't exist on Linux come back with alternatives. Returns (command, kind, notes)."""
+        app, rest = catalog.lookup(target)
+        if app is None:
+            word = target.split()[0] if target.split() else ""
+            if word and "/" not in word and not shutil.which(word) and install and catalog.apt_package(word):
+                try:
+                    secs, _ = catalog.install([word])
+                except catalog.InstallError as e:
+                    raise RpcError(f"{word} is not installed and {e}") from e
+                return target, "command", {"installed": f"{word} ({secs:.0f}s)"}
+            return target, "command", {}
+        name = app.get("name", app["id"])
+        notes: dict = {"app": app["id"]}
+        if app["id"] not in self._tipped and catalog.tips(app):
+            self._tipped.add(app["id"])
+            notes["tips"] = catalog.tips(app)
+        if app.get("unavailable"):
+            raise RpcError(catalog.unavailable_message(app))
+        if app.get("url"):
+            return f"{self._browser()} {shlex.quote(app['url'])}", "url", notes
+        if not catalog.installed(app):
+            if not install:
+                raise RpcError(f"{name} is not installed here; open it with install allowed (the default) to add it")
+            try:
+                secs, _ = catalog.install(catalog.sources(app))
+            except catalog.InstallError as e:
+                raise RpcError(f"{name} is not installed and {e}") from e
+            notes["installed"] = f"{name} ({secs:.0f}s)"
+        return app["command"] + (f" {rest}" if rest else ""), "app", notes
+
     OFFICE_EXT = {
         ".docx",
         ".doc",
@@ -1053,10 +1300,13 @@ class Agent:
                     return f"{fm} {q}"
         return f"xdg-open {q}"
 
-    def _open(self, target, wait: float = 12.0) -> dict:
+    def _open(self, target, wait: float = 12.0, install: bool = True) -> dict:
         if not target:
             raise RpcError("open needs a target: an app name, a URL, a file path or a command")
         cmd, kind = self._resolve_open(str(target))
+        extra: dict = {}
+        if kind == "command":
+            cmd, kind, extra = self._from_catalog(str(target).strip(), install)
         try:
             before = {w.id: w for w in self.windows.list(with_states=False)}
         except WindowError:
@@ -1067,6 +1317,7 @@ class Agent:
             proc = subprocess.Popen(
                 ["bash", "-lc", cmd],
                 cwd=self.home,
+                env=catalog.launch_env(),
                 stdin=subprocess.DEVNULL,
                 stdout=log,
                 stderr=log,
@@ -1101,7 +1352,7 @@ class Agent:
                 # The window shows before its document can take keystrokes: wait for the document.
                 end = time.monotonic() + 8.0
                 while time.monotonic() < end:
-                    aw = a11y.find_window(title=found.title, pid=found.pid)
+                    aw = a11y.window_for(found)
                     if aw is not None and a11y.has_document(aw):
                         break
                     time.sleep(0.25)
@@ -1117,6 +1368,7 @@ class Agent:
             "pid": proc.pid,
             "window": found.to_dict() if found else None,
             "elapsed": round(time.monotonic() - t0, 2),
+            **extra,
         }
         try:
             also = [
@@ -1200,7 +1452,7 @@ class Agent:
 
     def m_open(self, p: dict) -> dict:
         with self.input_lock:
-            res = self._open(p.get("target"), wait=float(p.get("wait") or 12.0))
+            res = self._open(p.get("target"), wait=float(p.get("wait") or 12.0), install=p.get("install", True))
         if "error" not in res:
             self.recorder.add_macro("open", {"target": p.get("target")})
         self.recorder.add("open", res["command"], self.screen.grab(), ok="error" not in res)

@@ -279,3 +279,33 @@ def test_compact_restore_grid_and_timeout():
     assert calls[-1]["grid"] is True
     r = tk.call("computer", {"command": "wait-for --timeout soon Saved"})
     assert r.is_error and "takes seconds" in r.text
+
+
+def test_compact_menus_paths_documents_and_installs():
+    calls = []
+    tk = _toolkit()
+    tk.t_act = lambda a, p: calls.append(("act", a)) or []
+    tk.t_see = lambda a, p: calls.append(("see", a)) or []
+    tk.t_files = lambda a, p: calls.append(("files", a)) or []
+    tk.t_open = lambda a, p: calls.append(("open", a)) or []
+    for cmd in (
+        "menu File > Export As > Export as PDF...",
+        "path '~/My Documents/out.pdf' --overwrite",
+        "see --menus",
+        "read ~/Documents/report.docx",
+        "convert ~/Documents/report.docx pdf",
+        "open gimp --no-install",
+        "click button:Save",
+    ):
+        assert not tk.call("computer", {"command": cmd}).is_error, cmd
+    assert calls[0] == ("act", {"actions": [{"action": "menu", "item": "File > Export As > Export as PDF..."}]})
+    assert calls[1] == ("act", {"actions": [{"action": "path", "path": "~/My Documents/out.pdf", "overwrite": True}]})
+    assert calls[2][1]["menus"] is True
+    assert calls[3] == ("files", {"action": "read", "path": "~/Documents/report.docx"})
+    assert calls[4] == ("files", {"action": "convert", "path": "~/Documents/report.docx", "to": "pdf"})
+    assert calls[5] == ("open", {"target": "gimp", "install": False})
+    assert calls[6][1]["actions"][0] == {"action": "click", "target": "button:Save"}
+    assert tk.call("computer", {"command": "convert ~/a.docx"}).is_error  # needs a format
+    assert tk.call("computer", {"command": "path"}).is_error
+    r = _toolkit().call("act", {"actions": [{"action": "menu"}]})
+    assert r.is_error and "needs item" in r.text

@@ -333,7 +333,7 @@ def cmd_pull(args) -> int:
 def cmd_see(args) -> int:
     d = desktop(args)
     ocr = True if args.ocr else ("auto" if not args.no_ocr else False)
-    obs = d.see(ocr=ocr, window=args.window, full_text=args.full, changes=args.changes)
+    obs = d.see(ocr=ocr, window=args.window, full_text=args.full, changes=args.changes, menus=args.menus)
     if args.json:
         emit_json(obs.__dict__)
     else:
@@ -399,9 +399,13 @@ def cmd_move(args) -> int:
 
 
 def cmd_type(args) -> int:
+    from .tools import _escapes
+
     text = " ".join(args.text)
     if text == "-":
-        text = sys.stdin.read()
+        text = sys.stdin.read()  # (stdin is typed exactly as it is)
+    elif not args.raw:
+        text = _escapes(text)  # \n is Return and \t is Tab, as in act strings; \\ is a backslash
     if args.paste:  # a pasted trailing newline is often dropped: press Return as its own step
         steps = [{"action": "paste", "text": text}] + ([{"action": "key", "keys": "Return"}] if args.enter else [])
         return act_and_print(args, *steps)
@@ -438,6 +442,44 @@ def cmd_select(args) -> int:
     return act_and_print(args, {"action": "select", "target": args.target, "option": " ".join(args.option)})
 
 
+def desktop_path(path: str) -> str:
+    """A path for the desktop: a shell expands ~ to *this* machine's home (/root/x.pdf, /Users/ada/x.pdf),
+    which means the desktop's home (~/x.pdf) there."""
+    home = os.path.expanduser("~").rstrip("/")
+    if home and home != "/home/agent" and (path == home or path.startswith(home + "/")):
+        return "~" + path[len(home) :]
+    return path
+
+
+def cmd_menu(args) -> int:
+    return act_and_print(args, {"action": "menu", "item": " ".join(args.item)})
+
+
+def cmd_path(args) -> int:
+    path = desktop_path(" ".join(args.path))
+    return act_and_print(args, {"action": "path", "path": path, "overwrite": args.overwrite})
+
+
+def cmd_read(args) -> int:
+    d = desktop(args)
+    text = d.read(desktop_path(args.file))
+    if args.json:
+        emit_json({"path": args.file, "text": text})
+    else:
+        sys.stdout.write(text if text.endswith("\n") else text + "\n")
+    return 0
+
+
+def cmd_convert(args) -> int:
+    d = desktop(args)
+    out = d.convert(desktop_path(args.file), args.format, desktop_path(args.outdir) if args.outdir else None)
+    if args.json:
+        emit_json({"path": out})
+    else:
+        ok(f"{args.file} → {out}")
+    return 0
+
+
 def cmd_wait_for(args) -> int:
     return act_and_print(
         args,
@@ -463,10 +505,15 @@ def cmd_act(args) -> int:
 
 def cmd_open(args) -> int:
     d = desktop(args)
-    res = d.open(" ".join(args.target), wait=args.wait)
+    if not args.no_install and not args.json:
+        info(f"opening {' '.join(args.target)} (an app that isn't installed yet is installed first)")
+        sys.stdout.flush()
+    res = d.open(" ".join(args.target), wait=args.wait, install=not args.no_install)
     if args.json:
         emit_json(res)
         return 0 if "error" not in res else 1
+    if res.get("installed"):
+        ok(f"installed {res['installed']}")
     w = res.get("window")
     if w:
         ok(f'opened {res["command"]} → "{w["title"]}"')
@@ -477,6 +524,8 @@ def cmd_open(args) -> int:
         return 1
     else:
         ok(f"launched {res['command']} (no new window yet)")
+    if res.get("tips"):
+        info(f"tips: {res['tips']}")
     return 0
 
 
@@ -795,14 +844,15 @@ minion — instant, featherweight Linux desktops for AI agents.
 
 First run: minion setup (checks Docker, prepares a desktop, connects your agent apps)
 Start:     minion up [office|dev|research|browser|data|windows|base]    then: minion see · minion view
-Look:      see · shot · windows
-Act:       click · type · key · scroll · drag · fill · select · open · run · act (batch) · wait-for
+Look:      see (--menus lists every menu command) · shot · windows · read (any document as text)
+Act:       click · type · key · scroll · drag · fill · select · menu · path · open · run · act (batch) · wait-for
+Apps:      open gimp / vscode / chrome / figma ... (installed the first time) · convert (docx → pdf, ...)
 Manage:    ls · rm · stop · start · freeze · thaw · fork · snapshot · restore · use · cp · clip
 Connect:   connect (add Minion to Claude, Cursor, VS Code, Codex...) · mcp (the MCP server itself)
            serve (HTTP API + dashboard) · view (live) · share (a URL for ChatGPT, Claude.ai, Le Chat)
            tools (definitions for any LLM API) · skill (SKILL.md for agents with a shell)
 
-Targets for click/move/fill: @12 (an id from `minion see`), "Sign in" (visible text), or 640,400.
+Targets for click/move/fill: @12 (an id from `minion see`), "Sign in" (visible text), button:Save, or 640,400.
 Docs: https://github.com/apophisss/minion
 """
 
@@ -890,6 +940,7 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--window", "-w", help="describe this window instead of the focused one")
     sp.add_argument("--full", action="store_true", help="keep paragraphs whole (for reading)")
     sp.add_argument("--changes", action="store_true", help="only what changed since the previous look")
+    sp.add_argument("--menus", action="store_true", help="also list the app's menu commands and shortcuts")
 
     sp = add("shot", cmd_shot, "take a screenshot", aliases=["screenshot"])
     sp.add_argument("-o", "--output", help="file (.png/.jpg/.webp) or - for stdout")
@@ -917,8 +968,9 @@ def build_parser() -> argparse.ArgumentParser:
         sp.add_argument("target", nargs="+")
         sp.add_argument("--shot", metavar="FILE")
 
-    sp = add("type", cmd_type, "type text into the focused element")
+    sp = add("type", cmd_type, "type text into the focused element (\\n is Return, \\t is Tab)")
     sp.add_argument("text", nargs="+", help="text to type (- reads stdin)")
+    sp.add_argument("--raw", action="store_true", help="type backslashes as they are (no \\n or \\t)")
     sp.add_argument("--enter", action="store_true", help="press Return afterwards")
     sp.add_argument("--paste", action="store_true", help="paste through the clipboard (fast for long text)")
     sp.add_argument("--shot", metavar="FILE")
@@ -949,6 +1001,23 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("option", nargs="+")
     sp.add_argument("--shot", metavar="FILE")
 
+    sp = add("menu", cmd_menu, 'choose a menu command by its path: minion menu "File > Export as PDF"')
+    sp.add_argument("item", nargs="+")
+    sp.add_argument("--shot", metavar="FILE")
+
+    sp = add("path", cmd_path, "type a full path into the open file dialog and confirm: minion path ~/out.pdf")
+    sp.add_argument("path", nargs="+")
+    sp.add_argument("--overwrite", action="store_true", help="replace the file if it exists")
+    sp.add_argument("--shot", metavar="FILE")
+
+    sp = add("read", cmd_read, "print any file in the desktop as text (docx, xlsx, pptx, pdf, odt, epub, html, images)")
+    sp.add_argument("file")
+
+    sp = add("convert", cmd_convert, "convert a document in the desktop: minion convert ~/report.docx pdf")
+    sp.add_argument("file")
+    sp.add_argument("format", help="pdf, docx, odt, xlsx, ods, csv, pptx, odp, html, txt, md, png, jpg")
+    sp.add_argument("--outdir", help="folder for the result (default: next to the file)")
+
     sp = add("wait-for", cmd_wait_for, "wait until text is visible on screen (or --gone)")
     sp.add_argument("text", nargs="+")
     sp.add_argument("--timeout", "-t", type=float, default=15, help="seconds to wait (15)")
@@ -965,6 +1034,7 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "action strings: click|dclick|rclick|move TARGET · type TEXT (\\n is Return, \\t is Tab) · "
             "paste TEXT · key KEYS [N] (or a sequence: key Tab Tab Return) · fill TARGET TEXT · select TARGET OPTION · "
+            "menu File > Save As · path FILE [--overwrite] · "
             "scroll DIR [N] [TARGET] · drag FROM TO · wait SECONDS · wait_for TEXT · focus WINDOW. "
             "The text of type/paste/fill is taken as is (one pair of outer quotes is removed). "
             "Also JSON objects/lists, or - for JSON on stdin"
@@ -978,9 +1048,10 @@ def build_parser() -> argparse.ArgumentParser:
     )
     sp.add_argument("--shot", metavar="FILE", help="also save a screenshot (or the --observe crop image) here")
 
-    sp = add("open", cmd_open, "open an app, URL, file or command")
+    sp = add("open", cmd_open, "open an app (installed first if needed: minion open gimp), a URL, a file or a command")
     sp.add_argument("target", nargs="+")
     sp.add_argument("--wait", type=float, default=12.0, help="seconds to wait for a window")
+    sp.add_argument("--no-install", action="store_true", help="fail instead of installing a missing app")
 
     sp = add("run", cmd_run, "run a shell command inside the desktop (piped stdin is passed on)", aliases=["exec"])
     sp.add_argument("command", nargs="+")

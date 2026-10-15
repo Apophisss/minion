@@ -580,15 +580,29 @@ def top_windows() -> list[dict]:
     return out
 
 
-def find_window(title: str | None = None, pid: int | None = None) -> dict | None:
+def find_window(title: str | None = None, pid: int | None = None, box=None) -> dict | None:
+    """The accessible window for an X window (its title, process and on-screen box [x, y, w, h]).
+    The box is the strongest clue: a "Save" dialog's confirmation is also titled "Save" for the window
+    manager, but accessibility calls it "Question"."""
     wins = top_windows()
     active = [w for w in wins if w["active"]]
     if title is None and pid is None:
         return active[-1] if active else None
 
-    # Prefer exact title (+pid) matches, then active ones.
+    distances: dict[int, int] = {}
+
+    def distance(w) -> int:
+        if id(w) not in distances:
+            with LOCK:
+                e = _extents(w["node"])
+            distances[id(w)] = sum(abs(a - b) for a, b in zip(e, box, strict=True)) if e else 1 << 30
+        return distances[id(w)]
+
+    # Same place and size, then exact title (+pid) matches, then active ones.
     def score(w):
         s = 0
+        if box is not None and (not pid or w["pid"] == pid) and distance(w) <= 40:
+            s += 5
         if title is not None and w["name"] == title:
             s += 4
         elif title is not None and title and (title in w["name"] or w["name"] in title) and w["name"]:
@@ -602,7 +616,17 @@ def find_window(title: str | None = None, pid: int | None = None) -> dict | None
     best = max(wins, key=score, default=None)
     if best is None or score(best) < 2:
         return active[-1] if active else None
+    tied = [w for w in wins if score(w) == score(best)]
+    if box is not None and len(tied) > 1:
+        best = min(tied, key=distance)
     return best
+
+
+def window_for(win) -> dict | None:
+    """find_window for a Windows.Window (wmctrl): by title, process and geometry."""
+    if win is None:
+        return find_window()
+    return find_window(title=win.title, pid=win.pid, box=(win.x, win.y, win.w, win.h))
 
 
 def snapshot(
@@ -1079,6 +1103,217 @@ def select_option(el: Element, wanted: str) -> str | None:
         except Exception:
             pass
     return None
+
+
+MENU_ITEM_ROLES = {"menu item", "check menu item", "radio menu item", "menu"}
+_MODIFIERS = {"primary": "ctrl", "control": "ctrl", "ctrl": "ctrl", "shift": "shift", "alt": "alt", "mod1": "alt"}
+_MODIFIERS.update({"super": "super", "meta": "super", "cmd": "ctrl"})
+
+
+def _shortcut(binding: str) -> str:
+    """An action's key binding as "ctrl+shift+s". GTK gives "mnemonic;<Alt>f:s;<Primary><Shift>s",
+    Qt and LibreOffice "Ctrl+Shift+S"."""
+    accel = binding.split(";")[2] if binding.count(";") >= 2 else binding
+    mods = re.findall(r"<(\w+)>", accel)
+    key = re.sub(r"<\w+>", "", accel).strip()
+    if not mods and "+" in key.rstrip("+"):
+        *mods, key = key.split("+")
+    if not key or key.startswith(":") or ":" in key:
+        return ""
+    names = [_MODIFIERS.get(m.lower(), m.lower()) for m in mods]
+    order = [m for m in ("ctrl", "alt", "shift", "super") if m in names]
+    return "+".join([*order, key.lower() if len(key) == 1 else key])
+
+
+def _action_names(node) -> list[str]:
+    try:
+        return [Atspi.Action.get_action_name(node, i) or "" for i in range(Atspi.Action.get_n_actions(node))]
+    except Exception:
+        return []
+
+
+def _key_binding(node) -> str:
+    try:
+        for i in range(Atspi.Action.get_n_actions(node)):
+            found = _shortcut(Atspi.Action.get_key_binding(node, i) or "")
+            if found:
+                return found
+    except Exception:
+        pass
+    return ""
+
+
+def _children(node, limit: int = 200) -> list:
+    try:
+        n = min(node.get_child_count(), limit)
+    except Exception:
+        return []
+    out = []
+    for i in range(n):
+        try:
+            child = node.get_child_at_index(i)
+        except Exception:
+            continue
+        if child is not None:
+            out.append(child)
+    return out
+
+
+def _menu_bar(window: dict, max_depth: int = 6):
+    """The window's menu bar (a real one: LibreOffice also exposes an empty, collapsed twin)."""
+    queue, best = [(window["node"], 0)], None
+    while queue:
+        node, depth = queue.pop(0)
+        if _role(node) == "menu bar":
+            box = _extents(node)
+            kids = len(_children(node, 40))
+            if kids and (best is None or (box and box[2] > 0 and box[3] > 0)):
+                best = node
+                if box and box[2] > 0 and box[3] > 0:
+                    return node
+            continue
+        if depth < max_depth:
+            queue.extend((c, depth + 1) for c in _children(node, 60))
+    return best
+
+
+def menu_name(name: str) -> str:
+    """Menu labels compare without mnemonics, ellipses and case: "Save _As…" == "save as"."""
+    return " ".join(re.sub(r"[_&~]|\.\.\.|…", "", name).split()).casefold().rstrip(":")
+
+
+def menu_items(window: dict, max_depth: int = 2, limit: int = 600) -> list[tuple[int, str, str, bool, bool]]:
+    """The commands in the window's menus, without opening them: [(depth, name, shortcut, enabled, submenu)]."""
+    if not _init():
+        return []
+    out: list[tuple[int, str, str, bool, bool]] = []
+    with LOCK:
+        bar = _menu_bar(window)
+        if bar is None:
+            return []
+
+        def walk(node, depth: int) -> None:
+            for child in _children(node):
+                if len(out) >= limit:
+                    return
+                role = _role(child)
+                if role not in MENU_ITEM_ROLES:
+                    if role in ("panel", "filler", "unknown"):  # some toolkits wrap items in a container
+                        walk(child, depth)
+                    continue
+                name = _name(child).strip()
+                if not name:
+                    continue
+                st = _states(child)
+                enabled = Atspi.StateType.ENABLED in st or Atspi.StateType.SENSITIVE in st
+                sub = role == "menu"
+                out.append((depth, name, "" if sub else _key_binding(child), enabled, sub))
+                if sub and depth < max_depth:
+                    walk(child, depth + 1)
+
+        walk(bar, 0)
+    return out
+
+
+def format_menus(items: list[tuple[int, str, str, bool, bool]], width: int = 400) -> list[str]:
+    """One line per menu: "File: New ▸ · Open... (ctrl+o) · Save (ctrl+s) · … (+3 greyed out)". Commands
+    that can't be used right now are only counted (they cost tokens and can't be chosen)."""
+    lines: list[str] = []
+    path: list[str] = []
+    current: dict[str, list[str]] = {}
+    greyed: dict[str, int] = {}
+    order: list[str] = []
+    for depth, name, keys, enabled, sub in items:
+        path = path[:depth]
+        if depth == 0:
+            path = [name]
+            current.setdefault(name, [])
+            order.append(name)
+            continue
+        parent = " > ".join(path)
+        if parent not in current:
+            current[parent] = []
+            order.append(parent)
+        if enabled:
+            current[parent].append(name + (" ▸" if sub else "") + (f" ({keys})" if keys else ""))
+        else:
+            greyed[parent] = greyed.get(parent, 0) + 1
+        if sub:
+            path = [*path, name]
+    for key in order:
+        if current.get(key):
+            line = f"{key}: " + " · ".join(current[key])
+            line = line if len(line) <= width else line[: width - 1] + "…"
+            lines.append(line + (f" (+{greyed[key]} greyed out)" if greyed.get(key) else ""))
+    return lines
+
+
+def _press(node) -> bool:
+    for i, name in enumerate(_action_names(node)):
+        if name.lower() in ("click", "press", "activate", "toggle", "select", "open"):
+            try:
+                return bool(Atspi.Action.do_action(node, i))
+            except Exception:
+                return False
+    return False
+
+
+def _menu_child(node, wanted: str):
+    kids = [(menu_name(_name(c)), c) for c in _children(node) if _role(c) in MENU_ITEM_ROLES]
+    for c in _children(node):  # items wrapped in a container
+        if _role(c) in ("panel", "filler", "unknown"):
+            kids.extend((menu_name(_name(k)), k) for k in _children(c) if _role(k) in MENU_ITEM_ROLES)
+    w = menu_name(wanted)
+    for test in (lambda n: n == w, lambda n: n.startswith(w), lambda n: w in n):
+        found = [c for n, c in kids if n and test(n)]
+        if found:
+            return found[0], [n for n, _ in kids if n]
+    return None, [n for n, _ in kids if n]
+
+
+def find_menu_path(window: dict, path: list[str]) -> list:
+    """The accessible nodes along a menu path (menu bar item first, the command last). Raises
+    ValueError naming the items that do exist when a step is missing or the command is greyed out."""
+    if not _init():
+        raise ValueError("accessibility is not available in this desktop")
+    with LOCK:
+        bar = _menu_bar(window)
+        if bar is None:
+            raise ValueError("this window has no menu bar (try its keyboard shortcuts, or right-click for a menu)")
+        nodes, node = [], bar
+        for i, part in enumerate(path):
+            child, names = _menu_child(node, part)
+            if child is None:
+                where = " > ".join(path[:i]) or "the menu bar"
+                raise ValueError(f'no "{part}" in {where}; it has: ' + " · ".join(names[:30]))
+            nodes.append(child)
+            node = child
+        last = nodes[-1]
+        st = _states(last)
+        if not (Atspi.StateType.ENABLED in st or Atspi.StateType.SENSITIVE in st):
+            raise ValueError(f'"{" > ".join(path)}" is greyed out right now (disabled)')
+        return nodes
+
+
+def press_menu(nodes: list) -> bool:
+    """Activate a menu command through accessibility, without opening its menus. False if the app
+    doesn't support that (the caller then opens the menus with the mouse)."""
+    if not _init():
+        return False
+    with LOCK:
+        return _press(nodes[-1])
+
+
+def menu_box(node) -> tuple[int, int, int, int] | None:
+    """Where a menu item is on screen now (None while its menu is closed)."""
+    if not _init():
+        return None
+    with LOCK:
+        box = _extents(node)
+        st = _states(node)
+    if not box or box[2] <= 0 or box[3] <= 0 or Atspi.StateType.SHOWING not in st:
+        return None
+    return box
 
 
 def page_state(window: dict, max_depth: int = 8, limit: int = 3000) -> tuple[bool | None, int]:

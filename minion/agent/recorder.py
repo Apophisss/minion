@@ -74,6 +74,11 @@ class Recorder:
                 lines.append(f"fill({r(t)}, {r(p.get('text', ''))})")
             elif action == "select":
                 lines.append(f"select({r(t)}, {r(p.get('option', ''))})")
+            elif action == "menu":
+                lines.append(f"menu({r(p.get('item', ''))})")
+            elif action == "path":
+                ow = ", overwrite=True" if p.get("overwrite") else ""
+                lines.append(f"path({r(p.get('path', ''))}{ow})")
             elif action == "key":
                 rep = int(p.get("repeat") or 1)
                 lines.append(f"key({r(p.get('keys'))}{f', repeat={rep}' if rep > 1 else ''})")
