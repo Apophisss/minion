@@ -83,8 +83,8 @@ In Claude Desktop, drag `dist/minion.mcpb` onto **Settings → Extensions**. Its
 ## Release and signing
 
 The release workflow builds the bundle after the PyPI upload and attaches it to the GitHub release as
-`minion.mcpb`, so the `releases/latest/download/minion.mcpb` link always serves the newest one. The MCP Registry entry
-(`server.json`) can list it as a second package with its SHA-256.
+`minion.mcpb`, so the `releases/latest/download/minion.mcpb` link always serves the newest one. The workflow then adds
+it to the MCP Registry entry (`server.json`), after the PyPI and npm packages, with its SHA-256.
 
 The bundle is unsigned (`mcpb info` says "Not signed"). To sign it, get a code-signing certificate and run
 `npx -y @anthropic-ai/mcpb@2.1.2 sign dist/minion.mcpb --cert cert.pem --key key.pem`. Signing changes the file, so
