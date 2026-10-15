@@ -899,7 +899,7 @@ class Agent:
                 "no file dialog is open: open one first (ctrl+o to open, ctrl+shift+s to save as), then use path"
             )
         typed = full
-        if re.search(r"\.(exe|msi)\b|wine", (focused.app or "") + " " + (focused.title or ""), re.I):
+        if self._is_wine(focused):
             typed = "Z:" + full.replace("/", "\\")  # a Windows program (Wine) sees the Linux root as Z:
         self.xi.click(field.center[0], field.center[1])
         time.sleep(0.1)
@@ -952,6 +952,17 @@ class Agent:
         else:
             self.xi.key("Escape")
         return " ".join(said)[:300]
+
+    @staticmethod
+    def _is_wine(win) -> bool:
+        """Is this window a Windows program running in Wine? (Its process is Wine's loader, named after the .exe.)"""
+        try:
+            with open(f"/proc/{win.pid}/cmdline", "rb") as f:
+                cmdline = f.read().decode("utf-8", "replace")
+            exe = os.path.basename(os.readlink(f"/proc/{win.pid}/exe"))
+        except OSError:
+            return False
+        return bool(re.search(r"\.exe\b", cmdline, re.I) or exe.startswith("wine"))
 
     def _confirm_replace(self, overwrite: bool) -> str:
         """Answer "a file named x already exists, replace it?" only when the caller said so."""
