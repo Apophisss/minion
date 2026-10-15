@@ -19,7 +19,7 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-6366f1" alt="MIT"></a>
 </p>
 
-<!-- mcp-name: io.github.apophisss/minion -->
+<!-- mcp-name: io.github.Apophisss/minion -->
 
 ## Get started
 

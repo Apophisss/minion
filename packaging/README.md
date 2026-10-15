@@ -6,7 +6,7 @@ itself when a `vX.Y.Z` tag is pushed:
 - **PyPI**: `minion-desktop`, the wheel and the sdist.
 - **npm**: `minion-desktop`, the TypeScript client and the `npx minion-desktop mcp` launcher (`clients/typescript`).
 - **GitHub release**: the wheel, the sdist and the Claude Desktop extension, `minion.mcpb` ([mcpb/](mcpb/README.md)).
-- **The official MCP Registry**: `server.json`, as `io.github.apophisss/minion`, with the PyPI, npm and `.mcpb`
+- **The official MCP Registry**: `server.json`, as `io.github.Apophisss/minion`, with the PyPI, npm and `.mcpb`
   packages.
 
 The files in this folder are for package managers that a person publishes to by hand, **after the PyPI release**:

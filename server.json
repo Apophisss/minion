@@ -1,6 +1,6 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
-  "name": "io.github.apophisss/minion",
+  "name": "io.github.Apophisss/minion",
   "title": "Minion",
   "description": "Featherweight Linux desktops for AI agents: read the screen as text, click, type, run any app.",
   "websiteUrl": "https://github.com/apophisss/minion/blob/main/docs/install.md",

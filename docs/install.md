@@ -251,8 +251,8 @@ With Minion installed, `"command": "minion", "args": ["mcp"]` works too. If the 
 the full path (`which uvx` on macOS and Linux, `where uvx` on Windows). Agent frameworks (OpenAI Agents SDK,
 LangChain, CrewAI and others) are covered in [integrations.md](integrations.md).
 
-Minion is also in the official [MCP Registry](https://registry.modelcontextprotocol.io/v0.1/servers?search=io.github.apophisss/minion)
-as `io.github.apophisss/minion`, for apps and directories that install from it.
+Minion is also in the official [MCP Registry](https://registry.modelcontextprotocol.io/v0.1/servers?search=io.github.Apophisss/minion)
+as `io.github.Apophisss/minion`, for apps and directories that install from it.
 
 ### With npx
 

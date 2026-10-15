@@ -9,7 +9,7 @@ submit.
 1. Release 1.0.0 (tag `v1.0.0`). The release workflow publishes PyPI, npm, the GitHub release with `minion.mcpb`,
    and the official MCP Registry. Most directories show `uvx minion-desktop mcp`, so wait until that works.
 2. Check that the registry has Minion:
-   `curl "https://registry.modelcontextprotocol.io/v0.1/servers?search=io.github.apophisss/minion"`.
+   `curl "https://registry.modelcontextprotocol.io/v0.1/servers?search=io.github.Apophisss/minion"`.
 3. Some lists accept only what a person writes and files (said below). There, use the texts as notes and write
    your own.
 
@@ -19,7 +19,7 @@ submit.
 |---|---|
 | Name | Minion |
 | Repository | https://github.com/apophisss/minion |
-| Registry name | `io.github.apophisss/minion` |
+| Registry name | `io.github.Apophisss/minion` |
 | License | MIT |
 | Install | `uvx minion-desktop mcp`, or `npx -y minion-desktop mcp` (needs uv or pipx). Claude Code: `claude plugin marketplace add apophisss/minion && claude plugin install minion@minion`. Claude Desktop: [`minion.mcpb`](https://github.com/apophisss/minion/releases/latest/download/minion.mcpb) |
 | Needs | Docker, OrbStack or Podman. uv (or pipx), except for the Claude Desktop extension |
@@ -75,6 +75,10 @@ Minion gives any AI agent its own computer: featherweight Linux desktops in loca
   adds the `.mcpb` from the GitHub release with its SHA-256, and publishes `server.json` with GitHub OIDC. The
   registry checks ownership of each package: the `mcp-name:` comment in `README.md` (PyPI's description) and
   `mcpName` in `clients/typescript/package.json` (npm).
+- **The name** has a capital A, like the GitHub account `Apophisss`: the registry lets an account publish
+  `io.github.<account>/*` with the account's exact casing
+  ([registry#689](https://github.com/modelcontextprotocol/registry/issues/689)). The release workflow checks this
+  before it publishes anything.
 - **Then:** Glama imports it, PulseMCP will pick it up, GitHub's registry syncs new versions once it has onboarded
   the server, and several registry browsers show it.
 
@@ -89,11 +93,11 @@ Minion gives any AI agent its own computer: featherweight Linux desktops in loca
 
   ```text
   Please consider onboarding Minion to the GitHub MCP Registry.
-  - Registry name: io.github.apophisss/minion, version 1.0.0
+  - Registry name: io.github.Apophisss/minion, version 1.0.0
   - Packages: PyPI minion-desktop (uvx, stdio), npm minion-desktop (npx, stdio), MCPB (GitHub release)
   - Repository: https://github.com/apophisss/minion (MIT)
   - What it does: Featherweight Linux desktops for AI agents: read the screen as text, click, type, run any app.
-  - curl "https://registry.modelcontextprotocol.io/v0.1/servers?search=io.github.apophisss/minion"
+  - curl "https://registry.modelcontextprotocol.io/v0.1/servers?search=io.github.Apophisss/minion"
   ```
 
 ## Glama
@@ -156,7 +160,7 @@ Minion gives any AI agent its own computer: featherweight Linux desktops in loca
 - **Where:** https://mcpservers.org/submit. Its list, wong2/awesome-mcp-servers, takes no pull requests.
 - **How:** the form, reviewed within two weeks (or within a day for $39).
 - **Paste:** Server Name `Minion` · Category `Development` · Short Description: the one line ·
-  Repository `https://github.com/apophisss/minion` · Official MCP Registry Name `io.github.apophisss/minion` ·
+  Repository `https://github.com/apophisss/minion` · Official MCP Registry Name `io.github.Apophisss/minion` ·
   Remote connections: no · Contact email: yours.
 
 ## LobeHub
