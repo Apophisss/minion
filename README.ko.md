@@ -1,4 +1,4 @@
-<p align="center"><a href="README.md">English</a> · <a href="README.zh-CN.md">简体中文</a> · <a href="README.zh-TW.md">繁體中文</a> · 한국어 · <a href="README.ja.md">日本語</a> · <a href="README.he.md">עברית</a></p>
+<p align="center"><a href="README.md">English</a> · <a href="README.zh-CN.md">简体中文</a> · <a href="README.zh-TW.md">繁體中文</a> · 한국어 · <a href="README.ja.md">日本語</a> · <a href="README.he.md">עברית</a> · <a href="README.es.md">Español</a></p>
 
 <p align="center">
   <img src="docs/assets/hero.png" alt="Minion: AI 에이전트를 위한 즉시 실행 데스크톱" width="100%">
