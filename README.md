@@ -272,6 +272,10 @@ When pixels matter, `screenshot --marks` labels every control with its `@id`:
 
 ## Efficiency, measured
 
+**Five real tasks (a PDF report, a spreadsheet, a Wikipedia lookup, a web form, reading a document) cost an agent
+4,356 tokens with Minion and 50,505 with screenshots: 11.6× fewer.** The full table and method are in
+[docs/benchmarks.md](docs/benchmarks.md); reproduce it with `python scripts/bench_tasks.py`.
+
 | | Tokens | |
 |---|---|---|
 | Screenshot 1280×800 | ~1,365 | the baseline |

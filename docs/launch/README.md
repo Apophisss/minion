@@ -75,6 +75,7 @@ Use these numbers as written. If the README changes, the README wins.
 | Fact | Say | Source |
 |---|---|---|
 | What it is | Featherweight Linux desktops that any AI agent can use; agents read the screen as text, act in batches or in code, and use any program or website | [README.md](../../README.md), [index.html](../index.html) |
+| Task cost | Five real tasks: 4,356 tokens with Minion vs. 50,505 with screenshots (11.6× fewer). The lead for any post about cost: the "Computer Use is 45x more expensive" HN thread (495 points) shows people care | [benchmarks.md](../benchmarks.md) |
 | Startup | Ready in about 1.5 s (1.2–1.8 s for every profile) | [README.md](../../README.md#efficiency-measured), [design.md](../design.md) |
 | Idle memory | 54–105 MB per desktop, about 60 MB typical. Firefox and LibreOffice add their own when open (a few hundred MB each) | [README.md](../../README.md#efficiency-measured), [faq.md](../faq.md) |
 | Freezing | Idle desktops freeze to 0% CPU and thaw in about 0.2 s | [README.md](../../README.md), [design.md](../design.md) |

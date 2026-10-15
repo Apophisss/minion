@@ -41,6 +41,10 @@ The first release of Minion: instant desktops that any AI agent can use.
 - **Code mode** (`script`): Python runs inside the desktop with a GUI API, so loops cost one call.
 - **Macros**: export the recorded session as a Python script that replays it without a model.
 
+**Measured**
+- Five real tasks cost an agent 4,356 tokens with Minion and 50,505 with a screenshot agent: 11.6× fewer
+  ([docs/benchmarks.md](docs/benchmarks.md), `python scripts/bench_tasks.py`).
+
 **Every agent**
 - One toolset (`minion/tools.py`), served as:
   - an MCP server over stdio or Streamable HTTP (`/mcp`): 9 tools, or one `computer` tool with `--compact`, and

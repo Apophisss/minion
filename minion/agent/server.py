@@ -970,11 +970,11 @@ class Agent:
             focused, aw = self._focused_a11y()
         except RpcError:
             return ""
-        if aw is None:
-            return ""
+        if aw is None or aw.get("role") not in ("alert", "dialog", "file chooser"):
+            return ""  # back in the app's own window (whose status bar may well say "Overwrite"): no question asked
         snap = a11y.snapshot(aw, max_elements=120, budget=1.5, screen=self.size)
         said = " ".join(f"{el.name} {el.text}" for el in snap.elements)
-        if not re.search(r"already exists|replace it|overwrite", said, re.I):
+        if not re.search(r"already exists|replace it\b|overwrite it\b", said, re.I):
             return ""
         buttons = {(el.name or "").strip().lower(): el for el in snap.elements if el.role in ("push button", "button")}
         answer = next((buttons[n] for n in ("replace", "overwrite", "yes", "ok") if n in buttons), None)
