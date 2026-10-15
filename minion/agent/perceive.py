@@ -33,6 +33,35 @@ class Target:
     match: int = 0  # how well its text matched the query (100 = exactly)
 
 
+def _within(box: tuple, region: tuple) -> tuple[int, int, int, int]:
+    """`box` clipped to `region` (both x, y, w, h)."""
+    x0, y0 = max(box[0], region[0]), max(box[1], region[1])
+    x1, y1 = min(box[0] + box[2], region[0] + region[2]), min(box[1] + box[3], region[1] + region[3])
+    return (x0, y0, x1 - x0, y1 - y0) if x1 > x0 and y1 > y0 else region
+
+
+PICTURE_ROLES = {"image", "image map", "canvas", "graphic", "figure", "video", "embedded"}
+
+
+def _below_toolbar(elements, region: tuple) -> tuple:
+    """A browser's page area before it has told accessibility where it is: below the address bar."""
+    bar = max((e.y + e.h for e in elements if e.role == "address bar" and e.y < region[1] + 200), default=None)
+    if bar is None:
+        return region
+    top = bar + 8
+    return _within((region[0], top, region[2], region[1] + region[3] - top), region)
+
+
+def _inside(point: tuple[int, int], boxes: list) -> bool:
+    return any(x <= point[0] < x + w and y <= point[1] < y + h for x, y, w, h in boxes)
+
+
+def _worth_reading(line) -> bool:
+    """Text from a picture, not a smudge: logos and icons read as "Vv" or "WY"."""
+    letters = sum(ch.isalnum() for ch in line.text)
+    return letters >= 3 or (letters == 2 and line.conf >= 85)
+
+
 @dataclass
 class OcrRef:
     id: int
@@ -41,6 +70,8 @@ class OcrRef:
     y: int
     w: int
     h: int
+    kind: str = "pic"  # text read with OCR, in a picture or a window that accessibility doesn't describe
+    region: int = -1  # which of the pictures `see` read
 
     @property
     def center(self) -> tuple[int, int]:
@@ -312,11 +343,15 @@ class Perception:
             if popups:  # a right-click menu in a window of its own: it is what the next action is about
                 elements = popups + elements
         useful = sum(1 for e in elements if e.name or e.text)
-        want_ocr = ocr is True or (ocr == "auto" and useful < 5)
-        ocr_lines = []
+        lang = ocr if isinstance(ocr, str) and ocr.lower() not in ("auto", "") else None  # "heb", "ara+eng"
+        forced = ocr is True or lang is not None
+        want_ocr = forced or (ocr == "auto" and useful < 5)
+        pictures: list[tuple[tuple[int, int, int, int], list, bool]] = []  # (box, lines, the whole window)
         ocr_note = ""
-        if want_ocr:
-            if ocr_mod.available():
+        if ocr is not False and (want_ocr or elements):
+            if not ocr_mod.available():
+                ocr_note = "OCR is not installed" if want_ocr else ""
+            else:
                 if target and not target.minimized:
                     x0, y0 = max(0, target.x), max(0, target.y)
                     x1, y1 = min(sw, target.x + target.w), min(sh, target.y + target.h)
@@ -325,14 +360,44 @@ class Perception:
                     region = (0, 0, sw, sh)
                 try:
                     img = self.screen.grab(region)
-                    ocr_lines = ocr_mod.recognize(img, offset=region[:2])
+                    area = region[2] * region[3]
+                    # Containers (most of the window) don't count as covering anything.
+                    # An image's name is its file or alt text, not the text in it: images don't cover anything.
+                    covered = [
+                        (e.x, e.y, e.w, e.h)
+                        for e in elements
+                        if (e.name or e.text) and e.w * e.h < area / 2 and e.role not in PICTURE_ROLES
+                    ]
+                    # In a browser only the page counts, not its tabs and toolbar.
+                    look = _within(snap.content, region) if snap and snap.content else _below_toolbar(elements, region)
+                    # No accessibility to speak of (and not a browser, whose page area is known): read all of it.
+                    whole = want_ocr and useful < 5 and not (snap and snap.content)
+                    spots = [look] if whole else []
+                    if not whole and elements:
+                        # Parts of the window that show text accessibility doesn't have: a slide, a canvas, a
+                        # picture, a remote screen.
+                        dx, dy = look[0] - region[0], look[1] - region[1]
+                        part = img.crop((dx, dy, dx + look[2], dy + look[3]))
+                        share = (0.02 if forced else 0.15) * area / max(1, look[2] * look[3])
+                        spots = ocr_mod.blind_spots(part, covered, origin=look[:2], min_share=share)
+                        if forced and not spots:
+                            spots, whole = [look], True
+                    if spots:
+                        hint = " ".join([w.title for w in wins] + [f"{e.name} {e.text}" for e in elements[:300]])
+                        langs, ocr_note = ocr_mod.ensure(lang.split("+") if lang else ocr_mod.langs_for(hint))
+                        for box in spots:
+                            x, y, w, h = box[0] - region[0], box[1] - region[1], box[2], box[3]
+                            part = ocr_mod.mask(img.crop((x, y, x + w, y + h)), covered, box[:2])
+                            part, (tx, ty) = ocr_mod.trim(part)
+                            lines = ocr_mod.read(part, langs, offset=(box[0] + tx, box[1] + ty))
+                            # Text accessibility already gives (a button over a slide) isn't repeated.
+                            fresh = [ln for ln in lines if _worth_reading(ln) and not _inside(ln.center, covered)]
+                            pictures.append((box, fresh, whole))
                 except Exception as e:  # OCR is best-effort
                     ocr_note = f"OCR failed: {e}"
-            else:
-                ocr_note = "OCR is not installed"
-        # Fragments with fewer than two letters or digits ("&", "»>", "Oe") are noise, not text to act on.
-        ocr_lines = [ln for ln in ocr_lines if sum(ch.isalnum() for ch in ln.text) >= 2]
-        ocr_refs = [OcrRef(0, ln.text, ln.x, ln.y, ln.w, ln.h) for ln in ocr_lines]
+        ocr_refs = []
+        for n, (_box, lines, _whole) in enumerate(pictures):
+            ocr_refs += [OcrRef(0, ln.text, ln.x, ln.y, ln.w, ln.h, kind="pic", region=n) for ln in lines]
         if register:
             self._assign(list(elements) + ocr_refs)
             fresh = {el.id: el for el in elements}
@@ -348,7 +413,9 @@ class Perception:
                 el.id = i
 
         where = f'"{target.title}"' if target else "the screen"
-        full = self._compose((sw, sh), wins, where, elements, ocr_refs, snap, a11y_note, ocr_note, want_ocr)
+        full = self._compose(
+            (sw, sh), wins, where, elements, ocr_refs, snap, a11y_note, ocr_note, want_ocr or bool(pictures), pictures
+        )
         view = self._view(wins, target, elements, ocr_refs)
         text = full
         diff = None
@@ -384,7 +451,7 @@ class Perception:
         }
 
     @staticmethod
-    def _compose(size, wins, where, elements, ocr_refs, snap, a11y_note, ocr_note, want_ocr) -> str:
+    def _compose(size, wins, where, elements, ocr_refs, snap, a11y_note, ocr_note, want_ocr, pictures=()) -> str:
         out = [f"Screen {size[0]}x{size[1]} · {len(wins)} window{'s' if len(wins) != 1 else ''}"]
         for i, w in enumerate(wins, 1):
             flags = []
@@ -403,12 +470,23 @@ class Perception:
             out.extend(a11y.format_elements(elements))
             if snap and snap.truncated:
                 out.append("  … truncated: more elements than fit. Scroll for the rest, or take a screenshot.")
-        if ocr_refs:
-            out.append("")
-            out.append(f"Text on {where} (OCR):")
-            for r in ocr_refs:
-                cx, cy = r.center
-                out.append(f'  @{r.id} "{r.text}" ({cx},{cy})')
+        for n, (box, _lines, whole) in enumerate(pictures):
+            x, y, w, h = box
+            refs = [r for r in ocr_refs if r.kind == "pic" and r.region == n]
+            if refs:
+                out.append("")
+                if whole:
+                    out.append(f"Text on {where} (OCR):")
+                else:
+                    out.append(f"Text in the picture at {x},{y} {w}x{h} (OCR: accessibility doesn't have it):")
+                for r in refs:
+                    cx, cy = r.center
+                    out.append(f'  @{r.id} "{r.text}" ({cx},{cy})')
+            elif not whole:
+                out.append(
+                    f"(A picture at {x},{y} {w}x{h} has no text OCR could read. If it matters, look at just it:"
+                    f" screenshot region={x},{y},{w},{h}.)"
+                )
         if not elements and not ocr_refs:
             note = a11y_note or ocr_note or "nothing readable"
             out.append("")
@@ -427,7 +505,7 @@ class Perception:
             items[el.id] = ((el.role, el.name, el.text, el.value, tuple(el.states)), (cx // 6, cy // 6), line, block)
         for r in ocr_refs:
             cx, cy = r.center
-            items[r.id] = (("ocr", r.text), (cx // 6, cy // 6), f'@{r.id} text "{r.text}" ({cx},{cy}) [OCR]', None)
+            items[r.id] = ((r.kind, r.text), (cx // 6, cy // 6), f'@{r.id} text "{r.text}" ({cx},{cy}) [OCR]', None)
         return {
             "time": time.time(),
             "windows": {w.id: (w.title, w.focused) for w in wins},
@@ -617,8 +695,10 @@ class Perception:
                     regions.append((x0, y0, x1 - x0, y1 - y0))
             regions.append((0, 0, sw, sh))
             qn = _norm(query).split()
+            # Read in the language of what is asked for and of the window: "שמור" needs Hebrew.
+            langs, _ = ocr_mod.ensure(ocr_mod.langs_for(f"{query} {focused.title if focused else ''}"))
             for region in regions:
-                for ln in ocr_mod.recognize(self.screen.grab(region), offset=region[:2]):
+                for ln in ocr_mod.recognize(self.screen.grab(region), lang="+".join(langs), offset=region[:2]):
                     score = match_score(query, ln.text)
                     if score >= min_score:
                         cx, cy = ln.center

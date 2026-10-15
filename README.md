@@ -266,6 +266,25 @@ Changes since your last look 1.0s ago (81 elements unchanged; their @ids still w
   ~ @80 label "4 words, 30 characters" (281,730)
 ```
 
+Text that accessibility doesn't expose (a slideshow, a canvas app, a picture of text, a remote screen, a program
+without an accessibility tree) is read with OCR, only where it is missing and in the screen's own language: the scripts
+in the window's titles and labels choose it. Hebrew, Arabic, Russian, Chinese, Japanese, Korean and Hindi are built in,
+and other languages install on first use. Large text and light text on colour get passes of their own, and a picture
+that hasn't changed is never read twice. On 24 photographed Hebrew slides, `see` reads 94% of the words. Here it is on
+a web page that shows a slide as an image:
+
+```text
+@2 heading "Board meeting, October 15" (640,131)
+@3 paragraph "The slides from the quarterly review:" (640,186)
+
+Text in the picture at 0,117 800x480 (OCR: accessibility doesn't have it):
+  @4 "Q3 review" (146,254)
+  @5 "Revenue grew 12% to $4.1M" (218,348)
+  @6 "1,240 new customers, churn down to 2.1%" (291,404)
+  @7 "Next: launch in Japan and Brazil" (239,460)
+  @8 "| Goal: $5M in Q4" (163,555)
+```
+
 When pixels matter, `screenshot --marks` labels every control with its `@id`:
 
 <p align="center"><img src="docs/assets/marks.png" alt="Screenshot with @id marks on every clickable element" width="720"></p>

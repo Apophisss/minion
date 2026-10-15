@@ -56,7 +56,7 @@ COMPACT_INSTRUCTIONS = """\
 Minion gives you real Linux computers (isolated desktops with GUI apps; any program can be installed).
 Use the `computer` tool, one command per call:
   create [office|browser|dev|research|data|windows|base] [--name NAME] [--count N]
-  see [--changes] [--full] [--ocr]  -> the screen as text; act on the @ids it lists
+  see [--changes] [--full] [--ocr] [--lang=heb]  -> the screen as text; act on the @ids it lists
   click|dclick|rclick TARGET · type TEXT · key KEYS · fill TARGET TEXT · select TARGET OPTION · scroll up|down [N]
   menu File > Save As · path FILE [--overwrite] (in a file dialog) · see --menus (all menu commands)
   wait-for TEXT · open APP|URL|FILE · run SHELL · script PYTHON · screenshot [--marks] [--low]
@@ -132,8 +132,10 @@ TOOLS: list[dict] = [
         "name": "see",
         "description": (
             "Read the screen as text: windows, then the focused window's UI elements with stable @ids, roles, "
-            "names, values, states and center coordinates (accessibility tree; OCR when an app exposes none). "
-            "Exact and far cheaper than a screenshot. changes=true returns only what changed since your last look."
+            "names, values, states and center coordinates (accessibility tree). Text that accessibility doesn't "
+            "have (an app without it, slides, canvases, pictures of text, remote screens) is read with OCR in the "
+            "screen's language. Exact and far cheaper than a screenshot. changes=true returns only what changed "
+            "since your last look."
         ),
         "input_schema": {
             "type": "object",
@@ -142,7 +144,11 @@ TOOLS: list[dict] = [
                 "changes": {"type": "boolean", "description": "Only what changed since your previous see()."},
                 "ocr": {
                     "type": "boolean",
-                    "description": "Also read text by OCR (slower; canvases, images, remote screens).",
+                    "description": "Also OCR smaller pictures and, when nothing is missing, the whole window (slower).",
+                },
+                "lang": {
+                    "type": "string",
+                    "description": 'OCR language when the screen\'s own is wrong: "heb", "ara+eng", "jpn"... (implies ocr)',
                 },
                 "window": {"type": "string", "description": "Describe this window (title, app or index) instead."},
                 "full_text": {"type": "boolean", "description": "Keep paragraphs whole (to read an article/document)."},
@@ -383,7 +389,7 @@ COMPUTER_TOOL = {
     "description": (
         "Use Linux computers through one command per call (CLI syntax). Commands: "
         "create [profile] [--name NAME] [--count N] · "
-        "list · use NAME · remove [NAME] · see [--changes] [--ocr] [--full] · screenshot [--marks] [--low] "
+        "list · use NAME · remove [NAME] · see [--changes] [--ocr] [--lang=X] [--full] · screenshot [--marks] [--low] "
         "[--zoom x,y,w,h] · click TARGET · dclick TARGET · rclick TARGET · type TEXT · key KEYS · "
         "scroll up|down [N] · fill TARGET TEXT · select TARGET OPTION · drag FROM TO · wait-for TEXT [--timeout N] · "
         "menu File > Save As · path FILE [--overwrite] · see --menus · read FILE · convert FILE FORMAT · "
@@ -989,7 +995,7 @@ class Toolkit:
     def t_see(self, args: dict, progress) -> list:
         d = self.desk(args)
         obs = d.see(
-            ocr=True if args.get("ocr") else "auto",
+            ocr=str(args["lang"]) if args.get("lang") else (True if args.get("ocr") else "auto"),
             window=args.get("window"),
             full_text=bool(args.get("full_text")),
             changes=bool(args.get("changes")),
@@ -1261,6 +1267,7 @@ class Toolkit:
                 {
                     "changes": "--changes" in flags,
                     "ocr": "--ocr" in flags,
+                    "lang": next((f.split("=", 1)[1] for f in flags if f.startswith("--lang=")), None),
                     "full_text": "--full" in flags,
                     "menus": "--menus" in flags,
                 },
@@ -1371,7 +1378,7 @@ class Toolkit:
 
 # Options each compact command takes (others take their text verbatim and are not checked).
 _COMPACT_FLAGS = {
-    "see": {"--changes", "--ocr", "--full", "--menus"},
+    "see": {"--changes", "--ocr", "--lang", "--full", "--menus"},
     "path": {"--overwrite"},
     "convert": set(),
     "screenshot": {"--marks", "--low", "--zoom", "--grid"},

@@ -332,7 +332,7 @@ def cmd_pull(args) -> int:
 
 def cmd_see(args) -> int:
     d = desktop(args)
-    ocr = True if args.ocr else ("auto" if not args.no_ocr else False)
+    ocr = args.lang or (True if args.ocr else ("auto" if not args.no_ocr else False))
     obs = d.see(ocr=ocr, window=args.window, full_text=args.full, changes=args.changes, menus=args.menus)
     if args.json:
         emit_json(obs.__dict__)
@@ -935,7 +935,8 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("profiles", nargs="*")
 
     sp = add("see", cmd_see, "describe the screen as text: windows and UI elements with @ids")
-    sp.add_argument("--ocr", action="store_true", help="always add OCR text")
+    sp.add_argument("--ocr", action="store_true", help="also OCR small pictures, or the whole window")
+    sp.add_argument("--lang", help="OCR language if not the screen's own: heb, ara+eng, jpn, ...")
     sp.add_argument("--no-ocr", action="store_true", help="never run OCR")
     sp.add_argument("--window", "-w", help="describe this window instead of the focused one")
     sp.add_argument("--full", action="store_true", help="keep paragraphs whole (for reading)")

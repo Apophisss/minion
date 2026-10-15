@@ -70,6 +70,14 @@ Yes. `open gimp`, `open vscode` or `open dbeaver` installs the app the first tim
 `minion-install` takes `.deb`/`.AppImage` URLs, `pip:` and `npm:` packages. Inside an app, `see --menus` lists
 every command with its shortcut, and `menu`, `path` and `read` cover menus, file dialogs and documents. The [list of apps by name](apps.md) has the details.
 
+**What about text that isn't in the accessibility tree, or isn't in English?**
+
+`see` reads it with OCR, only in the parts of the window that accessibility misses (a slideshow, a canvas, a picture
+of text, a remote screen), and in the screen's language, which the scripts in its titles and labels choose. Hebrew,
+Arabic, Russian, Chinese, Japanese, Korean and Hindi are built in. Other languages are installed the first time they
+are needed, or you can name one with `lang` (`minion see --lang tha`). To read a slideshow or a scanned document page
+by page, loop `key("Right")` and `see()` in one `script` call. `files read` reads image files and scanned PDFs too.
+
 **Something looks wrong. How do I debug?**
 `minion doctor` checks your setup, `minion logs` shows the desktop's session log, `minion view` lets you watch,
 and `minion shot --marks` shows what the agent can target.

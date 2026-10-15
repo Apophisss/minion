@@ -449,7 +449,8 @@ class Handler(BaseHTTPRequestHandler):
                 )
             return self._send(200, shot.data, shot.mime, headers)
         if method == "GET" and op == "see":
-            obs = d.see(ocr=True if q("ocr") == "1" else "auto", window=q("window"), menus=q("menus") == "1")
+            ocr = q("lang") or (True if q("ocr") == "1" else "auto")
+            obs = d.see(ocr=ocr, window=q("window"), menus=q("menus") == "1")
             return self._json(obs.__dict__)
         if method == "GET" and op == "info":  # no wake-up: safe to poll on frozen desktops
             return self._json(d.info().to_dict())

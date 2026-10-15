@@ -22,6 +22,13 @@ The first release of Minion: instant desktops that any AI agent can use.
 - `see(changes=true)` returns only what changed since the last look at that window, including new terminal output and
   changed editor lines. Moves and truncation don't count as changes. Long diffs fall back to the full view and say why.
 - `see(menus=true)` lists every menu command with its keyboard shortcut. Open right-click menus are listed first.
+- **Text accessibility doesn't have** is read with OCR where it is missing: slides, canvases, pictures of text, remote
+  screens and programs without an accessibility tree. It is read in the screen's language, chosen from the scripts of
+  its titles and labels or given with `lang`. Hebrew, Arabic, Russian, Chinese, Japanese, Korean and Hindi are built
+  into the images, and others install on first use. Extra passes catch large text and light text on colour, and a
+  cache means an unchanged picture is never read twice. On 24 photographed Hebrew slides, 94% of the words are read,
+  up from 2%. `files read` reads image files and scanned PDFs the same way, and clicking on visible text that only
+  OCR can find works in the text's language.
 - **Documents as text**: `files read` / `minion read` return the text of docx, xlsx (values and formulas), pptx,
   odt/ods/odp, pdf (OCR for scans), epub, html, images and doc/xls/ppt. `files convert` / `minion convert` change
   formats, even while LibreOffice is open. Inside desktops: `minion-read` and `minion-convert`.
