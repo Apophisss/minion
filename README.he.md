@@ -1,4 +1,4 @@
-<p align="center"><a href="README.md">English</a> · <a href="README.zh-CN.md">简体中文</a> · <a href="README.zh-TW.md">繁體中文</a> · <a href="README.ko.md">한국어</a> · <a href="README.ja.md">日本語</a> · עברית</p>
+<p align="center"><a href="README.md">English</a> · <a href="README.zh-CN.md">简体中文</a> · <a href="README.zh-TW.md">繁體中文</a> · <a href="README.ko.md">한국어</a> · <a href="README.ja.md">日本語</a> · עברית · <a href="README.es.md">Español</a></p>
 
 <p align="center">
   <img src="docs/assets/hero.png" alt="Minion: שולחנות עבודה מיידיים לסוכני AI" width="100%">
