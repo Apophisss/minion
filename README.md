@@ -71,7 +71,7 @@ brief.docx."* Every way to install is in [docs/install.md](docs/install.md).
 - **🖥️ Any program, any website.** Every desktop is a real Linux computer: browsers, LibreOffice, IDEs, terminals,
   file dialogs and installers, plus Windows programs through the `windows` (Wine) profile. **Open any app by name**
   and it is installed the first time (`open gimp`, `open vscode`, `open dbeaver`, any Debian package), web apps open
-  in the browser (`open gmail`), and the first open answers with a few tips for the app.
+  in the browser (`open gmail`), and the first open answers with a few tips for the app. [130+ apps by name](docs/apps.md).
 - **🧭 Shortcuts through every app.** `see --menus` lists every menu command with its keyboard shortcut, and
   `menu "File > Export as PDF"` runs one without opening a menu. `path ~/out.pdf` fills any Open/Save dialog.
   Right-click menus show up in `see`, `button:Save` picks one kind of control, and a button below the fold is
@@ -329,7 +329,7 @@ out of desktops unless a human hands off. Read [SECURITY.md](SECURITY.md).
 
 ## Documentation
 
-[Website](https://apophisss.github.io/minion/) · [Install](docs/install.md) · [Connect your apps](docs/connect.md) · [Remote MCP](docs/remote.md) · [Design](docs/design.md) · [Agents & MCP](docs/agents.md) · [Integrations](docs/integrations.md) · [CLI](docs/cli.md) · [Python](docs/python.md) · [HTTP API](docs/http-api.md) · [Claude computer use](docs/computer-use.md) · [OpenAI & Gemini computer use](docs/computer-use-openai-gemini.md) · [Profiles](docs/profiles.md) · [Windows apps](docs/windows-apps.md) · [Architecture](docs/architecture.md) · [FAQ](docs/faq.md)
+[Website](https://apophisss.github.io/minion/) · [Install](docs/install.md) · [Connect your apps](docs/connect.md) · [Remote MCP](docs/remote.md) · [Design](docs/design.md) · [Agents & MCP](docs/agents.md) · [Integrations](docs/integrations.md) · [CLI](docs/cli.md) · [Python](docs/python.md) · [HTTP API](docs/http-api.md) · [Claude computer use](docs/computer-use.md) · [OpenAI & Gemini computer use](docs/computer-use-openai-gemini.md) · [Profiles](docs/profiles.md) · [Apps by name](docs/apps.md) · [Windows apps](docs/windows-apps.md) · [Architecture](docs/architecture.md) · [FAQ](docs/faq.md)
 
 ## Contributing
 

@@ -102,3 +102,15 @@ def test_unpacked_archives_run_from_their_own_folder():
         sources = [*app.get("deb", {}).values(), *(v for k, v in app.get("github", {}).items() if k != "repo")]
         if command.startswith(("~/apps/", "$HOME/apps/")) or any(re.search(r"tar\W*gz", s) for s in sources):
             assert command.startswith(f"~/apps/{app['id']}/"), app["id"]
+
+
+def test_the_apps_page_is_up_to_date():
+    """docs/apps.md is generated from the catalog: regenerate it with scripts/gen_apps_doc.py."""
+    import importlib.util
+    from pathlib import Path
+
+    script = Path(__file__).resolve().parent.parent / "scripts" / "gen_apps_doc.py"
+    spec = importlib.util.spec_from_file_location("gen_apps_doc", script)
+    gen = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(gen)
+    assert gen.DOC.read_text() == gen.render(), "run: python scripts/gen_apps_doc.py"

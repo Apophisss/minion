@@ -68,7 +68,7 @@ for: pulling desktop images, installing apps inside a desktop, and `minion share
 Yes. `open gimp`, `open vscode` or `open dbeaver` installs the app the first time (Debian packages, official
 `.deb`s and AppImages), and `open gmail` or `open figma` opens web apps. Any Debian package works by name, and
 `minion-install` takes `.deb`/`.AppImage` URLs, `pip:` and `npm:` packages. Inside an app, `see --menus` lists
-every command with its shortcut, and `menu`, `path` and `read` cover menus, file dialogs and documents.
+every command with its shortcut, and `menu`, `path` and `read` cover menus, file dialogs and documents. The [list of apps by name](apps.md) has the details.
 
 **Something looks wrong. How do I debug?**
 `minion doctor` checks your setup, `minion logs` shows the desktop's session log, `minion view` lets you watch,
