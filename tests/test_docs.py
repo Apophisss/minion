@@ -125,7 +125,7 @@ def test_html_epub_text_and_errors(tmp_path):
     )
     assert "Chapter one" in docs.read(book)[0]
     note = tmp_path / "n.md"
-    note.write_text("# Notes\n\n\n\nkeep")
+    note.write_bytes(b"# Notes\n\n\n\nkeep")  # (bytes: on Windows, write_text would store \r\n)
     assert docs.read(str(note)) == ("# Notes\n\n\n\nkeep", "text")  # text files stay exact
     with pytest.raises(docs.DocError, match="no such file"):
         docs.read(str(tmp_path / "missing.docx"))

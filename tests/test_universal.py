@@ -142,7 +142,7 @@ def test_installed_checks_the_command(fake_catalog, monkeypatch, tmp_path):
     monkeypatch.setattr(catalog.shutil, "which", lambda name: "/usr/bin/gimp" if name == "gimp" else None)
     assert catalog.installed(catalog.find("gimp")) and not catalog.installed(catalog.find("vscode"))
     exe = tmp_path / "Postman"
-    app = {"id": "postman", "command": f"{exe} --flag"}
+    app = {"id": "postman", "command": f"{exe.as_posix()} --flag"}  # (commands are POSIX shell words)
     assert not catalog.installed(app)
     exe.write_text("")
     assert catalog.installed(app)
