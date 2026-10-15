@@ -123,6 +123,9 @@ minion path ~/Documents/report.pdf        # fill the open Save/Open dialog
 minion cp :~/Documents/notes.md .        # copy files out (and in)
 ```
 
+<p align="center"><img src="docs/assets/any-app.gif" alt="An agent exports a PDF through LibreOffice's menu and Save dialog, then opens GIMP, which installs itself first" width="720"></p>
+<p align="center"><sub>Menus, file dialogs and apps by name: <code>menu "File > Export As > Export Directly as PDF"</code>, <code>path ~/Documents/report.pdf</code>, then <code>open gimp</code>, which installed GIMP in 16 s. Recorded by the flight recorder.</sub></p>
+
 ## Works with every agent
 
 | Your agent | Connect with |

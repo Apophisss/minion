@@ -213,7 +213,7 @@ APPS: list[dict] = [
         "aliases": ["gimp-3", "gnu image manipulation program"],
         "apt": ["gimp"],
         "command": "gimp",
-        "tips": "ctrl+shift+e Export As (PNG/JPG; ctrl+s saves .xcf only), ctrl+shift+v paste as new image, "
+        "tips": "First start shows a Welcome dialog: Escape closes it. ctrl+shift+e Export As (PNG/JPG; ctrl+s saves .xcf only), ctrl+shift+v paste as new image, "
         "ctrl+shift+j fit in window, shift+c crop, t text, Image > Scale Image. Batch: magick in.png "
         "-resize 50% out.jpg (minion-install imagemagick).",
         "size_mb": 90,

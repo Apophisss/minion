@@ -1455,8 +1455,10 @@ class Agent:
 
     @staticmethod
     def _splash(w) -> bool:
-        """A splash screen (LibreOffice's logo window) is not the app's window yet."""
-        return w.title in ("LibreOffice", "") and w.w <= 800 and w.h <= 400
+        """A splash screen (LibreOffice's logo window, "GIMP Startup", "Loading…") is not the app's window yet."""
+        if w.title in ("LibreOffice", "") and w.w <= 800 and w.h <= 400:
+            return True
+        return bool(re.search(r"\b(startup|starting|loading|splash)\b", w.title, re.I)) and w.w <= 900 and w.h <= 600
 
     def _until_ready(self, found, before: dict, deadline: float):
         """Apps often map a window before they are ready (a splash, a generic title that changes when
@@ -1485,7 +1487,8 @@ class Agent:
             res = self._open(p.get("target"), wait=float(p.get("wait") or 12.0), install=p.get("install", True))
         if "error" not in res:
             self.recorder.add_macro("open", {"target": p.get("target")})
-        self.recorder.add("open", res["command"], self.screen.grab(), ok="error" not in res)
+        detail = res["command"] + (f" (installed {res['installed']} first)" if res.get("installed") else "")
+        self.recorder.add("open", detail, self.screen.grab(), ok="error" not in res)
         return res
 
     def m_run(self, p: dict) -> dict:
