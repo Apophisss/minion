@@ -28,13 +28,14 @@ The first release of Minion: instant desktops that any AI agent can use.
 
 **Acting**
 - Actions wait for the screen to settle, for web pages and documents to be ready, and for dialogs that appear a moment
-  later. Each one reports what changed.
+  later. Each one reports what changed, including typing that an app still starting up only shows seconds later.
 - Text targets match exactly: "Delete" never clicks "Delete all". A miss fails with the closest controls and their
   `@ids` instead of clicking something else.
 - `fill` only types into text fields. `select` picks dropdown options. Unknown key names are errors.
-- `menu` runs any menu command by its path ("File > Export As > Export as PDF...") without opening menus.
-- `path` fills the open Open/Save/Export dialog with a full path and confirms; existing files are only replaced with
-  `overwrite`, and the app's error boxes are reported.
+- `menu` runs any menu command by its path ("File > Export As > Export as PDF...") without opening menus, and waits
+  for the dialog that a command ending in "…" opens.
+- `path` fills the open Open/Save/Export dialog with a full path and confirms (it waits for a dialog that is still
+  opening); existing files are only replaced with `overwrite`, and the app's error boxes are reported.
 - Targets can name a kind of control (`button:Save`, `link:Docs`, `field:Email`), and a control that is scrolled out
   of view is scrolled into view.
 - Typing in LibreOffice is lossless for any language, and its coordinates are correct from the first look.

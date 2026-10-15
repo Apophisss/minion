@@ -290,6 +290,7 @@ def test_setup_for_real(tmp_path, monkeypatch, capsys):
     monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.setenv("USERPROFILE", str(tmp_path))
     monkeypatch.setattr(connect, "interactive", lambda: False)
+    monkeypatch.setattr(connect, "detected", lambda: [])  # agent apps installed on this computer don't count
     assert onboard.setup(["base"], yes=True) == 0
     out = capsys.readouterr().out
     assert "base is ready" in out and "No agent apps found" in out
