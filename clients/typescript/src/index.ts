@@ -202,6 +202,10 @@ export interface OpenResult {
   window: WindowInfo | null;
   elapsed: number;
   error?: string;
+  /** The app that was installed first, e.g. "GIMP (48s)". */
+  installed?: string;
+  /** Short tips for the app, the first time it is opened. */
+  tips?: string;
 }
 
 /** `Desktop.run()` */
@@ -267,6 +271,8 @@ export type KnownAction =
   | { action: "paste"; text: string }
   | { action: "fill"; target: Target; text: string }
   | { action: "select"; target: Target; option: string }
+  | { action: "menu"; item: string }
+  | { action: "path"; path: string; overwrite?: boolean }
   | { action: "key" | "press" | "hotkey"; keys: string; repeat?: number }
   | { action: "hold_key"; keys: string; seconds?: number }
   | { action: "wait" | "sleep"; seconds?: number }
@@ -318,6 +324,8 @@ export interface SeeOptions {
   ocr?: boolean;
   /** Describe this window (title, app or index) instead of the focused one. */
   window?: string;
+  /** Also list the app's menu commands with their keyboard shortcuts (for `menu()`). */
+  menus?: boolean;
 }
 
 export interface ScreenshotOptions {
@@ -333,6 +341,8 @@ export interface ScreenshotOptions {
 export interface OpenOptions {
   /** Seconds to wait for a window to appear (default 12). */
   wait?: number;
+  /** Install a missing app first (default true): `open("gimp")` works on any desktop. */
+  install?: boolean;
 }
 
 export interface RunOptions {
@@ -807,7 +817,7 @@ export class Desktop {
 
   /** The screen as text: windows, then the focused window's controls with `@ids` to act on. */
   see(options: SeeOptions = {}): Promise<Observation> {
-    return this.#get("see", { ocr: options.ocr, window: options.window });
+    return this.#get("see", { ocr: options.ocr, window: options.window, menus: options.menus });
   }
 
   /** A screenshot. Pixels in a full-size screenshot are desktop coordinates. */
@@ -879,6 +889,16 @@ export class Desktop {
     return this.act({ action: "select", target, option }, options);
   }
 
+  /** Choose a menu command by its path: `menu("File > Export as PDF")`. `see({ menus: true })` lists them. */
+  menu(item: string, options: ActOptions = {}): Promise<ActResult> {
+    return this.act({ action: "menu", item }, options);
+  }
+
+  /** Type a full path into the open file dialog (Open, Save As, Export, Upload...) and confirm it. */
+  path(filePath: string, overwrite = false, options: ActOptions = {}): Promise<ActResult> {
+    return this.act({ action: "path", path: filePath, overwrite }, options);
+  }
+
   /** Drag from one target to another. */
   drag(from: Target, to: Target, options: ActOptions = {}): Promise<ActResult> {
     return this.act({ action: "drag", from, to }, options);
@@ -897,7 +917,20 @@ export class Desktop {
    * wait for its window.
    */
   open(target: string, options: OpenOptions = {}): Promise<OpenResult> {
-    return this.#post("open", { target, wait: options.wait });
+    return this.#post("open", { target, wait: options.wait, install: options.install });
+  }
+
+  /**
+   * Any file in the desktop as text: text files as they are, and documents converted (docx, xlsx with
+   * values and formulas, pptx, odt/ods/odp, pdf, epub, html, images by OCR, doc/xls/ppt).
+   */
+  async read(path: string): Promise<string> {
+    return (await this.#post<{ text: string }>("read", { path })).text;
+  }
+
+  /** Convert a document or image in the desktop (`"pdf"`, `"docx"`, `"xlsx"`, `"csv"`, `"png"`, ...); returns the new path. */
+  async convert(path: string, to: string, outdir?: string): Promise<string> {
+    return (await this.#post<{ path: string }>("convert", { path, to, outdir })).path;
   }
 
   /** Run a shell command in the desktop (`sudo` works). */

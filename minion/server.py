@@ -449,7 +449,7 @@ class Handler(BaseHTTPRequestHandler):
                 )
             return self._send(200, shot.data, shot.mime, headers)
         if method == "GET" and op == "see":
-            obs = d.see(ocr=True if q("ocr") == "1" else "auto", window=q("window"))
+            obs = d.see(ocr=True if q("ocr") == "1" else "auto", window=q("window"), menus=q("menus") == "1")
             return self._json(obs.__dict__)
         if method == "GET" and op == "info":  # no wake-up: safe to poll on frozen desktops
             return self._json(d.info().to_dict())
@@ -487,7 +487,12 @@ class Handler(BaseHTTPRequestHandler):
             )
             return self._json(r.__dict__)
         if op == "open":
-            return self._json(d.open(body.get("target") or "", wait=float(body.get("wait") or 12)))
+            install = body.get("install", True) is not False
+            return self._json(d.open(body.get("target") or "", wait=float(body.get("wait") or 12), install=install))
+        if op == "read":  # any document as text
+            return self._json({"text": d.read(body.get("path") or "", max_chars=int(body.get("max_chars") or 200_000))})
+        if op == "convert":
+            return self._json({"path": d.convert(body.get("path") or "", body.get("to") or "", body.get("outdir"))})
         if op == "clipboard":
             if "text" in body:
                 d.clipboard = body["text"]

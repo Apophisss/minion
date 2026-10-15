@@ -636,8 +636,10 @@ def snapshot(
     text_limit: int = 160,
     max_children: int = 400,
     screen: tuple[int, int] | None = None,
+    clip: bool = True,
 ) -> Snapshot:
-    """Walk a window's accessible tree and collect visible, meaningful elements."""
+    """Walk a window's accessible tree and collect visible, meaningful elements. clip=False also keeps
+    page content that is scrolled out of view (to find a target and scroll it into view)."""
     snap = Snapshot(app=window.get("app", ""), window=window.get("name", ""))
     if not _init():
         snap.error = "accessibility is not available in this desktop"
@@ -655,8 +657,8 @@ def snapshot(
             return
         snap.visited += 1
         st = _states(node)
-        if depth > 0 and Atspi.StateType.SHOWING not in st:
-            return
+        if depth > 0 and Atspi.StateType.SHOWING not in st and (clip or not in_doc):
+            return  # (a page's content scrolled out of view isn't "showing", but it is there to scroll to)
         role = _role(node)
         if role in SKIP_ROLES:
             return
@@ -871,7 +873,7 @@ def snapshot(
                     depth + 1,
                     child_shown_depth,
                     in_doc or role in WEB_DOCS,
-                    (x, y, w, h) if role in WEB_DOCS and boxed else view,
+                    (x, y, w, h) if role in WEB_DOCS and boxed and clip else view,
                 )
         if n > max_children:
             snap.truncated = True
@@ -908,7 +910,8 @@ def browser_compact(elements: list[Element]) -> tuple[list[Element], list[str]]:
         return elements, []
     tabs = [e for e in elements if not e.in_doc and e.role == "page tab"]
     page = next((e for e in elements if not e.in_doc and e.role in WEB_DOCS), None)
-    keep: list[Element] = []
+    # An open menu (a right-click menu, the ≡ menu) is what the next action is about: it goes first.
+    keep: list[Element] = [e for e in elements if not e.in_doc and e.role in MENU_ITEM_ROLES]
     for e in elements:
         if e.in_doc:
             keep.append(e)
@@ -933,6 +936,23 @@ def browser_compact(elements: list[Element]) -> tuple[list[Element], list[str]]:
     if page is not None and page.name:
         header.append(f'Web page "{page.name}"' + (f" ({len(tabs)} tabs open)" if len(tabs) > 1 else ""))
     return keep, header
+
+
+def popup_menus(window: dict, screen: tuple[int, int] | None = None) -> list[Element]:
+    """The open popup menus of a window's app that live in windows of their own (GTK, Qt and LibreOffice
+    right-click menus, an opened menu-bar menu): their items, so `see` lists them and targets reach them."""
+    if not _init():
+        return []
+    out: list[Element] = []
+    for tw in top_windows():
+        if tw["pid"] != window.get("pid") or not tw["showing"] or tw["role"] not in ("window", "menu", "popup menu"):
+            continue
+        if tw["node"] is window.get("node"):
+            continue
+        snap = snapshot(tw, max_elements=80, budget=1.0, screen=screen)
+        if any(e.role in MENU_ITEM_ROLES for e in snap.elements):
+            out.extend(snap.elements)
+    return out
 
 
 def _same(a: str, b: str) -> bool:
