@@ -21,7 +21,7 @@
 
 <p align="center">English · <a href="README.zh-CN.md">简体中文</a> · <a href="README.zh-TW.md">繁體中文</a> · <a href="README.ko.md">한국어</a> · <a href="README.ja.md">日本語</a> · <a href="README.he.md">עברית</a></p>
 
-<!-- mcp-name: io.github.apophisss/minion -->
+<!-- mcp-name: io.github.Apophisss/minion -->
 
 ## Get started
 
@@ -37,8 +37,9 @@ All you need is [Docker](https://docs.docker.com/get-docker/) (or OrbStack or Po
 [![Install in Goose](https://goose-docs.ai/img/extension-install-dark.svg)](https://goose-docs.ai/extension?cmd=uvx&arg=minion-desktop&arg=mcp&timeout=900&id=minion&name=Minion&description=Linux%20desktops%20that%20agents%20read%20as%20text%20and%20control)
 [![Add to Kiro](https://kiro.dev/images/add-to-kiro.svg)](https://kiro.dev/launch/mcp/add?name=minion&config=%7B%22command%22%3A%22uvx%22%2C%22args%22%3A%5B%22minion-desktop%22%2C%22mcp%22%5D%7D)
 
-Claude Code: `claude plugin marketplace add apophisss/minion && claude plugin install minion@minion`. The buttons
-start Minion with [uv](https://docs.astral.sh/uv/); the Claude Desktop extension needs nothing else.
+Claude Code: `claude plugin marketplace add apophisss/minion && claude plugin install minion@minion`. Any other MCP
+client: `uvx minion-desktop mcp`, or `npx -y minion-desktop mcp`. The buttons, uvx and npx start Minion with
+[uv](https://docs.astral.sh/uv/) (npx can use pipx instead); the Claude Desktop extension needs nothing else.
 
 **2. One line** that installs Minion and connects every AI app on your computer (Claude Desktop, Claude Code,
 Cursor, VS Code, Windsurf/Devin, Gemini CLI, Codex, LM Studio, Cline, Kiro):

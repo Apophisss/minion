@@ -7,6 +7,7 @@ HTTP API. It works with the Vercel AI SDK, Mastra, LangChain.js, the OpenAI and 
 - **Typed.** Every method and every server response has a type.
 - **Ready for function calling.** `listTools()` returns Minion's tools in OpenAI, Anthropic, Gemini or MCP format,
   `callTool()` runs them, and `toVercelAiTools()` plugs them into the Vercel AI SDK.
+- **An npx command for MCP clients.** `npx -y minion-desktop mcp` starts Minion's MCP server (see [MCP](#mcp)).
 
 ## Install
 
@@ -258,12 +259,19 @@ the same way.
 Agents that speak MCP can skip HTTP and use Minion's MCP server directly. It offers the same tools over stdio:
 
 ```bash
+npx -y minion-desktop mcp   # with this package
 uvx minion-desktop mcp      # or `minion mcp` if Minion is installed
 ```
 
 In any MCP client (the Vercel AI SDK's MCP client, `@mastra/mcp`, `@langchain/mcp-adapters`,
-`@modelcontextprotocol/sdk`, ...), configure a stdio server with the command `uvx` and the arguments
-`["minion-desktop", "mcp"]`. See [docs/agents.md](../../docs/agents.md).
+`@modelcontextprotocol/sdk`, ...), configure a stdio server with the command `npx` and the arguments
+`["-y", "minion-desktop", "mcp"]`, or `uvx` and `["minion-desktop", "mcp"]`. See [docs/agents.md](../../docs/agents.md).
+
+This package's `minion-desktop` command is a launcher: Minion is a Python program, so it runs `minion` from PyPI in
+the same version as this package with uvx, else `pipx run`, else an installed `minion` command, and passes stdin and
+stdout straight through. It needs [uv](https://docs.astral.sh/uv/) or pipx, and Docker for the desktops. Any
+arguments go to `minion` (`npx -y minion-desktop doctor`), and `MINION_SPEC` picks another version or a fork
+(`MINION_SPEC=git+https://github.com/apophisss/minion`).
 
 ## Security
 
@@ -277,7 +285,7 @@ agents should not reach even that folder. See [SECURITY.md](../../SECURITY.md).
 
 ```bash
 npm install
-npm test               # builds, then runs the offline tests against a fake server
+npm test               # builds, then runs the offline tests: a fake server, and fake uvx and pipx for the launcher
 
 # Against a real server (creates no desktops). MINION_HOME keeps this server out of your Minion state.
 MINION_HOME="$(mktemp -d)" minion serve --port 4810 --token tstok --idle-freeze 0 --quiet &

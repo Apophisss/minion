@@ -3,9 +3,9 @@ name: Release
 # Tag vX.Y.Z (the VERSION in minion/agent/__init__.py) to publish:
 #   - PyPI: minion-desktop (trusted publishing; environment "pypi")
 #   - GitHub release: wheel, sdist and the Claude Desktop extension (minion.mcpb)
-#   - npm: minion-desktop, the TypeScript client (trusted publishing, or an NPM_TOKEN secret for the very first
-#     release; environment "npm")
-#   - the official MCP Registry: server.json (GitHub OIDC, no secret)
+#   - npm: minion-desktop, the TypeScript client and the `npx minion-desktop` launcher (trusted publishing, or an
+#     NPM_TOKEN secret for the very first release; environment "npm")
+#   - the official MCP Registry: server.json, with the PyPI, npm and .mcpb packages (GitHub OIDC, no secret)
 # Desktop images are published by images.yml for the same tag.
 # One-time setup: on pypi.org and npmjs.com, add this repository as a trusted publisher (workflow: release.yml).
 
@@ -32,6 +32,16 @@ jobs:
           test "$GITHUB_REF_NAME" = "v$VERSION" || { echo "::error::tag $GITHUB_REF_NAME but VERSION $VERSION"; exit 1; }
           test "$(jq -r .version clients/typescript/package.json)" = "$VERSION" || { echo "::error::clients/typescript/package.json is not $VERSION"; exit 1; }
           test "$(jq -r .version plugins/minion/.claude-plugin/plugin.json)" = "$VERSION" || { echo "::error::plugin.json is not $VERSION"; exit 1; }
+      # Checked before anything is published, because PyPI and npm releases can't be changed afterwards.
+      - name: The MCP Registry will accept server.json's name
+        run: |
+          NAME=$(jq -r .name server.json)
+          case "$NAME" in # the registry grants io.github.<owner>/* with the owner's exact casing
+            "io.github.$GITHUB_REPOSITORY_OWNER/"*) ;;
+            *) echo "::error::server.json's name $NAME must start with io.github.$GITHUB_REPOSITORY_OWNER/"; exit 1 ;;
+          esac
+          grep -qF "mcp-name: $NAME" README.md || { echo "::error::README.md has no 'mcp-name: $NAME' for PyPI"; exit 1; }
+          test "$(jq -r .mcpName clients/typescript/package.json)" = "$NAME" || { echo "::error::clients/typescript/package.json's mcpName is not $NAME"; exit 1; }
       - run: uv build
       - uses: pypa/gh-action-pypi-publish@release/v1
       # Build the extension after the PyPI upload, which takes everything in dist/ (and rejects a .mcpb).
@@ -70,7 +80,7 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }} # only for the first release; afterwards OIDC is used
 
   mcp-registry:
-    needs: release
+    needs: [release, npm] # the registry checks that the PyPI and npm packages exist
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -79,20 +89,20 @@ jobs:
       - uses: actions/checkout@v4
       - name: Install mcp-publisher
         run: curl -fsSL https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_linux_amd64.tar.gz | tar xz mcp-publisher
-      - name: Version, and the extension as a second package
+      - name: Version, and the extension as a third package
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
           URL="https://github.com/$GITHUB_REPOSITORY/releases/download/$GITHUB_REF_NAME/minion.mcpb"
           curl -fsSL -o "$RUNNER_TEMP/minion.mcpb" "$URL"
           SHA256=$(sha256sum "$RUNNER_TEMP/minion.mcpb" | cut -d' ' -f1)
           jq --arg v "$VERSION" --arg url "$URL" --arg sha "$SHA256" '
-            .version = $v | .packages[0].version = $v
+            .version = $v | .packages[].version = $v
             | .packages += [{registryType: "mcpb", identifier: $url, version: $v, fileSha256: $sha, transport: {type: "stdio"}}]
           ' server.json > "$RUNNER_TEMP/server.json"
           mv "$RUNNER_TEMP/server.json" server.json
       - run: ./mcp-publisher validate
       - run: ./mcp-publisher login github-oidc
-      - name: Publish (retries while PyPI starts serving the new version)
+      - name: Publish (retries while PyPI and npm start serving the new version)
         run: |
           for _ in 1 2 3 4 5 6; do
             ./mcp-publisher publish && exit 0

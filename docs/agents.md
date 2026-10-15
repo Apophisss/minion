@@ -7,6 +7,7 @@ see [remote.md](remote.md). To add Minion to every agent app on your computer at
 
 ```bash
 uvx minion-desktop mcp          # without installing anything (needs uv)
+npx -y minion-desktop mcp       # the same through npm, for clients that expect npx (needs uv or pipx)
 minion mcp                      # if Minion is installed
 ```
 

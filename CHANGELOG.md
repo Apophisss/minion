@@ -59,6 +59,8 @@ The first release of Minion: instant desktops that any AI agent can use.
   Minion to Claude Desktop, Claude Code, Cursor, VS Code, Windsurf/Devin, Gemini CLI, Codex, LM Studio, Cline and Kiro.
 - One-click installs: a Claude Desktop extension (`minion.mcpb`), buttons for VS Code, Visual Studio, Cursor,
   LM Studio, Goose and Kiro, a Claude Code plugin, and an MCP Registry entry.
+- `npx -y minion-desktop mcp` for MCP clients that expect an npx command: the npm package runs Minion from PyPI,
+  in the same version, with uvx or pipx.
 - `minion share`: a public HTTPS MCP URL (Cloudflare quick tunnel) for ChatGPT, Claude.ai and Le Chat.
 
 **Working alongside people**

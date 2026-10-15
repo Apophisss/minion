@@ -88,7 +88,7 @@ Use these numbers as written. If the README changes, the README wins.
 | Code mode | A 50-step GUI loop in one tool call; only what the code prints comes back | [README.md](../../README.md), [design.md](../design.md) |
 | Profiles | `browser`, `office`, `dev`, `research`, `data`, `windows` (Wine), `base`; images of 187–707 MB that share layers; your own profile is a short TOML file | [README.md](../../README.md#profiles), [install.md](../install.md) |
 | `minion connect` | Claude Desktop, Claude Code, Cursor, VS Code (and GitHub Copilot CLI), Devin Desktop/Windsurf, Gemini CLI, Codex, LM Studio, Cline, Kiro, Zed. One entry, a backup first, idempotent, reversible | [connect.md](../connect.md), [install.md](../install.md#minion-connect) |
-| One click | A Claude Desktop extension (`minion.mcpb`, needs only Docker), buttons for VS Code, Visual Studio, Cursor, LM Studio, Goose and Kiro, a Claude Code plugin, and the MCP Registry entry `io.github.apophisss/minion` | [README.md](../../README.md#get-started), [install.md](../install.md), [design.md](../design.md) |
+| One click | A Claude Desktop extension (`minion.mcpb`, needs only Docker), buttons for VS Code, Visual Studio, Cursor, LM Studio, Goose and Kiro, a Claude Code plugin, and the MCP Registry entry `io.github.Apophisss/minion` | [README.md](../../README.md#get-started), [install.md](../install.md), [design.md](../design.md) |
 | One line | `install.sh` / `install.ps1` install uv and Minion, then `minion setup` checks Docker, prepares a desktop and runs `minion connect` | [install.md](../install.md), [design.md](../design.md) |
 | Web chat apps | ChatGPT, Claude.ai and Le Chat through `minion share`: a public HTTPS MCP URL (Cloudflare quick tunnel) with a fresh token; Ctrl+C stops it | [README.md](../../README.md), [install.md](../install.md#chatgpt-and-claudeai-on-the-web), [CHANGELOG.md](../../CHANGELOG.md) |
 | Interfaces | MCP over stdio or Streamable HTTP, function calling (OpenAI Chat Completions and Responses, Anthropic, Gemini), HTTP with OpenAPI, a CLI and an Agent Skill, a Python SDK and a TypeScript client | [CHANGELOG.md](../../CHANGELOG.md), [design.md](../design.md) |
@@ -111,7 +111,7 @@ Use these numbers as written. If the README changes, the README wins.
 | Install guide | https://github.com/apophisss/minion/blob/main/docs/install.md |
 | PyPI | https://pypi.org/project/minion-desktop/ |
 | Claude Desktop extension | https://github.com/apophisss/minion/releases/latest/download/minion.mcpb |
-| MCP Registry | https://registry.modelcontextprotocol.io/v0.1/servers?search=io.github.apophisss/minion |
+| MCP Registry | https://registry.modelcontextprotocol.io/v0.1/servers?search=io.github.Apophisss/minion |
 | Changelog | https://github.com/apophisss/minion/blob/main/CHANGELOG.md |
 | Security model | https://github.com/apophisss/minion/blob/main/SECURITY.md |
 | One-line install | `curl -fsSL https://raw.githubusercontent.com/apophisss/minion/main/install.sh \| sh` (macOS, Linux) · `irm https://raw.githubusercontent.com/apophisss/minion/main/install.ps1 \| iex` (Windows) |
