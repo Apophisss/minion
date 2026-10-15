@@ -25,7 +25,7 @@ import sys
 import time
 import tomllib
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 from .errors import MinionError, NotFound
@@ -275,6 +275,45 @@ def _copilot_entry(launch: Launch) -> dict:
     return {**_stdio(launch), "tools": ["*"]}  # Copilot's default (every tool), spelled out
 
 
+def _opencode() -> Path:
+    """opencode's global config (opencode.jsonc if that is the one in use)."""
+    folder = _env_dir("XDG_CONFIG_HOME", _home() / ".config") / "opencode"
+    jsonc = folder / "opencode.jsonc"
+    return jsonc if jsonc.exists() and not (folder / "opencode.json").exists() else folder / "opencode.json"
+
+
+def _opencode_entry(launch: Launch) -> dict:  # opencode 1.x: mcp.<name>
+    return {"type": "local", "command": [launch.command, *launch.args], "enabled": True}
+
+
+def _opencode_v2_entry(launch: Launch) -> dict:  # opencode 2: mcp.servers.<name>, connected unless "disabled"
+    return {"type": "local", "command": [launch.command, *launch.args]}
+
+
+def _opencode_variant(text: str | None) -> tuple[str, Callable[[Launch], dict]]:
+    """opencode 2 keeps servers under mcp.servers, 1.x under mcp: the config, or else the installed version, says which."""
+    try:
+        data = json.loads(_without_comments((text or "").lstrip(BOM)) or "{}")
+        if isinstance(data.get("mcp"), dict) and isinstance(data["mcp"].get("servers"), dict):
+            return "mcp.servers", _opencode_v2_entry
+    except (ValueError, AttributeError):
+        pass
+    cli = shutil.which("opencode")
+    if cli:
+        try:
+            out = subprocess.run([cli, "--version"], capture_output=True, text=True, timeout=20).stdout
+            if re.match(r"\s*v?([2-9]|\d{2,})\.", out):
+                return "mcp.servers", _opencode_v2_entry
+        except (OSError, subprocess.SubprocessError):
+            pass
+    return "mcp", _opencode_entry
+
+
+def _openclaw_entry(launch: Launch) -> dict:
+    # A first uvx download and long tool calls (installs, hand-offs) need more than its default timeouts.
+    return {**_plain(launch), "requestTimeoutMs": 900_000, "connectionTimeoutMs": 60_000}
+
+
 @dataclass(frozen=True)
 class App:
     id: str
@@ -282,9 +321,10 @@ class App:
     path: Callable[[], Path]  # its config file on this OS
     found: Callable[[Path], bool]  # is the app on this computer?
     reload: str  # what to do so the app loads the change
-    key: str = "mcpServers"  # JSON: the object that holds the servers
+    key: str = "mcpServers"  # JSON: the object that holds the servers ("mcp.servers": nested)
     entry: Callable[[Launch], dict] = _plain
-    kind: str = "json"  # "json", "toml" (Codex) or "claude-code" (its CLI, else ~/.claude.json)
+    kind: str = "json"  # "json", "toml" (Codex), or an app with its own `mcp add` CLI: "claude-code", "openclaw"
+    variant: Callable[[str | None], tuple[str, Callable[[Launch], dict]]] | None = None  # format by version
 
 
 # Where each app keeps its servers, and the format, are cited per app in docs/connect.md.
@@ -347,6 +387,26 @@ APPS: list[App] = [
         "it applies mcp.json changes when the file is saved",
     ),
     App("zed", "Zed", _zed, _folder_exists, "it reloads its settings by itself", key="context_servers"),
+    App(
+        "opencode",
+        "opencode",
+        _opencode,
+        _or_command("opencode", _folder_exists),
+        "start a new `opencode` session",
+        key="mcp",
+        entry=_opencode_entry,
+        variant=_opencode_variant,
+    ),
+    App(
+        "openclaw",
+        "OpenClaw",
+        lambda: _env_dir("OPENCLAW_HOME", _home() / ".openclaw") / "openclaw.json",
+        _or_command("openclaw", _folder_exists),
+        "it picks up new MCP servers on the next turn (or run `openclaw mcp reload`)",
+        key="mcp.servers",
+        entry=_openclaw_entry,
+        kind="openclaw",
+    ),
 ]
 # Codex gives a server 10 s to start and a tool 60 s to finish: too little for a first uvx download, an image pull
 # or a hand-off that waits for a person. Added when missing; values you set are kept.
@@ -561,11 +621,21 @@ def _edited(text: str | None, expected: dict, edit: Callable[[str], str]) -> str
     return _dump_json(expected, text)
 
 
+def _servers(data: dict, key: str) -> object:
+    """data["mcp"]["servers"] for the key "mcp.servers" ({} if missing)."""
+    obj: object = data
+    for k in key.split("."):
+        if not isinstance(obj, dict):
+            raise Unparseable(f'its "{key}" is not an object')
+        obj = obj.get(k, {})
+    return obj
+
+
 def json_set(text: str | None, key: str, name: str, entry: dict) -> tuple[str | None, bool]:
-    """Add or update `key.name` (keeping fields the entry doesn't set, like "env").
-    Returns the new text (None if nothing changes) and whether an entry was there already."""
+    """Add or update `key.name` (keeping fields the entry doesn't set, like "env"). The key may be a
+    path ("mcp.servers"). Returns the new text (None if nothing changes) and whether an entry was there."""
     data = _load_json(text)
-    servers = data.get(key, {})
+    servers = _servers(data, key)
     if not isinstance(servers, dict):
         raise Unparseable(f'its "{key}" is not an object')
     old = servers.get(name)
@@ -573,20 +643,26 @@ def json_set(text: str | None, key: str, name: str, entry: dict) -> tuple[str | 
         return None, True
     value = {**old, **entry} if isinstance(old, dict) else dict(entry)
     expected = copy.deepcopy(data)
-    expected.setdefault(key, {})[name] = value
-    return _edited(text, expected, lambda t: _json_put(t, [key, name], value)), old is not None
+    target = expected
+    for k in key.split("."):
+        target = target.setdefault(k, {})
+    target[name] = value
+    return _edited(text, expected, lambda t: _json_put(t, [*key.split("."), name], value)), old is not None
 
 
 def json_remove(text: str | None, key: str, name: str) -> tuple[str | None, bool]:
     if text is None:
         return None, False
     data = _load_json(text)
-    servers = data.get(key)
+    servers = _servers(data, key)
     if not isinstance(servers, dict) or name not in servers:
         return None, False
     expected = copy.deepcopy(data)
-    del expected[key][name]
-    return _edited(text, expected, lambda t: _json_drop(t, [key, name])), True
+    target = expected
+    for k in key.split("."):
+        target = target[k]
+    del target[name]
+    return _edited(text, expected, lambda t: _json_drop(t, [*key.split("."), name])), True
 
 
 _TABLE = re.compile(r"^[ \t]*\[")  # a [table] or [[array]] header
@@ -792,7 +868,13 @@ def snippet(app: App, launch: Launch) -> str:
     if app.kind == "toml":
         lines = _toml_lines({**_plain(launch), **CODEX_EXTRA})
         return f"[mcp_servers.{NAME}]\n" + "\n".join(lines.values())
-    return f"{json.dumps(app.key)}: {_block({NAME: app.entry(launch)}, '', '  ', chr(10), 2)}"
+    if app.kind == "openclaw":  # its config is JSON5: its CLI writes it
+        return cmdline(openclaw_commands("openclaw", launch, remove=False, replace=False)[0])
+    first, *rest = app.key.split(".")
+    value: dict = {NAME: app.entry(launch)}
+    for k in reversed(rest):
+        value = {k: value}
+    return f"{json.dumps(first)}: {_block(value, '', '  ', chr(10), 2)}"
 
 
 def _without_comments(text: str) -> str:
@@ -842,6 +924,35 @@ def claude_commands(cli: str, launch: Launch, remove: bool, replace: bool) -> li
     return [rm, add] if replace else [add]  # `claude mcp add` refuses to overwrite an entry
 
 
+def openclaw_cli() -> str | None:
+    return shutil.which("openclaw")
+
+
+def openclaw_commands(cli: str, launch: Launch, remove: bool, replace: bool) -> list[list[str]]:
+    rm = [cli, "mcp", "unset", NAME]
+    if remove:
+        return [rm]
+    args = [a for arg in launch.args for a in ("--arg", arg)]
+    # --no-probe: saving shouldn't wait for a first uvx download (`openclaw mcp doctor minion --probe` checks it)
+    add = [cli, "mcp", "add", NAME, "--command", launch.command, *args, "--no-probe", "--connect-timeout", "60"]
+    add += ["--timeout", "900"]
+    return [rm, add] if replace else [add]
+
+
+# Apps whose own CLI manages their MCP servers: (finds the CLI, builds its commands), looked up by name.
+CLIS = {"claude-code": ("claude_cli", "claude_commands"), "openclaw": ("openclaw_cli", "openclaw_commands")}
+
+
+def _app_cli(app: App) -> str | None:
+    """The app's own CLI that manages its MCP servers, when it has one installed here."""
+    found = CLIS.get(app.kind)
+    return globals()[found[0]]() if found else None
+
+
+def _cli_commands(app: App, cli: str, launch: Launch, remove: bool, replace: bool) -> list[list[str]]:
+    return globals()[CLIS[app.kind][1]](cli, launch, remove, replace)
+
+
 def plan(app: App, launch: Launch, remove: bool = False) -> Change:
     """What connecting (or removing) would change, without changing anything."""
     path = app.path()
@@ -849,6 +960,9 @@ def plan(app: App, launch: Launch, remove: bool = False) -> Change:
         before = _read(path)
     except (OSError, UnicodeDecodeError) as e:
         return Change(app, path, "manual", note=f"Minion can't read it ({e})", snippet=snippet(app, launch))
+    if app.variant is not None:  # the format depends on the app's version
+        key, entry = app.variant(before)
+        app = replace(app, key=key, entry=entry, variant=None)
     try:
         if app.kind == "toml" and remove:
             after, existed = toml_remove(before, NAME)
@@ -859,9 +973,9 @@ def plan(app: App, launch: Launch, remove: bool = False) -> Change:
         else:
             after, existed = json_set(before, app.key, NAME, app.entry(launch))
     except Unparseable as e:
-        cli = claude_cli() if app.kind == "claude-code" else None
+        cli = _app_cli(app)
         if cli:  # its own CLI can still do it
-            commands = claude_commands(cli, launch, remove, replace=True)
+            commands = _cli_commands(app, cli, launch, remove, replace=True)
             return Change(app, path, "remove" if remove else "update", before, commands=commands, note=str(e))
         if app.kind != "toml":  # JSON with comments: maybe the entry was pasted by hand already
             old = _entry_in_jsonc(before, app.key)
@@ -870,9 +984,9 @@ def plan(app: App, launch: Launch, remove: bool = False) -> Change:
         return Change(app, path, "manual", before, note=str(e), snippet=snippet(app, launch))
     action = "none" if after is None else "remove" if remove else "update" if existed else "add"
     change = Change(app, path, action, before, after)
-    cli = claude_cli() if app.kind == "claude-code" and after is not None else None
+    cli = _app_cli(app) if after is not None else None
     if cli:
-        change.commands = claude_commands(cli, launch, remove, replace=existed)
+        change.commands = _cli_commands(app, cli, launch, remove, replace=existed)
     if app.id == "vscode" and not remove:  # VS Code's install links and `code --add-mcp` write the older file
         for old in (_app_data(flavor) / "User" / "mcp.json" for flavor in ("Code", "Code - Insiders")):
             try:
@@ -896,7 +1010,7 @@ def apply(change: Change) -> Change:
             change.backup = _backup(Path(os.path.realpath(change.path)))
             for cmd in change.commands:
                 res = _run_cli(cmd)
-                failed_rm = res.returncode != 0 and cmd[2] == "remove" and len(change.commands) > 1
+                failed_rm = res.returncode != 0 and cmd[2] in ("remove", "unset") and len(change.commands) > 1
                 if res.returncode != 0 and not failed_rm:  # removing first may find nothing to remove
                     lines = (res.stderr or res.stdout or f"exit code {res.returncode}").strip().splitlines()
                     raise MinionError(f"`{' '.join(cmd[1:3])}` failed: {lines[-1] if lines else ''}")
@@ -956,8 +1070,12 @@ def _paint(text: str, code: str) -> str:
     return c(text, code)
 
 
+def _cli_name(change: Change) -> str:
+    return Path(change.commands[0][0]).stem if change.commands else ""
+
+
 def _describe(change: Change, remove: bool) -> str:
-    where = pretty(change.path) + ("  (with `claude mcp`)" if change.commands else "")
+    where = pretty(change.path) + (f"  (with `{_cli_name(change)} mcp`)" if change.commands else "")
     status = {
         "none": "not connected" if remove else "already connected",
         "update": "starts Minion another way: will update it",
@@ -1057,7 +1175,7 @@ def _summary(chosen: list[Change], remove: bool, dry_run: bool = False) -> None:
     for ch in chosen:
         if ch.done:
             what = {"add": "connected", "update": "updated", "remove": "removed"}[ch.action]
-            how = "with `claude mcp`" if ch.commands else pretty(ch.path)
+            how = f"with `{_cli_name(ch)} mcp`" if ch.commands else pretty(ch.path)
             extra = f"; backup: {ch.backup.name}" if ch.backup else ""
             ok(f"{ch.app.name}: {what} ({how}{extra})")
         elif ch.action == "error":

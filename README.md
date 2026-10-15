@@ -130,7 +130,7 @@ minion cp :~/Documents/notes.md .        # copy files out (and in)
 
 | Your agent | Connect with |
 |---|---|
-| Claude Desktop/Code, Cursor, VS Code, Codex, Gemini CLI, Windsurf/Devin, LM Studio, Kiro, Goose | one click, `minion connect`, or `uvx minion-desktop mcp` ([install](docs/install.md)) |
+| Claude Desktop/Code, Cursor, VS Code, Codex, Gemini CLI, opencode, OpenClaw, Windsurf/Devin, LM Studio, Kiro, Goose | one click, `minion connect`, or `uvx minion-desktop mcp` ([install](docs/install.md)) |
 | Agent frameworks: OpenAI Agents SDK, LangChain/LangGraph, LlamaIndex, CrewAI, smolagents, Pydantic AI, Google ADK, AutoGen | the same MCP server ([verified recipes](docs/integrations.md)) |
 | ChatGPT, Claude.ai, Le Chat (web apps) | `minion share`: remote MCP over HTTPS ([docs](docs/remote.md)) |
 | Any model with function calling (OpenAI, Anthropic, Gemini, Mistral, local models via Ollama/vLLM) | `Toolkit().definitions("openai" \| "anthropic" \| "gemini")` + `Toolkit().run_calls()` ([docs](docs/agents.md#without-mcp-function-calling-with-any-model)) |

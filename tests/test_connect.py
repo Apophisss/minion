@@ -664,3 +664,55 @@ def test_source_spec(monkeypatch, tmp_path):
     assert connect._source_spec() == str(tmp_path)
     fake(None)  # installed from PyPI
     assert connect._source_spec() is None
+
+
+# -- opencode and OpenClaw ---------------------------------------------------------------------------------------
+def test_opencode_writes_its_version_s_format(home, monkeypatch):
+    app = [connect.find_app("opencode")]
+    cfg = home / ".config/opencode/opencode.json"
+    write(cfg, '{\n  "$schema": "https://opencode.ai/config.json",\n  "theme": "opencode"\n}\n')
+    monkeypatch.setattr(connect.shutil, "which", lambda name: None)  # no opencode on PATH: 1.x, mcp.<name>
+    assert connect.run(app, LAUNCH)[0].done
+    data = json.loads(cfg.read_text())
+    assert data["theme"] == "opencode"
+    assert data["mcp"]["minion"] == {"type": "local", "command": [CMD, "mcp"], "enabled": True}
+    assert connect.run(app, LAUNCH)[0].action == "none"  # idempotent
+    connect.run(app, LAUNCH, remove=True)
+    assert json.loads(cfg.read_text())["mcp"] == {}
+
+    write(cfg, '{"mcp": {"servers": {"context7": {"type": "remote", "url": "https://mcp.context7.com/mcp"}}}}')
+    connect.run(app, LAUNCH)  # opencode 2's layout: mcp.servers.<name>, without "enabled"
+    servers = json.loads(cfg.read_text())["mcp"]["servers"]
+    assert servers["minion"] == {"type": "local", "command": [CMD, "mcp"]} and "context7" in servers
+
+
+def test_opencode_2_on_path_gets_its_format(home, monkeypatch):
+    monkeypatch.setattr(connect.shutil, "which", lambda name: "/usr/bin/opencode" if name == "opencode" else None)
+    monkeypatch.setattr(connect.subprocess, "run", lambda *a, **k: type("R", (), {"stdout": "2.0.3\n"}))
+    assert connect._opencode_variant(None)[0] == "mcp.servers"
+    monkeypatch.setattr(connect.subprocess, "run", lambda *a, **k: type("R", (), {"stdout": "1.19.0\n"}))
+    assert connect._opencode_variant(None)[0] == "mcp"
+
+
+def test_openclaw_uses_its_cli(home, monkeypatch):
+    calls = []
+    monkeypatch.setattr(connect, "openclaw_cli", lambda: "/usr/bin/openclaw")
+    monkeypatch.setattr(connect, "_run_cli", lambda cmd: calls.append(cmd[1:]) or type("R", (), {"returncode": 0}))
+    app = [connect.find_app("openclaw")]
+    change = connect.run(app, LAUNCH)[0]
+    assert change.done
+    add = ["mcp", "add", "minion", "--command", CMD, "--arg", "mcp", "--no-probe", "--connect-timeout", "60"]
+    assert calls == [[*add, "--timeout", "900"]]
+    write(
+        home / ".openclaw/openclaw.json", json.dumps({"mcp": {"servers": {"minion": connect._openclaw_entry(LAUNCH)}}})
+    )
+    assert connect.run(app, LAUNCH)[0].action == "none"  # already there, as its CLI wrote it
+    connect.run(app, LAUNCH, remove=True)
+    assert calls[-1] == ["mcp", "unset", "minion"]
+
+
+def test_openclaw_without_its_cli_gives_the_command(home, monkeypatch):
+    monkeypatch.setattr(connect, "openclaw_cli", lambda: None)
+    write(home / ".openclaw/openclaw.json", "{\n  // JSON5, with comments\n  gateway: { port: 18789 },\n}\n")
+    change = connect.run([connect.find_app("openclaw")], LAUNCH)[0]
+    assert change.action == "manual" and change.snippet.startswith("openclaw mcp add minion --command")
