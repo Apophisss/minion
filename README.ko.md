@@ -61,7 +61,7 @@ irm https://raw.githubusercontent.com/apophisss/minion/main/install.ps1 | iex   
 
 <p align="center"><img src="docs/assets/demo.gif" alt="Minion 데스크톱에서 위키백과를 검색하는 에이전트, Minion의 플라이트 레코더로 녹화" width="720"></p>
 <p align="center"><sub><code>research</code> 데스크톱에서 일하는 에이전트. 이 GIF는 Minion에 내장된 플라이트 레코더(<code>minion replay -o demo.gif</code>)로 만들었습니다.</sub></p>
-<p align="center"><sub>▶ <a href="docs/assets/demo.mp4">1분 데모 영상 보기</a>: 에이전트가 위키백과에서 여행을 조사하고, 스프레드시트에 차트가 있는 예산을 만들고, 계획을 PDF로 내보냅니다. 도구 호출 12번, 2,372 토큰.</sub></p>
+<p align="center"><sub>▶ <a href="https://apophisss.github.io/minion/assets/demo.mp4">1분 데모 영상 보기</a>: 에이전트가 위키백과에서 여행을 조사하고, 스프레드시트에 차트가 있는 예산을 만들고, 계획을 PDF로 내보냅니다. 도구 호출 12번, 2,372 토큰.</sub></p>
 
 ## 에이전트 연결하기
 

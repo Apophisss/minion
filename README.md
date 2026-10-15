@@ -61,8 +61,8 @@ app's connector settings ([how](docs/remote.md)).
 Then just ask: *"Create an office desktop, write a one-page brief about our Q3 numbers in Writer and save it as
 brief.docx."* Every way to install is in [docs/install.md](docs/install.md).
 
-<p align="center"><a href="docs/assets/demo.mp4"><img src="docs/assets/demo-poster.png" alt="Play the one-minute demo: an agent researches Lisbon on Wikipedia, makes a budget with a chart in LibreOffice Calc and exports a plan as PDF from Writer" width="720"></a></p>
-<p align="center"><sub>▶ <a href="docs/assets/demo.mp4">Watch the one-minute demo</a>: an agent researches a trip on Wikipedia, makes a budget with a chart and writes the plan as a PDF. 12 tool calls and 2,372 tokens of text; the same steps with screenshots would cost about 36,855. Recorded live with <code>python scripts/demo_video.py</code>, which makes the calls an agent would make.</sub></p>
+<p align="center"><a href="https://apophisss.github.io/minion/assets/demo.mp4"><img src="docs/assets/demo-poster.png" alt="Play the one-minute demo: an agent researches Lisbon on Wikipedia, makes a budget with a chart in LibreOffice Calc and exports a plan as PDF from Writer" width="720"></a></p>
+<p align="center"><sub>▶ <a href="https://apophisss.github.io/minion/assets/demo.mp4">Watch the one-minute demo</a>: an agent researches a trip on Wikipedia, makes a budget with a chart and writes the plan as a PDF. 12 tool calls and 2,372 tokens of text; the same steps with screenshots would cost about 36,855. Recorded live with <code>python scripts/demo_video.py</code>, which makes the calls an agent would make.</sub></p>
 
 ---
 
