@@ -172,8 +172,14 @@ LlamaIndex, smolagents, Pydantic AI, Google ADK, AutoGen and the OpenAI Agents S
 - **Batch actions.** For example,
   `act(actions=[{"action": "fill", "target": "@4", "text": "alice"}, {"action": "click", "target": "Sign in"}])`.
   The reply says what changed (new windows, focus, the changed region), which often makes another `see` unnecessary.
-- **Use the shell for files and data.** `run` is faster and more exact than the GUI: `soffice --headless --convert-to pdf`,
-  `pdftotext`, `python3 -c …`, `sudo apt-get install -y gimp`. Use the GUI for what needs eyes.
+- **Read documents as text, and use the shell for data.** `files(action="read")` returns any document's text
+  (docx, xlsx with formulas, pptx, pdf, odt…), `files(action="convert")` changes formats, and `run` is faster
+  than the GUI for data (`python3 -c …`). Use the GUI for what needs eyes.
+- **Open apps by name.** `open("gimp")`, `open("vscode")` or `open("dbeaver")` installs the app the first time and
+  answers with a few tips for it. `open("figma")` and `open("google sheets")` open web apps.
+- **Use menus and file dialogs directly.** `see(menus=true)` lists every menu command with its shortcut;
+  `{"action": "menu", "item": "File > Export As > Export as PDF..."}` runs one. In an Open/Save dialog,
+  `{"action": "path", "path": "~/Documents/out.pdf"}` types the full path and confirms.
 - **Wait for things, not for time.** `{"action": "wait_for", "text": "Saved"}` returns as soon as the text appears.
 - **Keyboard shortcuts work everywhere.** Examples: `ctrl+l` then type a URL, `ctrl+s`, `alt+Left` (back), `ctrl+Tab`, `F5`.
 - **Fork before risky steps** (`desktop(action="fork")`) and keep going on the copy.

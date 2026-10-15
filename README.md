@@ -66,8 +66,14 @@ brief.docx."* Every way to install is in [docs/install.md](docs/install.md).
 ## Why Minion
 
 - **🖥️ Any program, any website.** Every desktop is a real Linux computer: browsers, LibreOffice, IDEs, terminals,
-  file dialogs and installers, plus Windows programs through the `windows` (Wine) profile. Anything missing is one
-  command away: `minion-install gimp`, a `.deb`/`.AppImage` URL, `pip:` or `npm:`.
+  file dialogs and installers, plus Windows programs through the `windows` (Wine) profile. **Open any app by name**
+  and it is installed the first time (`open gimp`, `open vscode`, `open dbeaver`, any Debian package), web apps open
+  in the browser (`open gmail`), and the first open answers with a few tips for the app.
+- **🧭 Shortcuts through every app.** `see --menus` lists every menu command with its keyboard shortcut, and
+  `menu "File > Export as PDF"` runs one without opening a menu. `path ~/out.pdf` fills any Open/Save dialog.
+  Right-click menus show up in `see`, `button:Save` picks one kind of control, and a button below the fold is
+  scrolled into view. **Any document reads as text** (`read report.docx`, xlsx with formulas, pptx, pdf) and
+  converts in one call (`convert report.docx pdf`).
 - **🧠 Agents read the screen as text.** `see` turns any window into a list of controls with **stable `@ids`**, taken
   from the accessibility tree with OCR as a fallback: `@12 button "Save" (210,62)`. Web pages, editors (with line
   numbers), terminals, dropdowns with their options, and spreadsheets (`A1: value`) all come out as exact text.
@@ -107,7 +113,10 @@ minion wait-for "Analytical Engine"      # says where it saw the text
 minion see --full                        # read the article as text
 minion select @14 "Title"                # pick a dropdown option
 minion shot -o page.png --marks          # a screenshot with @ids drawn on it
-minion run "pdftotext -layout ~/Downloads/paper.pdf - | head"
+minion read ~/Downloads/paper.pdf         # any document as text: pdf, docx, xlsx, pptx, epub...
+minion open gimp                          # any app by name: installed the first time
+minion menu "File > Export As > Export as PDF..."   # any menu command
+minion path ~/Documents/report.pdf        # fill the open Save/Open dialog
 minion cp :~/Documents/notes.md .        # copy files out (and in)
 ```
 

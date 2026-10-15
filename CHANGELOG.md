@@ -10,6 +10,9 @@ The first release of Minion: instant desktops that any AI agent can use.
 - Profiles: `base`, `browser`, `office`, `dev`, `research`, `data` and `windows` (Wine), each tuned for agents:
   no first-run wizards, pop-ups, cookie banners, recovery dialogs or AutoCorrect. Custom profiles are TOML files.
   `minion-install` adds any app at runtime: apt packages, `.deb`/`.AppImage`/archive URLs, `pip:` and `npm:`.
+- **Any app by name**: `open gimp` (or `vscode`, `chrome`, `dbeaver`, any Debian package) installs the app the first
+  time and answers with a few tips for it. Web apps open in the browser (`open gmail`, `open figma`), and apps that
+  don't exist on Linux name their alternatives. Java apps get the accessibility bridge.
 
 **Seeing**
 - `see`: the screen as text with **stable** `@ids` from the accessibility tree, with OCR as a fallback.
@@ -18,6 +21,10 @@ The first release of Minion: instant desktops that any AI agent can use.
   formulas as `#ERROR`.
 - `see(changes=true)` returns only what changed since the last look at that window, including new terminal output and
   changed editor lines. Moves and truncation don't count as changes. Long diffs fall back to the full view and say why.
+- `see(menus=true)` lists every menu command with its keyboard shortcut. Open right-click menus are listed first.
+- **Documents as text**: `files read` / `minion read` return the text of docx, xlsx (values and formulas), pptx,
+  odt/ods/odp, pdf (OCR for scans), epub, html, images and doc/xls/ppt. `files convert` / `minion convert` change
+  formats, even while LibreOffice is open. Inside desktops: `minion-read` and `minion-convert`.
 
 **Acting**
 - Actions wait for the screen to settle, for web pages and documents to be ready, and for dialogs that appear a moment
@@ -25,6 +32,11 @@ The first release of Minion: instant desktops that any AI agent can use.
 - Text targets match exactly: "Delete" never clicks "Delete all". A miss fails with the closest controls and their
   `@ids` instead of clicking something else.
 - `fill` only types into text fields. `select` picks dropdown options. Unknown key names are errors.
+- `menu` runs any menu command by its path ("File > Export As > Export as PDF...") without opening menus.
+- `path` fills the open Open/Save/Export dialog with a full path and confirms; existing files are only replaced with
+  `overwrite`, and the app's error boxes are reported.
+- Targets can name a kind of control (`button:Save`, `link:Docs`, `field:Email`), and a control that is scrolled out
+  of view is scrolled into view.
 - Typing in LibreOffice is lossless for any language, and its coordinates are correct from the first look.
 - **Code mode** (`script`): Python runs inside the desktop with a GUI API, so loops cost one call.
 - **Macros**: export the recorded session as a Python script that replays it without a model.

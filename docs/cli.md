@@ -26,39 +26,45 @@ created or `use`d last, otherwise the most recent running one.
 
 | Command | |
 |---|---|
-| `minion see` | The screen as text with `@ids`. `--changes` shows only what changed since the last look, `--ocr` always adds OCR, `--no-ocr` never does, `--window TITLE` describes another window, and `--full` keeps paragraphs whole |
+| `minion see` | The screen as text with `@ids`. `--changes` shows only what changed since the last look, `--ocr` always adds OCR, `--no-ocr` never does, `--window TITLE` describes another window, `--full` keeps paragraphs whole, and `--menus` adds every menu command of the app with its keyboard shortcut. An open right-click menu is listed first |
+| `minion read FILE` | Any file in the desktop as text: text files as they are, documents converted (docx, xlsx with values and formulas, pptx, odt/ods/odp, pdf, epub, html, images by OCR, doc/xls/ppt) |
 | `minion shot [-o FILE]` | A screenshot (`.png`, `.jpg`, `.webp` or `-` for stdout). Options: `--region x,y,w,h`, `--max-width N`, `--marks` (draw `@ids`), `--grid`, `--no-cursor` |
 | `minion windows` | List windows |
 
 ## Act
 
-Targets are `@12` (from your latest `see`; the most reliable), exact visible text (`"Sign in"`), or coordinates
-(`640,400` or `640 400`). Text targets must really be on screen: a click or `wait-for` never settles for a
-fragment of what you asked for, and a miss fails with the closest candidates.
+Targets are `@12` (from your latest `see`; the most reliable), exact visible text (`"Sign in"`), a kind of
+control and its label (`button:Save`, `link:Docs`, `field:Email`, `tab:Settings`, `checkbox:Remember me`), or
+coordinates (`640,400` or `640 400`). A click or `wait-for` never settles for a fragment of what you asked for,
+and a miss fails with the closest candidates. A control labeled exactly so but scrolled out of view (a long
+form) is scrolled into view first.
 
 | Command | |
 |---|---|
 | `minion click TARGET` | `--double`, `--triple`, `--right`, `--middle`, `--mod ctrl`. Shortcuts: `dclick`, `rclick` |
-| `minion type TEXT` | `--enter` presses Return afterwards. `--paste` pastes through the clipboard, which is fast for long text. `-` reads stdin |
+| `minion type TEXT` | `\n` is Return and `\t` is Tab (`--raw` types backslashes as they are). `--enter` presses Return afterwards. `--paste` pastes through the clipboard, which is fast for long text. `-` reads stdin, typed exactly |
 | `minion key KEYS…` | `ctrl+s`, `Return`, `alt+Tab`, `ctrl+shift+t`, `F5`, or several in order (`minion key Tab Tab Return`). `-n 3` repeats. Unknown key names are errors |
 | `minion scroll [up\|down\|left\|right] [N] [--at TARGET]` | |
 | `minion drag FROM TO` · `minion move TARGET` | |
 | `minion fill TARGET TEXT` | Replace a field's content (a label like `"Name"` finds its field). Refuses targets that aren't text fields |
 | `minion select TARGET OPTION` | Pick a dropdown option by its text. `see` lists each dropdown's value and options |
+| `minion menu PATH` | Choose a menu command by its path: `minion menu "File > Export As > Export as PDF..."`. It works through accessibility, without opening menus (and clicks through them for apps that need it). `see --menus` lists the paths |
+| `minion path FILE [--overwrite]` | Fill the open file dialog (Open, Save As, Export, Upload…) with a full path and confirm it. An existing file is only replaced with `--overwrite`; an error box from the app is reported. `~` is the desktop's home, even after your shell expanded it |
 | `minion wait-for TEXT [--timeout 15] [--gone]` | Wait until the text is visible on screen (or gone), and say where it was seen |
 | `minion act STEP…` | Several actions in one round trip: `minion act "click @3" "fill @4 Ada" "type hi\n" "key ctrl+s"`. Also accepts JSON objects or lists, or `-` for JSON on stdin. `--observe changes` prints the changed UI, `--observe crop` saves an image of the changed region |
 | `minion script FILE\|-\|CODE` | Run Python inside the desktop with the GUI API preloaded (`click`, `write`, `key`, `see`, `cells`, `launch`, `run`, …) |
-| `minion open TARGET` | An app (`writer`, `calc`, `firefox`…), a URL, a file in the desktop, or a command |
+| `minion open TARGET` | An app, a URL, a file in the desktop, or a command. Apps by name are installed the first time (`minion open gimp`, `vscode`, `chrome`, `thunderbird`, `blender`, and any Debian package), web apps open in the browser (`gmail`, `figma`, `google sheets`), and apps that don't exist on Linux name their alternatives. The first open prints short tips for the app. `--no-install` fails instead of installing |
+| `minion convert FILE FORMAT` | Convert a document or image in the desktop: `minion convert ~/report.docx pdf` (pdf, docx, odt, xlsx, ods, csv, pptx, odp, html, txt, md, png, jpg). It works while LibreOffice is open |
 | `minion run CMD…` | A shell command in the desktop. It returns the command's exit code. `-t 60` sets a timeout, `-b` runs in the background |
 | `minion cp SRC DST` | Copy files: `minion cp report.pdf :~/Documents/` · `minion cp office-1:~/out.png .` |
 | `minion clip [TEXT]` | Read or set the clipboard |
 | `minion focus WINDOW [--action close\|maximize\|minimize\|restore]` | |
 
 **Step strings** for `act`: `click|dclick|rclick|move TARGET` · `type TEXT` · `paste TEXT` · `fill TARGET TEXT` ·
-`select TARGET OPTION` · `key KEYS [N]` · `scroll DIR [N] [TARGET]` · `drag FROM TO` · `wait SECONDS` ·
-`wait_for TEXT` · `focus WINDOW`. The text of `type`, `paste` and `fill` is taken verbatim (quotes and spacing
-included; one pair of outer quotes is removed), and `\n` is Return, `\t` is Tab and `\\` is a backslash, as
-in `write()` in scripts. `minion type` itself types its argument exactly as your shell passes it.
+`select TARGET OPTION` · `menu PATH` · `path FILE [--overwrite]` · `key KEYS [N]` · `scroll DIR [N] [TARGET]` ·
+`drag FROM TO` · `wait SECONDS` · `wait_for TEXT` · `focus WINDOW` · `open TARGET`. The text of `type`, `paste`
+and `fill` is taken verbatim (quotes and spacing included; one pair of outer quotes is removed), and `\n` is
+Return, `\t` is Tab and `\\` is a backslash, as in `write()` in scripts and in `minion type`.
 
 Every action prints what happened and what changed. With `--shot FILE` it also saves a screenshot:
 

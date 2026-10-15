@@ -51,6 +51,9 @@ desk.type("hello\n")  # \n = Return, \t = Tab
 desk.paste(long_text)  # through the clipboard
 desk.fill("Email", "ada@example.com")  # finds the field by its label
 desk.select("@14", "Express shipping")  # a dropdown option, by its text
+desk.click("button:Save")  # a kind of control and its label: button, link, field, tab, checkbox, menu, ...
+desk.menu("File > Export As > Export as PDF...")  # any menu command; desk.menus() lists them with shortcuts
+desk.path("~/Documents/report.pdf")  # fill the open file dialog and confirm (overwrite=True to replace)
 desk.key("ctrl+s")
 desk.scroll("down", 5, target="@30")
 desk.drag("@4", "@9")
@@ -91,8 +94,10 @@ it prints comes back. If it fails, the error names the line of your script that 
 | `click(target, button="left", count=1, modifiers=None)` · `double_click` · `right_click` · `move` · `drag(a, b)` | Targets: `"@12"`, exact visible text, `"x,y"` or `[x, y]` |
 | `write(text)` · `paste(text)` · `key(keys, repeat=1)` · `hold_key(keys, seconds)` | `write("a\tb\n")`: Tab and Return are key presses |
 | `fill(target, text)` · `select(target, option)` · `scroll(direction, amount, target)` | |
+| `menu(item)` · `menus() -> list[str]` · `path(file, overwrite=False)` | Menu commands by path (`"File > Save As"`), the app's menus with shortcuts, and the open file dialog |
+| `read(file) -> str` · `convert(file, to, outdir=None) -> str` | Any document as text, and format conversion (`"pdf"`, `"docx"`, `"xlsx"`, `"csv"`, `"png"`…) |
 | `wait(seconds)` · `wait_for(text, timeout=10, gone=False) -> bool` | |
-| `launch(target, wait=12) -> dict` | An app, URL or file; waits for its window (and for a web page to load) |
+| `launch(target, wait=12, install=True) -> dict` | An app (installed the first time), URL or file; waits for its window (and for a web page to load) |
 | `run(command, timeout=60, input=None) -> dict` | A shell command (with optional stdin text): `code`, `stdout`, `stderr` |
 | `screenshot(path="/tmp/screenshot.png", region=None, marks=False) -> str` | Saved inside the desktop |
 | `windows()` · `focus(window)` · `clipboard(text=None)` | |
@@ -110,12 +115,16 @@ desks = Desktop.create_many("research", 4)  # in parallel, image prepared once
 
 ```python
 desk.open("calc")  # profile app, URL, file in the desktop, or a command
+desk.open("gimp")  # any app by name: installed the first time; .get("tips") has short tips for it
+desk.open("google sheets")  # web apps open in the browser
 r = desk.run("python3 -c 'print(6*7)'")  # RunResult(.code, .stdout, .stderr, .ok, .check())
 desk.run("python3 -m http.server 8000", background=True)
 desk.upload("data.csv", "~/Documents/")
 desk.download("~/Documents/report.pdf", ".")
 desk.write_text("~/notes.md", "# Notes")
 desk.read_text("~/notes.md")
+print(desk.read("~/Documents/budget.xlsx"))  # any document as text: docx, xlsx (+formulas), pptx, pdf, odt, ...
+desk.convert("~/Documents/report.docx", "pdf")  # -> "/home/agent/Documents/report.pdf"
 desk.clipboard = "copied"
 print(desk.clipboard)
 desk.window("maximize", "Firefox")
