@@ -261,6 +261,10 @@ html:not(.js) .tablist{display:none}
 @media (max-width:900px){.see{grid-template-columns:1fr}}
 
 /* tokens */
+.vid{margin:0 0 20px;overflow:hidden}
+.vid video{display:block;width:100%;height:auto;aspect-ratio:16/9;background:#070a18}
+.vid figcaption{padding:16px clamp(20px,2.8vw,30px);font-size:14.5px;color:var(--muted)}
+.vid figcaption b{color:var(--text);font-weight:600}
 .tok{display:grid;grid-template-columns:1.55fr 1fr;gap:20px}
 .tok-side{display:grid;gap:20px;align-content:start}
 .tok-side .bars th{width:50%}
@@ -458,6 +462,7 @@ html:not(.js) .tablist{display:none}
 <div class="cta rise" style="--d:3">
 <a class="btn btn-p" href="#install">Get started<svg class="ic" aria-hidden="true"><use href="#i-arrow"/></svg></a>
 <a class="btn btn-s" href="https://github.com/apophisss/minion"><svg class="ic" aria-hidden="true"><use href="#i-gh"/></svg>GitHub</a>
+<a class="btn btn-s" href="#demo"><svg class="ic" aria-hidden="true"><use href="#i-play"/></svg>Watch the demo</a>
 </div>
 <ul class="meta rise" style="--d:4">
 <li><span><b>~1.5 s</b> to a ready desktop</span></li>
@@ -679,6 +684,10 @@ desk.remove()</code></pre></div></li>
 <h2 id="tokens-h">Built to save tokens.</h2>
 <p class="lead">Screenshots are the most expensive thing an agent can look at, and the model still has to guess coordinates. Minion sends text first, diffs instead of re-reads, and pixels only when they matter.</p>
 </div>
+<figure class="card vid" id="demo">
+<video controls muted playsinline preload="none" poster="assets/demo-poster.png" width="1920" height="1080"><source src="assets/demo.mp4" type="video/mp4"></video>
+<figcaption><b>One job, three apps, 12 tool calls.</b> An agent researches Lisbon on Wikipedia, makes a budget with a chart in a spreadsheet and exports the plan as a PDF. It read 2,372 tokens of text; the same steps with screenshots would cost about 36,855. Recorded live, with the calls made by a script as an agent would make them.</figcaption>
+</figure>
 <div class="tok">
 <figure class="card chart">
 <figcaption><h3>Tokens, measured</h3><p>Lower is better. Every bar uses the same scale.</p></figcaption>
@@ -717,7 +726,7 @@ desk.remove()</code></pre></div></li>
 </div>
 </div>
 </div>
-<p class="fine">Measured on a 2-vCPU VM. Reproduce the numbers with <code>python&nbsp;scripts/bench.py</code>. A terminal costs about 50–90 tokens with <code>see</code>.</p>
+<p class="fine">Measured on a 2-vCPU VM. Reproduce the numbers with <code>python&nbsp;scripts/bench.py</code>. A terminal costs about 50–90 tokens with <code>see</code>. Whole tasks: five real ones cost 4,356 tokens with Minion and 50,505 with screenshots (<a href="https://github.com/apophisss/minion/blob/main/docs/benchmarks.md">the benchmark</a>).</p>
 </div>
 </section>
 

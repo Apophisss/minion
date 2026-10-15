@@ -45,6 +45,8 @@ The first release of Minion: instant desktops that any AI agent can use.
 **Measured**
 - Five real tasks cost an agent 4,356 tokens with Minion and 50,505 with a screenshot agent: 11.6× fewer
   ([docs/benchmarks.md](docs/benchmarks.md), `python scripts/bench_tasks.py`).
+- A one-minute demo video: one job in a browser, a spreadsheet and a word processor in 12 tool calls and 2,372 tokens
+  ([docs/assets/demo.mp4](docs/assets/demo.mp4), `python scripts/demo_video.py`).
 
 **Every agent**
 - One toolset (`minion/tools.py`), served as:

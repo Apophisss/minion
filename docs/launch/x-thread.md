@@ -13,8 +13,9 @@ Minion gives every agent its own disposable Linux desktop: a small container on 
 Open source, MIT. 🧵
 ```
 
-Image: [hero.png](../assets/hero.png). Alt text: *Minion: instant desktops for AI agents. Firefox, LibreOffice
-Writer and an IDE running on Minion desktops.*
+Video: [demo.mp4](../assets/demo.mp4) (upload the file: X plays it in the feed, muted, and its captions work without
+sound). Or the image [hero.png](../assets/hero.png), with the alt text *Minion: instant desktops for AI agents.
+Firefox, LibreOffice Writer and an IDE running on Minion desktops.*
 
 ## 2/8
 

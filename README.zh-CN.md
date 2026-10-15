@@ -61,6 +61,7 @@ irm https://raw.githubusercontent.com/apophisss/minion/main/install.ps1 | iex   
 
 <p align="center"><img src="docs/assets/demo.gif" alt="一个 Agent 在 Minion 桌面上搜索维基百科，由 Minion 的飞行记录仪录制" width="720"></p>
 <p align="center"><sub>一个在 <code>research</code> 桌面上工作的 Agent。这个 GIF 由 Minion 内置的飞行记录仪（flight recorder）生成（<code>minion replay -o demo.gif</code>）。</sub></p>
+<p align="center"><sub>▶ <a href="docs/assets/demo.mp4">观看一分钟演示视频</a>：Agent 在维基百科上调研行程，在电子表格里做出带图表的预算，再把计划导出为 PDF。共 12 次工具调用、2,372 个 token。</sub></p>
 
 ## 连接你的 Agent
 

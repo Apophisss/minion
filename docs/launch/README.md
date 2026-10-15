@@ -10,6 +10,7 @@ post with it. Everything here is drafted from the repository's own docs. Nothing
 | [reddit.md](reddit.md) | r/LocalLLaMA, r/ClaudeAI, r/selfhosted, r/opensource | English |
 | [x-thread.md](x-thread.md) | X: an 8-post thread | English |
 | [linkedin.md](linkedin.md) | LinkedIn | English |
+| [youtube.md](youtube.md) | YouTube: title, description with chapters, tags and thumbnail for the demo video | English |
 | [hebrew.md](hebrew.md) | Israeli tech communities and LinkedIn | Hebrew |
 | [chinese.md](chinese.md) | V2EX, Juejin, Zhihu | Simplified Chinese |
 | [faq-responses.md](faq-responses.md) | Short answers to likely objections, for any thread | English |
@@ -117,7 +118,16 @@ Use these numbers as written. If the README changes, the README wins.
 | Security model | https://github.com/apophisss/minion/blob/main/SECURITY.md |
 | One-line install | `curl -fsSL https://raw.githubusercontent.com/apophisss/minion/main/install.sh \| sh` (macOS, Linux) · `irm https://raw.githubusercontent.com/apophisss/minion/main/install.ps1 \| iex` (Windows) |
 
-## Images
+## Video and images
+
+**The demo video** is [demo.mp4](../assets/demo.mp4): 1920×1080, 1:03, 2 MB, with captions and no narration, so it
+works with the sound off. An agent researches Lisbon on Wikipedia, makes a budget with a chart in LibreOffice Calc and
+exports the plan as a PDF from Writer. Each tool call and its result are shown next to the desktop, with a running
+count of tokens against what the same steps cost in screenshots: 12 calls and 2,372 tokens against about 36,855.
+`python scripts/demo_video.py` records it again. Upload the file itself to X and LinkedIn, which play it in the feed,
+and use it as the first post or the post's attachment. Put it on YouTube for Product Hunt ([youtube.md](youtube.md)).
+[demo-poster.png](../assets/demo-poster.png) is a frame with a play button, for links to the video, and
+[demo-thumbnail.jpg](../assets/demo-thumbnail.jpg) is the YouTube thumbnail.
 
 The two main images are 1280×640 (2:1), the size the landing page declares for its link card (`og:image`).
 
