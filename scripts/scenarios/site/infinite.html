@@ -1,0 +1,21 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Activity feed</title>
+<link rel="stylesheet" href="gym.css"></head><body><h1>Activity feed</h1><p class="muted">More entries load as you scroll.</p>
+<div id="list"></div><p id="loading" class="muted">Loading more...</p>
+<script>
+const ITEMS = [{"n": 1, "code": "onyx-986"}, {"n": 2, "code": "raven-977"}, {"n": 3, "code": "yarrow-576"}, {"n": 4, "code": "onyx-620"}, {"n": 5, "code": "saffron-294"}, {"n": 6, "code": "fjord-923"}, {"n": 7, "code": "quartz-587"}, {"n": 8, "code": "umber-728"}, {"n": 9, "code": "zephyr-290"}, {"n": 10, "code": "delta-557"}, {"n": 11, "code": "jasper-245"}, {"n": 12, "code": "cobalt-651"}, {"n": 13, "code": "zephyr-810"}, {"n": 14, "code": "umber-142"}, {"n": 15, "code": "tundra-505"}, {"n": 16, "code": "onyx-769"}, {"n": 17, "code": "xenon-730"}, {"n": 18, "code": "umber-261"}, {"n": 19, "code": "tundra-115"}, {"n": 20, "code": "quartz-164"}, {"n": 21, "code": "birch-136"}, {"n": 22, "code": "granite-347"}, {"n": 23, "code": "tundra-130"}, {"n": 24, "code": "yarrow-575"}, {"n": 25, "code": "kelp-551"}, {"n": 26, "code": "saffron-962"}, {"n": 27, "code": "granite-631"}, {"n": 28, "code": "harbor-755"}, {"n": 29, "code": "jasper-611"}, {"n": 30, "code": "amber-778"}, {"n": 31, "code": "cobalt-568"}, {"n": 32, "code": "umber-384"}, {"n": 33, "code": "nectar-664"}, {"n": 34, "code": "cobalt-824"}, {"n": 35, "code": "indigo-422"}, {"n": 36, "code": "yarrow-335"}, {"n": 37, "code": "quartz-395"}, {"n": 38, "code": "amber-171"}, {"n": 39, "code": "saffron-884"}, {"n": 40, "code": "delta-510"}, {"n": 41, "code": "delta-966"}, {"n": 42, "code": "jasper-495"}, {"n": 43, "code": "cobalt-117"}, {"n": 44, "code": "velvet-100"}, {"n": 45, "code": "granite-314"}, {"n": 46, "code": "birch-581"}, {"n": 47, "code": "marble-825"}, {"n": 48, "code": "marble-529"}, {"n": 49, "code": "cobalt-679"}, {"n": 50, "code": "umber-303"}, {"n": 51, "code": "yarrow-791"}, {"n": 52, "code": "indigo-444"}, {"n": 53, "code": "cobalt-418"}, {"n": 54, "code": "kelp-115"}, {"n": 55, "code": "nectar-876"}, {"n": 56, "code": "delta-237"}, {"n": 57, "code": "harbor-823"}, {"n": 58, "code": "delta-111"}, {"n": 59, "code": "birch-576"}, {"n": 60, "code": "zephyr-598"}, {"n": 61, "code": "fjord-798"}, {"n": 62, "code": "raven-292"}, {"n": 63, "code": "onyx-621"}, {"n": 64, "code": "granite-849"}, {"n": 65, "code": "yarrow-234"}, {"n": 66, "code": "nectar-759"}, {"n": 67, "code": "marble-219"}, {"n": 68, "code": "marble-530"}, {"n": 69, "code": "granite-100"}, {"n": 70, "code": "indigo-985"}, {"n": 71, "code": "zephyr-706"}, {"n": 72, "code": "jasper-120"}, {"n": 73, "code": "granite-291"}, {"n": 74, "code": "marble-974"}, {"n": 75, "code": "tundra-757"}, {"n": 76, "code": "saffron-202"}, {"n": 77, "code": "birch-249"}, {"n": 78, "code": "granite-552"}, {"n": 79, "code": "indigo-109"}, {"n": 80, "code": "yarrow-724"}, {"n": 81, "code": "kelp-950"}, {"n": 82, "code": "jasper-495"}, {"n": 83, "code": "cobalt-176"}, {"n": 84, "code": "cobalt-313"}, {"n": 85, "code": "saffron-751"}, {"n": 86, "code": "harbor-115"}, {"n": 87, "code": "tundra-477"}, {"n": 88, "code": "lumen-737"}, {"n": 89, "code": "onyx-230"}, {"n": 90, "code": "saffron-595"}, {"n": 91, "code": "saffron-238"}, {"n": 92, "code": "marble-287"}, {"n": 93, "code": "umber-257"}, {"n": 94, "code": "jasper-333"}, {"n": 95, "code": "tundra-355"}, {"n": 96, "code": "xenon-294"}, {"n": 97, "code": "fjord-857"}, {"n": 98, "code": "umber-667"}, {"n": 99, "code": "granite-803"}, {"n": 100, "code": "marble-594"}];
+let shown = 0, busy = false;
+function more() {
+  if (busy || shown >= ITEMS.length) return; busy = true;
+  setTimeout(() => {
+    const list = document.getElementById("list");
+    for (const it of ITEMS.slice(shown, shown + 15)) {
+      const d = document.createElement("div"); d.className = "card";
+      d.innerHTML = `<b>Entry ${it.n}</b> <span class="muted">reference</span> <code>${it.code}</code>`; list.appendChild(d);
+    }
+    shown = Math.min(ITEMS.length, shown + 15); busy = false;
+    if (shown >= ITEMS.length) document.getElementById("loading").textContent = "You have reached the end.";
+  }, 700);
+}
+window.addEventListener("scroll", () => { if (innerHeight + scrollY > document.body.scrollHeight - 300) more(); });
+more();
+</script></body></html>

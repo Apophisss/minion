@@ -1,0 +1,14 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Contacts - Pipeline CRM</title>
+<link rel="stylesheet" href="gym.css"><script src="gym.js"></script></head><body>
+<h1>Pipeline CRM</h1><h2>Add a contact</h2>
+<form id="f"><label>First name <input name="first"></label><label>Last name <input name="last"></label>
+<label>Email <input name="email" type="email"></label><label>City <input name="city"></label>
+<label>Amount due <input name="amount" inputmode="decimal"></label><p><button>Save contact</button> <span id="ok" class="muted"></span></p></form>
+<h2>Contacts (<span id="n">0</span>)</h2><table><thead><tr><th>Name</th><th>Email</th><th>City</th><th>Amount due</th></tr></thead><tbody id="tb"></tbody></table>
+<script>
+const all = [];
+document.getElementById("f").onsubmit = e => { e.preventDefault(); const f = e.target, d = {first: f.first.value.trim(), last: f.last.value.trim(), email: f.email.value.trim(), city: f.city.value.trim(), amount: f.amount.value.trim()};
+  if (!d.first || !d.email) { document.getElementById("ok").textContent = "First name and email are required."; return; }
+  all.push(d); document.getElementById("tb").insertAdjacentHTML("beforeend", `<tr><td>${d.first} ${d.last}</td><td>${d.email}</td><td>${d.city}</td><td>${d.amount}</td></tr>`);
+  document.getElementById("n").textContent = all.length; document.getElementById("ok").textContent = "Saved " + d.first + "."; f.reset(); f.first.focus(); report("contacts", d); };
+</script></body></html>

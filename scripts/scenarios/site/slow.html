@@ -1,0 +1,9 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Reports</title>
+<link rel="stylesheet" href="gym.css"><script src="gym.js"></script></head><body>
+<h1>Quarterly reports</h1><p><button id="g">Generate report</button></p><p id="spin" class="muted" hidden>Generating... this can take a while.</p>
+<div id="out"></div><div id="result"></div>
+<script>
+document.getElementById("g").onclick = () => { document.getElementById("spin").hidden = false;
+  setTimeout(() => { document.getElementById("spin").hidden = true;
+    document.getElementById("out").innerHTML = "<h2>Q3 2026 report</h2><p>Rows processed: <b>4,217</b>. Flagged transactions: <b>38</b>.</p>"; }, 7000); };
+</script></body></html>

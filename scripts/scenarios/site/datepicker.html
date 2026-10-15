@@ -1,0 +1,21 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Book a table</title>
+<link rel="stylesheet" href="gym.css"><script src="gym.js"></script>
+<style>.cal{border:1px solid #cbd5e1;border-radius:8px;padding:10px;width:300px}.cal table td{text-align:center;cursor:pointer;border:0}
+.cal td:hover{background:#e0e7ff}.hd{display:flex;justify-content:space-between;align-items:center}</style></head><body>
+<h1>Book a table at Olive &amp; Thyme</h1>
+<p>Date: <input id="d" readonly placeholder="Pick a date" onclick="cal.hidden=false"></p>
+<div class="cal" id="cal" hidden><div class="hd"><button class="secondary" id="pv" aria-label="Previous month">‹</button><b id="m"></b>
+<button class="secondary" id="nx" aria-label="Next month">›</button></div><table><thead><tr><th>Mo</th><th>Tu</th><th>We</th><th>Th</th><th>Fr</th><th>Sa</th><th>Su</th></tr></thead><tbody id="g"></tbody></table></div>
+<label>Guests <select id="n"><option>1</option><option selected>2</option><option>3</option><option>4</option><option>5</option><option>6</option></select></label>
+<p><button id="b">Book</button></p><div id="result"></div>
+<script>
+const $ = id => document.getElementById(id), cal = $("cal"); let y = 2026, mo = 9;
+const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+function draw() { $("m").textContent = MONTHS[mo] + " " + y; const first = (new Date(y, mo, 1).getDay() + 6) % 7, days = new Date(y, mo + 1, 0).getDate();
+  let h = "<tr>" + "<td></td>".repeat(first); for (let d = 1; d <= days; d++) { h += `<td data-d="${d}">${d}</td>`; if ((first + d) % 7 === 0) h += "</tr><tr>"; }
+  $("g").innerHTML = h + "</tr>"; $("g").querySelectorAll("td[data-d]").forEach(td => td.onclick = () => {
+    $("d").value = `${y}-${String(mo + 1).padStart(2, "0")}-${String(td.dataset.d).padStart(2, "0")}`; cal.hidden = true; }); }
+$("pv").onclick = () => { mo--; if (mo < 0) { mo = 11; y--; } draw(); }; $("nx").onclick = () => { mo++; if (mo > 11) { mo = 0; y++; } draw(); };
+$("b").onclick = () => { if (!$("d").value) { $("result").textContent = "Pick a date first."; return; } report("datepicker", {date: $("d").value, guests: $("n").value}, "Booked for " + $("d").value + ", " + $("n").value + " guests."); };
+draw();
+</script></body></html>

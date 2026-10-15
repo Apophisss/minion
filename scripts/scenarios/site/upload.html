@@ -1,0 +1,7 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Submit your documents</title>
+<link rel="stylesheet" href="gym.css"><script src="gym.js"></script></head><body>
+<h1>Submit your documents</h1><p>Upload your signed contract (PDF or text, up to 5 MB).</p>
+<label>Contract file <input type="file" id="f"></label><p><button id="s">Submit</button></p><div id="result"></div>
+<script>document.getElementById("s").onclick = () => { const f = document.getElementById("f").files[0];
+  if (!f) { document.getElementById("result").textContent = "Choose a file first."; return; }
+  const r = new FileReader(); r.onload = () => report("upload", {name: f.name, size: f.size, head: String(r.result).slice(0, 60)}, "Received " + f.name + " (" + f.size + " bytes)."); r.readAsText(f); };</script></body></html>

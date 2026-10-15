@@ -1,0 +1,11 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Expense approvals</title>
+<link rel="stylesheet" href="gym.css"><script src="gym.js"></script></head><body>
+<h1>Expense approvals</h1><p class="muted">Pending claims (scroll inside the list).</p>
+<div id="box" style="height:260px;overflow:auto;border:1px solid #cbd5e1;border-radius:8px;padding:4px"></div>
+<p>Notes for the finance team are below the list.</p><div id="result"></div>
+<script>
+const P = ["Taxi","Hotel","Lunch","Flight","Conference","Software","Books","Parking"]; let h = "";
+for (let i = 1; i <= 60; i++) h += `<div class="card" style="margin:4px">Claim ${2000 + i}: ${P[i % 8]}, $${(i * 37) % 900 + 20} <button class="secondary" data-c="${2000 + i}">Approve</button></div>`;
+document.getElementById("box").innerHTML = h;
+document.querySelectorAll("[data-c]").forEach(b => b.onclick = () => { b.textContent = "Approved"; report("scrollbox", {claim: Number(b.dataset.c)}, "Claim " + b.dataset.c + " approved."); });
+</script></body></html>

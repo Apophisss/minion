@@ -1,0 +1,10 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Dashboard</title>
+<link rel="stylesheet" href="gym.css"><script src="gym.js"></script>
+<style>.top{display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #cbd5e1;padding-bottom:8px}
+.av{position:relative}.av img{width:40px;height:40px;border-radius:50%;background:#a5b4fc}
+.menu{display:none;position:absolute;right:0;top:44px;background:#fff;border:1px solid #cbd5e1;border-radius:8px;min-width:160px;padding:6px}
+.av:hover .menu{display:block}.menu a{display:block;padding:6px}</style></head><body>
+<div class="top"><h1>Dashboard</h1><div class="av"><img alt="Account menu" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40'%3E%3Ccircle cx='20' cy='20' r='20' fill='%23a5b4fc'/%3E%3C/svg%3E">
+<div class="menu"><a href="#" onclick="go('Profile')">Profile</a><a href="#" onclick="go('Billing')">Billing</a><a href="#" onclick="go('Sign out')">Sign out</a></div></div></div>
+<p>Welcome back. Your plan renews on 1 December.</p><div id="result"></div>
+<script>function go(x) { event.preventDefault(); report("hover", {chosen: x}, x + " settings opened."); }</script></body></html>

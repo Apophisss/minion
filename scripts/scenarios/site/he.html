@@ -1,0 +1,9 @@
+<!doctype html><html lang="he" dir="rtl"><head><meta charset="utf-8"><title>הרשמה לסדנה</title>
+<link rel="stylesheet" href="gym.css"><script src="gym.js"></script></head><body>
+<h1>הרשמה לסדנת צילום</h1><p>הסדנה תתקיים ביום חמישי בשעה 18:00. מספר המקומות מוגבל.</p>
+<label>שם מלא <input id="n"></label><label>טלפון <input id="p"></label>
+<label>עיר <select id="c"><option value="">בחרו עיר</option><option>תל אביב</option><option>ירושלים</option><option>חיפה</option><option>באר שבע</option></select></label>
+<label><input type="checkbox" id="k"> אני מאשר/ת קבלת עדכונים</label>
+<p><button id="s">שליחה</button></p><div id="result"></div>
+<script>document.getElementById("s").onclick = () => { const d = {name: n.value, phone: p.value, city: c.value, updates: k.checked};
+  if (!d.name || !d.city) { document.getElementById("result").textContent = "יש למלא שם ועיר."; return; } report("he", d, "תודה " + d.name + ", נרשמת בהצלחה!"); };</script></body></html>

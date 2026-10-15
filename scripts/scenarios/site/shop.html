@@ -1,0 +1,28 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Gadget Barn</title>
+<link rel="stylesheet" href="gym.css"><script src="gym.js"></script>
+<style>.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}</style></head><body>
+<h1>Gadget Barn</h1><p><input id="q" placeholder="Search products" size="30"> <select id="cat"><option value="">All categories</option><option>Accessories</option><option>Audio</option><option>Cables</option><option>Storage</option><option>Video</option></select>
+<select id="sort"><option value="">Sort: featured</option><option value="asc">Price: low to high</option><option value="desc">Price: high to low</option></select> <a href="#" id="cartlink">Cart (<span id="cn">0</span>)</a></p>
+<div class="grid" id="grid"></div><div id="cart" hidden></div><div id="result"></div>
+<script>
+const P = [{"id": 1, "name": "USB-C cable 1 m", "cat": "Cables", "price": 7.9}, {"id": 2, "name": "USB-C cable 2 m", "cat": "Cables", "price": 9.5}, {"id": 3, "name": "USB hub 4-port", "cat": "Accessories", "price": 18.0}, {"id": 4, "name": "USB flash drive 64 GB", "cat": "Storage", "price": 11.25}, {"id": 5, "name": "USB flash drive 128 GB", "cat": "Storage", "price": 16.0}, {"id": 6, "name": "Wireless mouse", "cat": "Accessories", "price": 22.0}, {"id": 7, "name": "Mechanical keyboard", "cat": "Accessories", "price": 89.0}, {"id": 8, "name": "HDMI cable 2 m", "cat": "Cables", "price": 8.4}, {"id": 9, "name": "Laptop stand", "cat": "Accessories", "price": 34.0}, {"id": 10, "name": "Webcam 1080p", "cat": "Video", "price": 45.0}, {"id": 11, "name": "USB desk lamp", "cat": "Accessories", "price": 6.75}, {"id": 12, "name": "Portable SSD 1 TB", "cat": "Storage", "price": 99.0}, {"id": 13, "name": "Noise-cancelling headphones", "cat": "Audio", "price": 149.0}, {"id": 14, "name": "Bluetooth speaker", "cat": "Audio", "price": 39.0}, {"id": 15, "name": "Microphone USB", "cat": "Audio", "price": 59.0}, {"id": 16, "name": "Monitor 27 inch", "cat": "Video", "price": 229.0}]; const cart = {}; const $ = id => document.getElementById(id);
+function grid() { let ps = P.filter(p => (!$("q").value || p.name.toLowerCase().includes($("q").value.toLowerCase())) && (!$("cat").value || p.cat === $("cat").value));
+  if ($("sort").value) ps = ps.slice().sort((a, b) => ($("sort").value === "asc" ? 1 : -1) * (a.price - b.price));
+  $("grid").innerHTML = ps.map(p => `<div class="card"><b>${p.name}</b><p>$${p.price.toFixed(2)}</p><button data-id="${p.id}">Add to cart</button></div>`).join("") || "<p>No products found.</p>";
+  $("grid").querySelectorAll("button").forEach(b => b.onclick = () => { cart[b.dataset.id] = (cart[b.dataset.id] || 0) + 1; count(); b.textContent = "Added ✓"; }); }
+function count() { $("cn").textContent = Object.values(cart).reduce((a, b) => a + b, 0); }
+function total() { return Object.entries(cart).reduce((s, [id, n]) => s + P[id - 1].price * n, 0); }
+function showCart() { $("grid").hidden = true; $("cart").hidden = false;
+  $("cart").innerHTML = "<h2>Your cart</h2>" + Object.entries(cart).map(([id, n]) => `<div class="card">${P[id - 1].name} - $${P[id - 1].price.toFixed(2)} <label style="display:inline">Quantity <input type="number" min="0" value="${n}" data-id="${id}" style="width:60px"></label> <button class="secondary" data-rm="${id}">Remove</button></div>`).join("") +
+   `<p>Subtotal: <b id="sub">$${total().toFixed(2)}</b></p><h2>Checkout</h2><label>Full name <input id="nm"></label><label>Address <input id="ad" size="40"></label>
+   <label><input type="radio" name="sh" value="Standard" checked> Standard shipping (free)</label><label><input type="radio" name="sh" value="Express"> Express shipping ($12)</label>
+   <label>Promo code <input id="pc" size="10"></label><p><button id="place">Place order</button> <button class="secondary" id="back">Continue shopping</button></p>`;
+  $("cart").querySelectorAll("input[data-id]").forEach(i => i.onchange = () => { cart[i.dataset.id] = Number(i.value); if (!cart[i.dataset.id]) delete cart[i.dataset.id]; count(); showCart(); });
+  $("cart").querySelectorAll("[data-rm]").forEach(b => b.onclick = () => { delete cart[b.dataset.rm]; count(); showCart(); });
+  $("back").onclick = () => { $("cart").hidden = true; $("grid").hidden = false; grid(); };
+  $("place").onclick = () => { if (!Object.keys(cart).length || !$("nm").value || !$("ad").value) { $("result").textContent = "Add items and fill in your name and address."; return; }
+    const ship = document.querySelector("[name=sh]:checked").value, promo = $("pc").value.trim().toUpperCase(); let t = total() * (promo === "SAVE10" ? 0.9 : 1) + (ship === "Express" ? 12 : 0);
+    const d = {items: Object.fromEntries(Object.entries(cart).map(([id, n]) => [P[id - 1].name, n])), name: $("nm").value, address: $("ad").value, shipping: ship, promo: promo, total: Math.round(t * 100) / 100};
+    report("shop", d, "Order placed! Total charged: $" + d.total.toFixed(2)); }; }
+$("q").oninput = grid; $("cat").onchange = grid; $("sort").onchange = grid; $("cartlink").onclick = e => { e.preventDefault(); showCart(); }; grid();
+</script></body></html>

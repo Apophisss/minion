@@ -1,0 +1,48 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Create your account - Nimbus</title>
+<link rel="stylesheet" href="gym.css"><script src="gym.js"></script></head><body>
+<h1>Create your Nimbus account</h1>
+<form id="f" novalidate>
+<label>Full name <input name="name" autocomplete="off"></label>
+<label>Email address <input name="email" type="email"></label>
+<label>Password <input name="password" type="password"></label>
+<label>Confirm password <input name="confirm" type="password"></label>
+<label>Phone <input name="phone" type="tel" placeholder="+1 555 0100"></label>
+<fieldset><legend>Plan</legend>
+<label><input type="radio" name="plan" value="Free" checked> Free</label>
+<label><input type="radio" name="plan" value="Pro"> Pro ($12/month)</label>
+<label><input type="radio" name="plan" value="Team"> Team ($49/month)</label></fieldset>
+<fieldset><legend>Interests</legend>
+<label><input type="checkbox" name="interests" value="Music"> Music</label>
+<label><input type="checkbox" name="interests" value="Sports"> Sports</label>
+<label><input type="checkbox" name="interests" value="Technology"> Technology</label>
+<label><input type="checkbox" name="interests" value="Travel"> Travel</label></fieldset>
+<label>Country <select name="country"><option value="">Select a country</option><option>Canada</option><option>France</option>
+<option>Germany</option><option>Israel</option><option>Japan</option><option>United Kingdom</option><option>United States</option></select></label>
+<label>Date of birth <input name="birth" type="date"></label>
+<label>Years of experience <input name="years" type="number" min="0" max="50"></label>
+<label>About you <textarea name="bio" rows="3" cols="50"></textarea></label>
+<label><input type="checkbox" name="terms"> I accept the Terms of Service</label>
+<p><button type="submit">Create account</button></p>
+<p id="errors" style="color:#b91c1c"></p>
+</form>
+<div id="result"></div>
+<script>
+document.getElementById("f").addEventListener("submit", e => {
+  e.preventDefault();
+  const f = e.target, d = {
+    name: f.name.value.trim(), email: f.email.value.trim(), phone: f.phone.value.trim(),
+    plan: f.plan.value, interests: [...f.querySelectorAll("[name=interests]:checked")].map(x => x.value),
+    country: f.country.value, birth: f.birth.value, years: f.years.value, bio: f.bio.value.trim(), terms: f.terms.checked};
+  const errs = [];
+  if (!d.name) errs.push("Full name is required.");
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(d.email)) errs.push("Enter a valid email address.");
+  if (f.password.value.length < 8) errs.push("Password must be at least 8 characters.");
+  if (f.password.value !== f.confirm.value) errs.push("Passwords do not match.");
+  if (!d.country) errs.push("Select a country.");
+  if (!d.terms) errs.push("You must accept the Terms of Service.");
+  document.getElementById("errors").textContent = errs.join(" ");
+  if (errs.length) { report("signup-attempt", {errors: errs}); return; }
+  f.style.display = "none";
+  report("signup", d, "Welcome aboard, " + d.name + "! Account created.\n" + JSON.stringify(d, null, 1));
+});
+</script></body></html>
