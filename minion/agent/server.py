@@ -1778,8 +1778,9 @@ class Agent:
         return state
 
     def _files_changed(self, before: dict, after: dict) -> list[str]:
-        def short(path: str) -> str:
-            return "~" + path[len(self.home) :] if path.startswith(self.home + "/") else path
+        def short(path: str) -> str:  # ~/Downloads/x.csv (with / on every system)
+            inside = path.startswith(os.path.join(self.home, ""))
+            return ("~" + path[len(self.home) :] if inside else path).replace(os.sep, "/")
 
         def size(n: int) -> str:
             return f"{n} bytes" if n < 1024 else f"{n / 1024:.0f} KB" if n < 1024 * 1024 else f"{n / 1048576:.1f} MB"
@@ -1788,7 +1789,7 @@ class Agent:
         for path, (_, n) in sorted(after.items(), key=lambda kv: -kv[1][0]):
             if path == "\0partial":
                 continue
-            if path.endswith((".part", ".crdownload", ".tmp")) or "/.~lock." in path:
+            if path.endswith((".part", ".crdownload", ".tmp")) or os.path.basename(path).startswith(".~lock."):
                 if path not in before and path.endswith((".part", ".crdownload")):
                     notes.append(f"downloading {short(path.rsplit('.', 1)[0])} (not finished yet)")
                 continue

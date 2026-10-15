@@ -256,12 +256,14 @@ def test_the_reply_says_which_files_an_action_saved_or_downloaded(tmp_path):
     (tmp_path / ".cache/noise").write_text("n")
     os.remove(tmp_path / "Downloads/old.bin")
     notes = agent._files_changed(before, agent._files_state())
-    assert notes == [
-        "downloading ~/Downloads/data.csv (not finished yet)",
-        "new file ~/Documents/letters/Avi.pdf (3 KB)",
-        "saved ~/Documents/report.docx (8 bytes)",
-        "deleted ~/Downloads/old.bin",
-    ]
+    assert sorted(notes) == sorted(
+        [
+            "downloading ~/Downloads/data.csv (not finished yet)",
+            "new file ~/Documents/letters/Avi.pdf (3 KB)",
+            "saved ~/Documents/report.docx (8 bytes)",
+            "deleted ~/Downloads/old.bin",
+        ]
+    )  # (the order follows modification times, which can tie on some systems)
 
 
 # -- documents -----------------------------------------------------------------------------------------
