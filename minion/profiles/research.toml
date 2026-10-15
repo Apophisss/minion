@@ -19,7 +19,7 @@ apps = [
   { name = "Notes", id = "notes", command = "mousepad" },
 ]
 tips = """
-Browse with `open <url>`; PDFs open in Firefox's viewer. For long documents, extract text instead of reading screenshots:
-`run pdftotext -layout ~/Downloads/paper.pdf - | head -200`. Keep notes in ~/Documents/notes.md (`open notes`), and
+Browse with `open <url>`; PDFs open in Firefox's viewer. For long documents, read the text instead of screenshots:
+`files read ~/Downloads/paper.pdf` (any document: pdf, docx, epub, html...). Keep notes in ~/Documents/notes.md (`open notes`), and
 convert them with pandoc (`pandoc notes.md -o report.docx`). Use `see` to read pages as text — far cheaper than screenshots.
 """

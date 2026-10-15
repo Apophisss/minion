@@ -88,6 +88,44 @@ def _quote(s: str) -> str:
     return '"' + s.replace('"', '\\"') + '"'
 
 
+# "button:Save", 'link "Docs"', "field:Email": a text target limited to one kind of control.
+ROLE_FAMILIES = {
+    "button": {"push button", "toggle button", "button", "menu button"},
+    "link": {"link"},
+    "field": {"entry", "password text", "text", "spin button", "combo box"},
+    "checkbox": {"check box", "check menu item"},
+    "radio": {"radio button", "radio menu item"},
+    "tab": {"page tab"},
+    "menu": {"menu", "menu item", "check menu item", "radio menu item"},
+    "item": {"list item", "tree item", "table cell", "cell", "menu item", "option"},
+    "heading": {"heading"},
+    "cell": {"cell", "table cell"},
+    "dropdown": {"combo box", "list box"},
+    "image": {"image", "icon"},
+    "slider": {"slider"},
+}
+ROLE_WORDS = {
+    **{w: w for w in ROLE_FAMILIES},
+    **dict.fromkeys(("entry", "input", "textbox", "text box", "text field", "box"), "field"),
+    **dict.fromkeys(("check", "check box"), "checkbox"),
+    **dict.fromkeys(("radio button", "option button"), "radio"),
+    **dict.fromkeys(("menu item", "menuitem"), "menu"),
+    **dict.fromkeys(("combo", "combobox", "combo box", "select", "list box"), "dropdown"),
+    **dict.fromkeys(("icon", "picture"), "image"),
+    "page tab": "tab",
+    "list item": "item",
+}
+_ROLE_QUERY = re.compile(r"^\s*([a-z][a-z ]{1,14}?)\s*(?::\s*(.+?)|\s+([\"'])(.+)\3)\s*$", re.S | re.I)
+
+
+def role_query(query: str) -> tuple[str, str]:
+    """("button", "Save") for "button:Save" or 'button "Save"'; ("", query) for plain text."""
+    m = _ROLE_QUERY.match(query or "")
+    if m and m.group(1).lower().strip() in ROLE_WORDS:
+        return ROLE_WORDS[m.group(1).lower().strip()], (m.group(2) or m.group(4) or "").strip()
+    return "", query
+
+
 _TYPOGRAPHY = str.maketrans({"’": "'", "‘": "'", "“": '"', "”": '"', "–": "-", "—": "-", "\u00a0": " "})
 
 
@@ -257,8 +295,9 @@ class Perception:
         sw, sh = self.size
         snap = None
         a11y_note = ""
+        aw = None
         if a11y.AVAILABLE:
-            aw = a11y.find_window(title=target.title if target else None, pid=target.pid if target else None)
+            aw = a11y.window_for(target)
             if aw is not None:
                 snap = a11y.snapshot(aw, max_elements=max_elements, screen=(sw, sh), text_limit=text_limit)
                 if snap.error:
@@ -268,6 +307,10 @@ class Perception:
         else:
             a11y_note = "accessibility is not available"
         elements = snap.elements if snap else []
+        if a11y.AVAILABLE and target is not None and aw is not None:
+            popups = a11y.popup_menus(aw, screen=(sw, sh))
+            if popups:  # a right-click menu in a window of its own: it is what the next action is about
+                elements = popups + elements
         useful = sum(1 for e in elements if e.name or e.text)
         want_ocr = ocr is True or (ocr == "auto" and useful < 5)
         ocr_lines = []
@@ -537,10 +580,10 @@ class Perception:
         sw, sh = self.size
         if a11y.AVAILABLE:
             focused = self.windows.focused()
-            aw = a11y.find_window(title=focused.title if focused else None, pid=focused.pid if focused else None)
+            aw = a11y.window_for(focused)
             if aw is not None:
                 snap = a11y.snapshot(aw, max_elements=600, budget=2.5, screen=(sw, sh))
-                for el in snap.elements:
+                for el in [*a11y.popup_menus(aw, screen=(sw, sh)), *snap.elements]:
                     text = "" if el.role in ("combo box", "list box") and el.text.startswith("options: ") else el.text
                     raw = max(match_score(query, el.name), match_score(query, text), match_score(query, el.value))
                     if raw < min_score:
@@ -605,9 +648,15 @@ class Perception:
     def _text(self, query: str, prefer_input: bool = False) -> Target:
         """A text target: a control labeled exactly so, or (if the accessibility tree has nothing like it)
         exactly that text on screen via OCR. Never a longer label: "Delete" must not click "Delete all"."""
+        family, name = role_query(query)
+        if family:
+            return self._typed(family, name, prefer_input)
         found = self.find_text(query, prefer_input=prefer_input, use_ocr=False)
         exact = [f for f in found if f[1].match >= 100]
         if not exact:
+            below = self._offscreen(query, prefer_input)
+            if below is not None:  # labeled exactly so, but scrolled out of view: it is there now
+                return below
             near = [t for _, t in found if isinstance(t.element, a11y.Element) and t.element.interactive]
             if near:
                 names = "; ".join(t.desc for t in near[:3])
@@ -636,13 +685,62 @@ class Perception:
             t.desc += f" (first of {len(ties) + 1} matches; use @id to pick another)"
         return t
 
+    def _offscreen(self, query: str, prefer_input: bool = False) -> Target | None:
+        """A control labeled exactly `query` that is scrolled out of view (a long form, a long page):
+        scroll it into view and return where it is now."""
+        if not a11y.AVAILABLE:
+            return None
+        focused = self.windows.focused()
+        aw = a11y.window_for(focused) if focused else None
+        if aw is None:
+            return None
+        sw, sh = self.size
+        snap = a11y.snapshot(aw, max_elements=1500, budget=2.5, screen=None, clip=False)
+        for el in snap.elements:
+            if not el.interactive or max(match_score(query, el.name), match_score(query, el.value)) < 100:
+                continue
+            if not a11y.scroll_into_view(el):  # (the visible ones were searched first: this one is not)
+                continue
+            time.sleep(0.35)
+            box = a11y.refresh(el)
+            if not box:
+                continue
+            x, y, w, h = box
+            cx, cy = x + w // 2, y + h // 2
+            if 0 <= cx < sw and 0 <= cy < sh:
+                return Target(cx, cy, f'{el.role} "{el.label()}" ({cx},{cy}) (scrolled into view)', el, 100)
+        return None
+
+    def _typed(self, family: str, name: str, prefer_input: bool) -> Target:
+        """`button:Save`: only controls of that kind, labeled exactly so."""
+        if not name:
+            raise TargetError(f"{family}: needs a label, e.g. {family}:Save")
+        roles = ROLE_FAMILIES[family]
+        found = [
+            f
+            for f in self.find_text(name, prefer_input=prefer_input, use_ocr=False)
+            if isinstance(f[1].element, a11y.Element) and f[1].element.role in roles
+        ]
+        exact = [f for f in found if f[1].match >= 100]
+        if not exact:
+            near = "; ".join(t.desc for _, t in found[:3])
+            raise TargetError(
+                f'no {family} is labeled exactly "{name}"'
+                + (f". Did you mean {near}?" if near else ". Use an @id from `see`, or plain text without the kind")
+            )
+        best = exact[0][1]
+        ties = [f for f in exact[1:] if f[0] == exact[0][0]]
+        if ties:
+            best.desc += f" (first of {len(ties) + 1} matches; use @id to pick another)"
+        return best
+
     def _visible_text(self, query: str) -> str:
         """Where the accessibility tree shows `query` as whole words (any element's name, text, value, or
         its editor/terminal lines), or ""."""
         if not a11y.AVAILABLE:
             return ""
         focused = self.windows.focused()
-        aw = a11y.find_window(title=focused.title if focused else None, pid=focused.pid if focused else None)
+        aw = a11y.window_for(focused)
         if aw is None:
             return ""
         sw, sh = self.size

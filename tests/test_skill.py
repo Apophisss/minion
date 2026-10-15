@@ -30,7 +30,7 @@ def test_plugin_ships_the_same_skill():
 def test_plugin_and_marketplace_manifests():
     plugin = json.loads((ROOT / "plugins/minion/.claude-plugin/plugin.json").read_text())
     assert plugin["name"] == "minion" and plugin["version"] == VERSION
-    assert plugin["mcpServers"]["minion"]["args"] == ["minion-desktop", "mcp"]
+    assert plugin["mcpServers"]["minion"]["args"] == [f"minion-desktop@{VERSION}", "mcp"]  # this exact release
     market = json.loads((ROOT / ".claude-plugin/marketplace.json").read_text())
     (entry,) = market["plugins"]
     assert entry["name"] == plugin["name"] and market["owner"]["name"]
@@ -41,3 +41,11 @@ def test_every_command_in_the_skill_exists():
     commands = set(build_parser()._subparsers._group_actions[0].choices)
     used = set(re.findall(r"`minion ([a-z-]+)", SKILL.read_text()))
     assert used and used <= commands, used - commands
+
+
+def test_every_tool_says_whether_it_changes_things():
+    from minion.tools import COMPUTER_TOOL, TOOLS
+
+    for tool in [*TOOLS, COMPUTER_TOOL]:
+        notes = tool["annotations"]
+        assert {"title", "readOnlyHint", "destructiveHint"} <= set(notes), tool["name"]

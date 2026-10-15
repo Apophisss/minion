@@ -42,6 +42,11 @@ __all__ = [
     "scroll",
     "fill",
     "select",
+    "menu",
+    "menus",
+    "path",
+    "read",
+    "convert",
     "wait",
     "wait_for",
     "launch",
@@ -198,6 +203,31 @@ def select(target, option: str) -> str:
     return act({"action": "select", "target": target, "option": option})
 
 
+def menu(item: str) -> str:
+    """Choose a menu command by its path: menu("File > Export as PDF")."""
+    return act({"action": "menu", "item": item})
+
+
+def menus() -> list[str]:
+    """The focused app's menu commands with their shortcuts, one line per menu."""
+    return _call("see", {"menus": True}).get("menus", [])
+
+
+def path(file_path: str, overwrite: bool = False) -> str:
+    """Type a full path into the open file dialog (Open, Save As, Export...) and confirm it."""
+    return act({"action": "path", "path": file_path, "overwrite": overwrite})
+
+
+def read(file_path: str) -> str:
+    """A document's text: docx, xlsx, pptx, odt/ods/odp, pdf, epub, html, images (OCR), ..."""
+    return _call("read", {"path": file_path})["text"]
+
+
+def convert(file_path: str, to: str, outdir: str | None = None) -> str:
+    """Convert a document or image ("pdf", "docx", "xlsx", "csv", "png", "md", ...); returns the new path."""
+    return _call("convert", {"path": file_path, "to": to, "outdir": outdir})["path"]
+
+
 def wait(seconds: float) -> None:
     time.sleep(seconds)
 
@@ -211,9 +241,10 @@ def wait_for(text: str, timeout: float = 10.0, gone: bool = False) -> bool:
 
 
 # -- apps, shell, misc ------------------------------------------------------------
-def launch(target: str, wait: float = 12.0) -> dict:
-    """Open an app ("writer"), a URL, a file or a command and wait for its window."""
-    return _call("open", {"target": target, "wait": wait})
+def launch(target: str, wait: float = 12.0, install: bool = True) -> dict:
+    """Open an app ("writer", "gimp", "vscode": installed first if needed), a URL, a file or a command,
+    and wait for its window."""
+    return _call("open", {"target": target, "wait": wait, "install": install})
 
 
 def run(command: str, timeout: float = 60.0, input: str | None = None) -> dict:

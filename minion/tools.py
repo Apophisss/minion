@@ -38,14 +38,18 @@ Minion gives you real Linux computers (isolated desktops with GUI apps; any prog
    research, data, windows (Windows .exe programs via Wine), base; count=N creates several at once.
 2. see() — the screen as text: windows + UI elements with stable @ids. Exact and cheap; prefer it to
    screenshots. see(changes=true) returns only what changed since your last look.
-3. act(actions=[...]) — click/type/key/scroll/fill/drag by @id, visible text ("Save") or "x,y". Batch
-   several actions per call; the reply says what changed (observe="changes" adds the changed UI).
+3. act(actions=[...]) — click/type/key/scroll/fill/drag by @id, visible text ("Save", or "button:Save" for one
+   kind of control) or "x,y". Batch several actions per call; the reply says what changed. menu ("File > Export
+   as PDF") runs any menu command (see(menus=true) lists them with shortcuts); path ("~/out.pdf") fills the open
+   file dialog.
 4. screenshot() when looks matter; marks=true labels clickable elements; detail="low" costs 4x fewer tokens.
 5. script(code=...) — for loops/repetition: Python runs inside the desktop with click/write/key/see/...;
    only what it prints comes back. run() executes shell commands (sudo works; `minion-install X`
    installs any app: apt names, .deb/.AppImage URLs, pip:, npm:).
-open() launches apps/URLs/files. files() moves files. view() gives a human a live link or hands off
-(logins, CAPTCHAs) until they press Done.
+open() launches apps, URLs and files; any app by name ("gimp", "vscode", "chrome") is installed the first time,
+and web apps ("figma", "gmail") open in the browser. files() moves files, and reads any document as text (docx,
+xlsx, pptx, pdf, ...) or converts it (files(action="convert", to="pdf")). view() gives a human a live link or
+hands off (logins, CAPTCHAs) until they press Done.
 """
 
 COMPACT_INSTRUCTIONS = """\
@@ -54,10 +58,11 @@ Use the `computer` tool, one command per call:
   create [office|browser|dev|research|data|windows|base] [--name NAME] [--count N]
   see [--changes] [--full] [--ocr]  -> the screen as text; act on the @ids it lists
   click|dclick|rclick TARGET · type TEXT · key KEYS · fill TARGET TEXT · select TARGET OPTION · scroll up|down [N]
+  menu File > Save As · path FILE [--overwrite] (in a file dialog) · see --menus (all menu commands)
   wait-for TEXT · open APP|URL|FILE · run SHELL · script PYTHON · screenshot [--marks] [--low]
-  list · use NAME · remove NAME · fork · freeze · view [MESSAGE]
-TARGET is @12 (from see), exact visible text ("Save"), or x,y. Prefer see to screenshots, and
-see --changes after acting. For loops or data entry, one script call beats many clicks.
+  read FILE (any document as text) · convert FILE FORMAT · list · use NAME · remove NAME · fork · view [MESSAGE]
+TARGET is @12 (from see), exact visible text ("Save"), button:Save, or x,y. open installs apps it doesn't
+have (open gimp). Prefer see to screenshots, and see --changes after acting. For loops, use script.
 """
 
 
@@ -116,7 +121,12 @@ TOOLS: list[dict] = [
             },
             "required": ["action"],
         },
-        "annotations": {"title": "Manage desktops", "destructiveHint": True, "openWorldHint": False},
+        "annotations": {
+            "title": "Manage desktops",
+            "readOnlyHint": False,
+            "destructiveHint": True,
+            "openWorldHint": False,
+        },
     },
     {
         "name": "see",
@@ -136,9 +146,13 @@ TOOLS: list[dict] = [
                 },
                 "window": {"type": "string", "description": "Describe this window (title, app or index) instead."},
                 "full_text": {"type": "boolean", "description": "Keep paragraphs whole (to read an article/document)."},
+                "menus": {
+                    "type": "boolean",
+                    "description": "Also list the app's menu commands and their keyboard shortcuts (for act menu).",
+                },
             },
         },
-        "annotations": {"title": "See the screen as text", "readOnlyHint": True},
+        "annotations": {"title": "See the screen as text", "readOnlyHint": True, "destructiveHint": False},
     },
     {
         "name": "screenshot",
@@ -158,7 +172,7 @@ TOOLS: list[dict] = [
                 "grid": {"type": "boolean", "description": "Overlay a labelled 100 px coordinate grid."},
             },
         },
-        "annotations": {"title": "Screenshot", "readOnlyHint": True},
+        "annotations": {"title": "Screenshot", "readOnlyHint": True, "destructiveHint": False},
     },
     {
         "name": "act",
@@ -170,8 +184,11 @@ TOOLS: list[dict] = [
             "field's content), select (target, option: pick a dropdown option by its text), key (keys: "
             '"ctrl+s", "Return", or a sequence "Tab Tab Return"; repeat), scroll '
             "(direction, amount, target), wait (seconds), wait_for (text, timeout; gone=true), focus (window), "
+            'menu (item: a menu path like "File > Export as PDF"; see(menus=true) lists them), path (path: fill the '
+            "open Open/Save/Export dialog with a full file path and confirm; overwrite=true replaces a file), "
             "mouse_down/mouse_up (target: press/release for custom drags), hold_key (keys, seconds). Targets: "
-            '"@12" from your latest see (best), exact visible text ("Save"; fails if not on screen), or "x,y". '
+            '"@12" from your latest see (best), exact visible text ("Save"; fails if not on screen), a kind and a '
+            'label ("button:Save", "link:Docs", "field:Email", "tab:Settings"), or "x,y". '
             "Web pages may still load after a click: add wait_for on text you expect."
         ),
         "input_schema": {
@@ -204,6 +221,8 @@ TOOLS: list[dict] = [
                                     "mouse_down",
                                     "mouse_up",
                                     "hold_key",
+                                    "menu",
+                                    "path",
                                 ],
                             },
                             "target": {
@@ -226,6 +245,9 @@ TOOLS: list[dict] = [
                             "timeout": {"type": "number", "description": "wait_for: seconds (default 10)."},
                             "gone": {"type": "boolean", "description": "wait_for: wait until the text disappears."},
                             "window": {"type": "string", "description": "focus: a window title or app name."},
+                            "item": {"type": "string", "description": 'menu: the menu path, e.g. "File > Save As".'},
+                            "path": {"type": "string", "description": "path: the full file path for the dialog."},
+                            "overwrite": {"type": "boolean", "description": "path: replace an existing file."},
                         },
                         "required": ["action"],
                     },
@@ -240,21 +262,32 @@ TOOLS: list[dict] = [
             },
             "required": ["actions"],
         },
-        "annotations": {"title": "Mouse and keyboard", "destructiveHint": True},
+        "annotations": {"title": "Mouse and keyboard", "readOnlyHint": False, "destructiveHint": True},
     },
     {
         "name": "open",
         "description": (
-            'Open something and wait until its window is ready: a profile app ("writer", "calc", "impress", '
-            '"firefox", "terminal", "chromium"), a URL ("github.com"), a file in the desktop '
-            '("~/Documents/report.docx"), or a shell command for any GUI program.'
+            'Open something and wait until its window is ready: an app ("writer", "calc", "firefox", "terminal", or '
+            'any app by name: "gimp", "inkscape", "vscode", "chrome", "thunderbird", "blender", "dbeaver"... '
+            'installed the first time, which can take a minute), a web app by name ("gmail", "figma", '
+            '"google sheets"), a URL ("github.com"), a file in the desktop ("~/Documents/report.docx"), or a shell '
+            "command. The reply includes short tips for the app the first time."
         ),
         "input_schema": {
             "type": "object",
-            "properties": {"target": {"type": "string"}, "desktop": DESKTOP_PROP},
+            "properties": {
+                "target": {"type": "string"},
+                "install": {"type": "boolean", "description": "Install a missing app first (default true)."},
+                "desktop": DESKTOP_PROP,
+            },
             "required": ["target"],
         },
-        "annotations": {"title": "Open app, URL or file"},
+        "annotations": {
+            "title": "Open app, URL or file",
+            "readOnlyHint": False,
+            "destructiveHint": False,
+            "openWorldHint": True,
+        },
     },
     {
         "name": "run",
@@ -273,7 +306,7 @@ TOOLS: list[dict] = [
             },
             "required": ["command"],
         },
-        "annotations": {"title": "Run a shell command", "destructiveHint": True},
+        "annotations": {"title": "Run a shell command", "readOnlyHint": False, "destructiveHint": True},
     },
     {
         "name": "script",
@@ -282,7 +315,8 @@ TOOLS: list[dict] = [
             "what it prints comes back. Preloaded: see(changes=False), elements(role, name), find(text), "
             'cells() (visible spreadsheet cells {"A1": ...}), click(target), double_click, right_click, '
             "write(text), paste(text), key(keys), scroll(dir, n), fill(target, text), drag(a, b), wait(s), "
-            "wait_for(text, timeout) -> bool, launch(app_or_url), run(cmd) -> dict, windows(), focus(title), "
+            'wait_for(text, timeout) -> bool, menu("File > Save"), menus(), path(file), read(file) -> text, '
+            "convert(file, to) -> path, launch(app_or_url), run(cmd) -> dict, windows(), focus(title), "
             "clipboard(text=None). Targets as in act. Errors raise MinionScriptError."
         ),
         "input_schema": {
@@ -294,20 +328,24 @@ TOOLS: list[dict] = [
             },
             "required": ["code"],
         },
-        "annotations": {"title": "Script the desktop", "destructiveHint": True},
+        "annotations": {"title": "Script the desktop", "readOnlyHint": False, "destructiveHint": True},
     },
     {
         "name": "files",
         "description": (
-            "Files in a desktop. read: a UTF-8 text file -> its text (download binaries instead). write: text -> "
-            "path (replaces the file; creates folders). upload: local_path (on the machine running Minion) -> "
-            "path. download: path -> local_path (never overwrites unless overwrite=true). local_path is limited "
-            "to Minion's files folder (relative paths start there). Desktop paths may start with ~."
+            "Files in a desktop. read: any file as text: text files as they are, documents converted (docx, "
+            "xlsx with values and formulas, pptx, odt/ods/odp, pdf, epub, html, images by OCR, doc/xls/ppt). "
+            "convert: path -> another format (to: pdf, docx, xlsx, csv, pptx, png, md, ...; returns the new "
+            "path). write: text -> path (replaces the file; creates folders). upload: local_path (on the "
+            "machine running Minion) -> path. download: path -> local_path (never overwrites unless "
+            "overwrite=true). local_path is limited to Minion's files folder (relative paths start there). "
+            "Desktop paths may start with ~."
         ),
         "input_schema": {
             "type": "object",
             "properties": {
-                "action": {"type": "string", "enum": ["upload", "download", "read", "write"]},
+                "action": {"type": "string", "enum": ["upload", "download", "read", "write", "convert"]},
+                "to": {"type": "string", "description": "convert: the new format, e.g. pdf, docx, xlsx, csv, png."},
                 "path": {"type": "string", "description": "Path inside the desktop, e.g. ~/Documents/report.docx."},
                 "local_path": {
                     "type": "string",
@@ -319,7 +357,7 @@ TOOLS: list[dict] = [
             },
             "required": ["action", "path"],
         },
-        "annotations": {"title": "Files", "destructiveHint": True},
+        "annotations": {"title": "Files", "readOnlyHint": False, "destructiveHint": True},
     },
     {
         "name": "view",
@@ -336,7 +374,7 @@ TOOLS: list[dict] = [
                 "timeout": {"type": "number", "description": "Seconds to wait for the human (default 600)."},
             },
         },
-        "annotations": {"title": "Live view / hand off to the human"},
+        "annotations": {"title": "Live view / hand off to the human", "readOnlyHint": False, "destructiveHint": False},
     },
 ]
 
@@ -348,8 +386,9 @@ COMPUTER_TOOL = {
         "list · use NAME · remove [NAME] · see [--changes] [--ocr] [--full] · screenshot [--marks] [--low] "
         "[--zoom x,y,w,h] · click TARGET · dclick TARGET · rclick TARGET · type TEXT · key KEYS · "
         "scroll up|down [N] · fill TARGET TEXT · select TARGET OPTION · drag FROM TO · wait-for TEXT [--timeout N] · "
-        "focus WINDOW · windows · open TARGET · run SHELL... · "
-        "script PYTHON... · view [MESSAGE]. Targets: @id from see, visible text (quote it), or x,y. "
+        "menu File > Save As · path FILE [--overwrite] · see --menus · read FILE · convert FILE FORMAT · "
+        "focus WINDOW · windows · open TARGET (any app by name; installed the first time) · run SHELL... · "
+        "script PYTHON... · view [MESSAGE]. Targets: @id from see, visible text (quote it), button:Save, or x,y. "
         "Profiles: browser, office, dev, research, data, windows, base. Example: create office · open calc · see · "
         "click @12 · type 'Total' · key Return."
     ),
@@ -358,7 +397,7 @@ COMPUTER_TOOL = {
         "properties": {"command": {"type": "string", "description": "One command, e.g. `click @12`."}},
         "required": ["command"],
     },
-    "annotations": {"title": "Computer"},
+    "annotations": {"title": "Computer", "readOnlyHint": False, "destructiveHint": True, "openWorldHint": True},
 }
 
 GEMINI_KEYS = {
@@ -487,6 +526,8 @@ _NEEDS = {
     "key": ("keys",),
     "hold_key": ("keys",),
     "wait_for": ("text",),
+    "menu": ("item",),
+    "path": ("path",),
     "focus": ("window",),
 }
 
@@ -952,6 +993,7 @@ class Toolkit:
             window=args.get("window"),
             full_text=bool(args.get("full_text")),
             changes=bool(args.get("changes")),
+            menus=bool(args.get("menus")),
         )
         return [_text(obs.text)]
 
@@ -1013,14 +1055,26 @@ class Toolkit:
         d = self.desk(args)
         if not args.get("target"):
             raise ToolError("open needs a target")
-        res = d.open(args["target"])
+        install = args.get("install", True) is not False
+        if install:
+            progress(f"Opening {args['target']} (an app that isn't installed yet is installed first)")
+        res = d.open(args["target"], install=install)
+        first = f"Installed {res['installed']}. " if res.get("installed") else ""
+        tips = f"\nTips: {res['tips']}" if res.get("tips") else ""
         w = res.get("window")
         if w:
             also = f" Also opened: {', '.join(repr(t) for t in res['also'])}." if res.get("also") else ""
-            return [_text(f'Opened {res["command"]} → window "{w["title"]}" ({w["app"]}).{also} Use see() to read it.')]
+            return [
+                _text(
+                    f'{first}Opened {res["command"]} → window "{w["title"]}" ({w["app"]}).{also} '
+                    f"Use see() to read it.{tips}"
+                )
+            ]
         if "error" in res:
-            raise ToolError(res["error"])
-        return [_text(f"Launched {res['command']}; no new window yet (it may still be loading — check see()).")]
+            raise ToolError(first + res["error"])
+        return [
+            _text(f"{first}Launched {res['command']}; no new window yet (it may still be loading — check see()).{tips}")
+        ]
 
     def t_run(self, args: dict, progress) -> list:
         d = self.desk(args)
@@ -1073,7 +1127,7 @@ class Toolkit:
                 raise ToolError(f"local_path {local!r} does not exist (relative paths start in {self.files_root})")
             d.upload(local, path or "~/")
             return [_text(f"Uploaded {local} → {d.name}:{path or '~/'}")]
-        if not path and action in ("download", "read", "write"):
+        if not path and action in ("download", "read", "write", "convert"):
             raise ToolError(f"{action} needs path: the file in the desktop, e.g. ~/Documents/report.docx")
         if action == "download":
             local = Path(self._host_path(args.get("local_path") or ".")).absolute()
@@ -1083,16 +1137,18 @@ class Toolkit:
             dest.parent.mkdir(parents=True, exist_ok=True)
             return [_text(f"Downloaded {d.name}:{path} → {d.download(path, dest)}")]
         if action == "read":
-            text = d.read_text(path)
-            if len(text) > 100_000:
-                text = text[:100_000] + f"\n… [{len(text) - 100_000} more characters]"
+            text = d.read(path, max_chars=100_000)
             return [_text(text)]
+        if action == "convert":
+            if not args.get("to"):
+                raise ToolError('convert needs to: the new format, e.g. "pdf", "docx", "xlsx", "csv" or "png"')
+            return [_text(f"Converted {path} → {d.convert(path, str(args['to']))}")]
         if action == "write":
             if args.get("text") is None:
                 raise ToolError('write needs text (use text="" for an empty file); it replaces the whole file')
             d.write_text(path, args["text"])
             return [_text(f"Wrote {len(args['text'])} characters to {d.name}:{path}")]
-        raise ToolError("action must be upload, download, read or write")
+        raise ToolError("action must be upload, download, read, write or convert")
 
     def t_view(self, args: dict, progress) -> list:
         d = self.desk(args)
@@ -1202,8 +1258,36 @@ class Toolkit:
             return self.t_desktop({"action": verb, key: rest or None}, progress)
         if verb == "see":
             return self.t_see(
-                {"changes": "--changes" in flags, "ocr": "--ocr" in flags, "full_text": "--full" in flags}, progress
+                {
+                    "changes": "--changes" in flags,
+                    "ocr": "--ocr" in flags,
+                    "full_text": "--full" in flags,
+                    "menus": "--menus" in flags,
+                },
+                progress,
             )
+        if verb == "menu":  # the rest is the menu path: menu File > Export > PDF
+            if not rest:
+                raise ToolError("menu PATH, e.g. menu File > Save As (see --menus lists them)")
+            return self.t_act({"actions": [{"action": "menu", "item": _unquote(rest)}]}, progress)
+        if verb == "path":
+            file_path = " ".join(w for w in words if w != "--overwrite")
+            if not file_path:
+                raise ToolError("path FILE [--overwrite]: a full path for the open file dialog")
+            step = {
+                "action": "path",
+                "path": _unquote(file_path),
+                **({"overwrite": True} if "--overwrite" in flags else {}),
+            }
+            return self.t_act({"actions": [step]}, progress)
+        if verb in ("read", "cat"):
+            if not rest:
+                raise ToolError("read FILE: any document as text (docx, xlsx, pptx, pdf, ...)")
+            return self.t_files({"action": "read", "path": _unquote(rest)}, progress)
+        if verb == "convert":
+            if len(plain) != 2:
+                raise ToolError("convert FILE FORMAT, e.g. convert ~/report.docx pdf")
+            return self.t_files({"action": "convert", "path": plain[0], "to": plain[1]}, progress)
         if verb in ("screenshot", "shot"):
             a = {
                 "marks": "--marks" in flags,
@@ -1274,7 +1358,8 @@ class Toolkit:
             step["text"] = " ".join(text_words)
             return self.t_act({"actions": [step]}, progress)
         if verb == "open":
-            return self.t_open({"target": rest}, progress)
+            target_ = " ".join(w for w in words if w != "--no-install") if "--no-install" in flags else rest
+            return self.t_open({"target": target_, "install": "--no-install" not in flags}, progress)
         if verb in ("run", "exec", "sh"):
             return self.t_run({"command": rest}, progress)
         if verb in ("script", "py", "python"):
@@ -1286,7 +1371,9 @@ class Toolkit:
 
 # Options each compact command takes (others take their text verbatim and are not checked).
 _COMPACT_FLAGS = {
-    "see": {"--changes", "--ocr", "--full"},
+    "see": {"--changes", "--ocr", "--full", "--menus"},
+    "path": {"--overwrite"},
+    "convert": set(),
     "screenshot": {"--marks", "--low", "--zoom", "--grid"},
     "shot": {"--marks", "--low", "--zoom", "--grid"},
     "click": {"--double", "--right", "--triple", "--middle"},

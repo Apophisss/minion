@@ -19,7 +19,9 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-6366f1" alt="MIT"></a>
 </p>
 
-<!-- mcp-name: io.github.apophisss/minion -->
+<p align="center">English · <a href="README.zh-CN.md">简体中文</a> · <a href="README.zh-TW.md">繁體中文</a> · <a href="README.ko.md">한국어</a> · <a href="README.ja.md">日本語</a> · <a href="README.he.md">עברית</a></p>
+
+<!-- mcp-name: io.github.Apophisss/minion -->
 
 ## Get started
 
@@ -35,8 +37,9 @@ All you need is [Docker](https://docs.docker.com/get-docker/) (or OrbStack or Po
 [![Install in Goose](https://goose-docs.ai/img/extension-install-dark.svg)](https://goose-docs.ai/extension?cmd=uvx&arg=minion-desktop&arg=mcp&timeout=900&id=minion&name=Minion&description=Linux%20desktops%20that%20agents%20read%20as%20text%20and%20control)
 [![Add to Kiro](https://kiro.dev/images/add-to-kiro.svg)](https://kiro.dev/launch/mcp/add?name=minion&config=%7B%22command%22%3A%22uvx%22%2C%22args%22%3A%5B%22minion-desktop%22%2C%22mcp%22%5D%7D)
 
-Claude Code: `claude plugin marketplace add apophisss/minion && claude plugin install minion@minion`. The buttons
-start Minion with [uv](https://docs.astral.sh/uv/); the Claude Desktop extension needs nothing else.
+Claude Code: `claude plugin marketplace add apophisss/minion && claude plugin install minion@minion`. Any other MCP
+client: `uvx minion-desktop mcp`, or `npx -y minion-desktop mcp`. The buttons, uvx and npx start Minion with
+[uv](https://docs.astral.sh/uv/) (npx can use pipx instead); the Claude Desktop extension needs nothing else.
 
 **2. One line** that installs Minion and connects every AI app on your computer (Claude Desktop, Claude Code,
 Cursor, VS Code, Windsurf/Devin, Gemini CLI, Codex, LM Studio, Cline, Kiro):
@@ -66,8 +69,14 @@ brief.docx."* Every way to install is in [docs/install.md](docs/install.md).
 ## Why Minion
 
 - **🖥️ Any program, any website.** Every desktop is a real Linux computer: browsers, LibreOffice, IDEs, terminals,
-  file dialogs and installers, plus Windows programs through the `windows` (Wine) profile. Anything missing is one
-  command away: `minion-install gimp`, a `.deb`/`.AppImage` URL, `pip:` or `npm:`.
+  file dialogs and installers, plus Windows programs through the `windows` (Wine) profile. **Open any app by name**
+  and it is installed the first time (`open gimp`, `open vscode`, `open dbeaver`, any Debian package), web apps open
+  in the browser (`open gmail`), and the first open answers with a few tips for the app. [130+ apps by name](docs/apps.md).
+- **🧭 Shortcuts through every app.** `see --menus` lists every menu command with its keyboard shortcut, and
+  `menu "File > Export as PDF"` runs one without opening a menu. `path ~/out.pdf` fills any Open/Save dialog.
+  Right-click menus show up in `see`, `button:Save` picks one kind of control, and a button below the fold is
+  scrolled into view. **Any document reads as text** (`read report.docx`, xlsx with formulas, pptx, pdf) and
+  converts in one call (`convert report.docx pdf`).
 - **🧠 Agents read the screen as text.** `see` turns any window into a list of controls with **stable `@ids`**, taken
   from the accessibility tree with OCR as a fallback: `@12 button "Save" (210,62)`. Web pages, editors (with line
   numbers), terminals, dropdowns with their options, and spreadsheets (`A1: value`) all come out as exact text.
@@ -107,9 +116,15 @@ minion wait-for "Analytical Engine"      # says where it saw the text
 minion see --full                        # read the article as text
 minion select @14 "Title"                # pick a dropdown option
 minion shot -o page.png --marks          # a screenshot with @ids drawn on it
-minion run "pdftotext -layout ~/Downloads/paper.pdf - | head"
+minion read ~/Downloads/paper.pdf         # any document as text: pdf, docx, xlsx, pptx, epub...
+minion open gimp                          # any app by name: installed the first time
+minion menu "File > Export As > Export as PDF..."   # any menu command
+minion path ~/Documents/report.pdf        # fill the open Save/Open dialog
 minion cp :~/Documents/notes.md .        # copy files out (and in)
 ```
+
+<p align="center"><img src="docs/assets/any-app.gif" alt="An agent exports a PDF through LibreOffice's menu and Save dialog, then opens GIMP, which installs itself first" width="720"></p>
+<p align="center"><sub>Menus, file dialogs and apps by name: <code>menu "File > Export As > Export Directly as PDF"</code>, <code>path ~/Documents/report.pdf</code>, then <code>open gimp</code>, which installed GIMP in 16 s. Recorded by the flight recorder.</sub></p>
 
 ## Works with every agent
 
@@ -317,7 +332,7 @@ out of desktops unless a human hands off. Read [SECURITY.md](SECURITY.md).
 
 ## Documentation
 
-[Website](https://apophisss.github.io/minion/) · [Install](docs/install.md) · [Connect your apps](docs/connect.md) · [Remote MCP](docs/remote.md) · [Design](docs/design.md) · [Agents & MCP](docs/agents.md) · [Integrations](docs/integrations.md) · [CLI](docs/cli.md) · [Python](docs/python.md) · [HTTP API](docs/http-api.md) · [Claude computer use](docs/computer-use.md) · [OpenAI & Gemini computer use](docs/computer-use-openai-gemini.md) · [Profiles](docs/profiles.md) · [Windows apps](docs/windows-apps.md) · [Architecture](docs/architecture.md) · [FAQ](docs/faq.md)
+[Website](https://apophisss.github.io/minion/) · [Install](docs/install.md) · [Connect your apps](docs/connect.md) · [Remote MCP](docs/remote.md) · [Design](docs/design.md) · [Agents & MCP](docs/agents.md) · [Integrations](docs/integrations.md) · [CLI](docs/cli.md) · [Python](docs/python.md) · [HTTP API](docs/http-api.md) · [Claude computer use](docs/computer-use.md) · [OpenAI & Gemini computer use](docs/computer-use-openai-gemini.md) · [Profiles](docs/profiles.md) · [Apps by name](docs/apps.md) · [Windows apps](docs/windows-apps.md) · [Architecture](docs/architecture.md) · [FAQ](docs/faq.md)
 
 ## Contributing
 

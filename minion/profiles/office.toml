@@ -28,10 +28,12 @@ apps = [
 tips = """
 Launch apps with `open writer`, `open calc`, `open impress`, or open a file: `open ~/Documents/report.docx`.
 Documents save as .docx/.xlsx/.pptx by default. Move files in and out with `files` (or `minion cp`).
-For bulk or exact data work, `run` is faster than the GUI: e.g. `soffice --headless --convert-to pdf ~/Documents/report.docx --outdir ~/Documents`.
+Menus: `menu File > Export As > Export as PDF...` (see --menus lists every command and its shortcut); in a Save/Open
+dialog, `path ~/Documents/report.docx` types the full path. Read any document as text with `files read` (xlsx gives
+values and formulas) and convert with `files convert` (e.g. docx to pdf, xlsx to csv), even while LibreOffice is open.
 Keys: ctrl+s save, ctrl+shift+s save as, ctrl+1/2/3 heading styles, ctrl+b/i/u. In Calc, act "type value\\tvalue\\n" fills a row
 (Tab moves right, Return goes to the next row); `see` lists visible cells as A1: value; use `script` for many rows.
-Typing is exact: AutoCorrect, smart quotes and AutoInput are off. PDFs: pdftotext, pdfinfo.
+Typing is exact: AutoCorrect, smart quotes and AutoInput are off.
 """
 
 [files]

@@ -54,6 +54,8 @@ function route(method, path, query, body) {
     case `POST ${D}/act`: return [200, actResult(!JSON.stringify(body.actions).includes("Nope"))];
     case `POST ${D}/open`: return [200, { command: "firefox-esr https://example.com", kind: "url", window: null }];
     case `POST ${D}/run`: return [200, { code: 0, stdout: "42\n", stderr: "", timed_out: false, pid: null }];
+    case `POST ${D}/read`: return [200, { text: "## Sheet: Budget\nA1: Item  B1: Price\n" }];
+    case `POST ${D}/convert`: return [200, { path: "/home/agent/Documents/report.pdf" }];
     case `POST ${D}/clipboard`: return [200, "text" in body ? { ok: true } : { text: "copied" }];
     case `POST ${D}/freeze`: return [200, { ok: true, state: "paused" }];
     case `POST ${D}/thaw`:
@@ -174,6 +176,8 @@ test("acting: act and its helpers", async () => {
     [() => desk.scroll("up", 5, "@30"), { action: "scroll", direction: "up", amount: 5, target: "@30" }],
     [() => desk.fill("Email", "ada@example.com"), { action: "fill", target: "Email", text: "ada@example.com" }],
     [() => desk.select("@14", "Express"), { action: "select", target: "@14", option: "Express" }],
+    [() => desk.menu("File > Export as PDF"), { action: "menu", item: "File > Export as PDF" }],
+    [() => desk.path("~/out.pdf", true), { action: "path", path: "~/out.pdf", overwrite: true }],
     [() => desk.drag("@4", { x: 5, y: 6 }), { action: "drag", from: "@4", to: { x: 5, y: 6 } }],
     [() => desk.waitFor("Saved", { timeout: 5 }), { action: "wait_for", text: "Saved", timeout: 5 }],
   ];
@@ -197,6 +201,12 @@ test("acting: act and its helpers", async () => {
 test("apps, shell, clipboard and lifecycle", async () => {
   assert.equal((await desk.open("example.com", { wait: 5 })).kind, "url");
   assert.deepEqual(last().body, { target: "example.com", wait: 5 });
+  await desk.open("gimp", { install: false });
+  assert.deepEqual(last().body, { target: "gimp", install: false });
+  assert.match(await desk.read("~/budget.xlsx"), /A1: Item/);
+  assert.deepEqual(last().body, { path: "~/budget.xlsx" });
+  assert.equal(await desk.convert("~/Documents/report.docx", "pdf"), "/home/agent/Documents/report.pdf");
+  assert.deepEqual(last().body, { path: "~/Documents/report.docx", to: "pdf" });
   assert.equal((await desk.run("python3 -c 'print(6*7)'", { timeout: 30 })).stdout, "42\n");
   assert.deepEqual(last().body, { command: "python3 -c 'print(6*7)'", timeout: 30 });
   await desk.run(["ls", "-la"], { background: true });

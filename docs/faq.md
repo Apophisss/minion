@@ -14,7 +14,7 @@ Local desktops start faster but are not isolated from your user account.
 Minion is built for agents rather than people. It gives them a text view of the screen with clickable ids, actions
 that wait for the UI to settle and report what changed, desktops tuned to avoid pop-ups, snapshots and forks,
 idle freezing, and MCP, SDK and HTTP interfaces. There is no VNC server and no desktop environment, so each
-desktop starts in about a second and stays small.
+desktop starts in about 1.5 s and stays small.
 
 **How is it different from browser automation (Playwright, browser-use)?**
 Those drive a browser through the DOM. Minion drives a whole computer: browsers, office apps, terminals, IDEs,
@@ -38,7 +38,7 @@ Prefer `see` to screenshots, and `see(changes=true)` or `act(..., observe="chang
 Once a task works, export it with `desktop(action="macro")` and replay it with no model at all.
 
 **How many desktops can I run at once?**
-As many as memory allows. An idle desktop uses about 55–105 MB, and apps add their usual footprint (Firefox
+As many as memory allows. An idle desktop uses about 54–105 MB, and apps add their usual footprint (Firefox
 and LibreOffice need a few hundred MB each while open). Frozen desktops use no CPU. Use `--memory` and `--cpus`
 to cap each desktop, and `minion up -c 8` or `desktop(action="create", count=8)` to start several in parallel.
 
@@ -59,6 +59,16 @@ share a folder, or `minion cp` / `files` to move data. Snapshots are ordinary Do
 It is safer than letting it use your computer. Each desktop is an isolated, unprivileged container. Treat
 on-screen content as untrusted, keep secrets out, and use `--offline` for untrusted files.
 See [SECURITY.md](../SECURITY.md).
+
+**Does Minion collect any data?**
+No. There is no telemetry, and Minion never reports anything anywhere. Its only network traffic is what you ask
+for: pulling desktop images, installing apps inside a desktop, and `minion share`.
+
+**Can agents use apps that aren't in a profile?**
+Yes. `open gimp`, `open vscode` or `open dbeaver` installs the app the first time (Debian packages, official
+`.deb`s and AppImages), and `open gmail` or `open figma` opens web apps. Any Debian package works by name, and
+`minion-install` takes `.deb`/`.AppImage` URLs, `pip:` and `npm:` packages. Inside an app, `see --menus` lists
+every command with its shortcut, and `menu`, `path` and `read` cover menus, file dialogs and documents. The [list of apps by name](apps.md) has the details.
 
 **Something looks wrong. How do I debug?**
 `minion doctor` checks your setup, `minion logs` shows the desktop's session log, `minion view` lets you watch,

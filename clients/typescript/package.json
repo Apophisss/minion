@@ -1,7 +1,7 @@
 {
   "name": "minion-desktop",
   "version": "1.0.0",
-  "description": "Zero-dependency TypeScript client for Minion: instant Linux desktops for AI agents (Vercel AI SDK, Mastra, LangChain.js or plain fetch).",
+  "description": "Zero-dependency TypeScript client for Minion: instant Linux desktops for AI agents (Vercel AI SDK, Mastra, LangChain.js or plain fetch). `npx minion-desktop mcp` starts its MCP server.",
   "keywords": [
     "ai-agents",
     "computer-use",
@@ -9,6 +9,7 @@
     "virtual-desktop",
     "automation",
     "mcp",
+    "mcp-server",
     "vercel-ai-sdk",
     "llm",
     "tool-calling",
@@ -25,6 +26,7 @@
   "bugs": {
     "url": "https://github.com/apophisss/minion/issues"
   },
+  "mcpName": "io.github.Apophisss/minion",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -35,7 +37,11 @@
     },
     "./package.json": "./package.json"
   },
+  "bin": {
+    "minion-desktop": "bin/minion-desktop.mjs"
+  },
   "files": [
+    "bin",
     "dist",
     "src",
     "README.md"
@@ -48,7 +54,7 @@
     "build": "tsc -p .",
     "typecheck": "tsc -p . --noEmit",
     "pretest": "npm run build",
-    "test": "node --test test/client.test.mjs",
+    "test": "node --test test/client.test.mjs test/launcher.test.mjs",
     "smoke": "npm run build && node test/smoke.mjs",
     "prepack": "npm run build"
   },

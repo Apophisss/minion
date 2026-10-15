@@ -10,11 +10,22 @@
   "homepage": "https://github.com/apophisss/minion",
   "repository": "https://github.com/apophisss/minion",
   "license": "MIT",
-  "keywords": ["computer-use", "desktop", "automation", "mcp", "agents", "libreoffice", "browser"],
+  "keywords": [
+    "computer-use",
+    "desktop",
+    "automation",
+    "mcp",
+    "agents",
+    "libreoffice",
+    "browser"
+  ],
   "mcpServers": {
     "minion": {
       "command": "uvx",
-      "args": ["minion-desktop", "mcp"]
+      "args": [
+        "minion-desktop@1.0.0",
+        "mcp"
+      ]
     }
   }
 }
