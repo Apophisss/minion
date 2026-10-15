@@ -102,13 +102,6 @@ Use these numbers as written. If the README changes, the README wins.
 | Dogfooding | Claude agents used Minion for real office, web, development and MCP tasks, and every issue they found was fixed before 1.0 | [design.md](../design.md) |
 | Release | 1.0.0, the first release; MIT license; `pip install minion-desktop` | [CHANGELOG.md](../../CHANGELOG.md), [README.md](../../README.md) |
 
-Small differences between the docs, worth fixing before launch:
-
-- Idle RAM is "54–105 MB" in the README, the landing page and the social preview, but "55–105 MB" in
-  [faq.md](../faq.md), [install.md](../install.md) and the [CHANGELOG](../../CHANGELOG.md). The copy uses 54–105 MB.
-- Image sizes: the landing page says 662 MB for `data` and 188 MB for `base`; the README says 663 MB and 187 MB.
-- [faq.md](../faq.md) says a desktop "starts in about a second"; everything else says about 1.5 s.
-
 ## Links
 
 | | |

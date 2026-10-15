@@ -5,7 +5,7 @@
 The first release of Minion: instant desktops that any AI agent can use.
 
 **Desktops**
-- Desktops in Docker/Podman (or native Xvfb on Linux) that are ready in about 1.5 s, use 55–105 MB RAM idle,
+- Desktops in Docker/Podman (or native Xvfb on Linux) that are ready in about 1.5 s, use 54–105 MB RAM idle,
   and freeze to 0% CPU automatically.
 - Profiles: `base`, `browser`, `office`, `dev`, `research`, `data` and `windows` (Wine), each tuned for agents:
   no first-run wizards, pop-ups, cookie banners, recovery dialogs or AutoCorrect. Custom profiles are TOML files.

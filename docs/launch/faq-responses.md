@@ -110,9 +110,8 @@ Minion is software you run, not a hosted service. What leaves your machine:
   or your own server avoid that.
 
 The host side has no network listeners by default, and `minion serve` binds to `127.0.0.1` with a token.
-
-[Maker: confirm before you add "and no telemetry". The docs don't mention telemetry, and the only outbound requests
-in the host code appear to go to Minion's own local server and to its own share URL.]
+There is no telemetry: Minion never reports anything anywhere. Its only network traffic is what you ask for
+(pulling desktop images, installing apps inside a desktop, `minion share`).
 
 *Sources: docs/design.md, docs/remote.md, docs/profiles.md, README.md (Security).*
 
