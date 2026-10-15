@@ -121,7 +121,12 @@ TOOLS: list[dict] = [
             },
             "required": ["action"],
         },
-        "annotations": {"title": "Manage desktops", "destructiveHint": True, "openWorldHint": False},
+        "annotations": {
+            "title": "Manage desktops",
+            "readOnlyHint": False,
+            "destructiveHint": True,
+            "openWorldHint": False,
+        },
     },
     {
         "name": "see",
@@ -147,7 +152,7 @@ TOOLS: list[dict] = [
                 },
             },
         },
-        "annotations": {"title": "See the screen as text", "readOnlyHint": True},
+        "annotations": {"title": "See the screen as text", "readOnlyHint": True, "destructiveHint": False},
     },
     {
         "name": "screenshot",
@@ -167,7 +172,7 @@ TOOLS: list[dict] = [
                 "grid": {"type": "boolean", "description": "Overlay a labelled 100 px coordinate grid."},
             },
         },
-        "annotations": {"title": "Screenshot", "readOnlyHint": True},
+        "annotations": {"title": "Screenshot", "readOnlyHint": True, "destructiveHint": False},
     },
     {
         "name": "act",
@@ -257,7 +262,7 @@ TOOLS: list[dict] = [
             },
             "required": ["actions"],
         },
-        "annotations": {"title": "Mouse and keyboard", "destructiveHint": True},
+        "annotations": {"title": "Mouse and keyboard", "readOnlyHint": False, "destructiveHint": True},
     },
     {
         "name": "open",
@@ -277,7 +282,12 @@ TOOLS: list[dict] = [
             },
             "required": ["target"],
         },
-        "annotations": {"title": "Open app, URL or file"},
+        "annotations": {
+            "title": "Open app, URL or file",
+            "readOnlyHint": False,
+            "destructiveHint": False,
+            "openWorldHint": True,
+        },
     },
     {
         "name": "run",
@@ -296,7 +306,7 @@ TOOLS: list[dict] = [
             },
             "required": ["command"],
         },
-        "annotations": {"title": "Run a shell command", "destructiveHint": True},
+        "annotations": {"title": "Run a shell command", "readOnlyHint": False, "destructiveHint": True},
     },
     {
         "name": "script",
@@ -318,7 +328,7 @@ TOOLS: list[dict] = [
             },
             "required": ["code"],
         },
-        "annotations": {"title": "Script the desktop", "destructiveHint": True},
+        "annotations": {"title": "Script the desktop", "readOnlyHint": False, "destructiveHint": True},
     },
     {
         "name": "files",
@@ -347,7 +357,7 @@ TOOLS: list[dict] = [
             },
             "required": ["action", "path"],
         },
-        "annotations": {"title": "Files", "destructiveHint": True},
+        "annotations": {"title": "Files", "readOnlyHint": False, "destructiveHint": True},
     },
     {
         "name": "view",
@@ -364,7 +374,7 @@ TOOLS: list[dict] = [
                 "timeout": {"type": "number", "description": "Seconds to wait for the human (default 600)."},
             },
         },
-        "annotations": {"title": "Live view / hand off to the human"},
+        "annotations": {"title": "Live view / hand off to the human", "readOnlyHint": False, "destructiveHint": False},
     },
 ]
 
@@ -387,7 +397,7 @@ COMPUTER_TOOL = {
         "properties": {"command": {"type": "string", "description": "One command, e.g. `click @12`."}},
         "required": ["command"],
     },
-    "annotations": {"title": "Computer"},
+    "annotations": {"title": "Computer", "readOnlyHint": False, "destructiveHint": True, "openWorldHint": True},
 }
 
 GEMINI_KEYS = {
