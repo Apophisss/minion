@@ -24,6 +24,9 @@ way in 1.0.0 is fixed here, and on the same tasks 1.1.0 took 18% fewer steps and
 - The clipboard both ways: Copy (and Ctrl+C while in control) puts the desktop's clipboard on your computer's.
 - A Keys menu for the keys your browser keeps (Ctrl+W, Ctrl+T, Alt+Tab, Alt+F4, F11), and an Open box for a URL,
   app or file.
+- The live view works on a phone: the toolbar fits, a tap clicks, a long press right-clicks, a swipe scrolls, and
+  ⌨ opens a typing bar for the phone's keyboard (which only opens for a real text field), with Enter, Backspace,
+  Tab and Esc buttons and a lock for passwords.
 - The dashboard can create a desktop signed in with a saved sign-in. The HTTP API has `files`, `download`,
   `upload`, `login` and `/api/logins`, and the SDK `Desktop.ls()`, `save_login()`, `logins()` and
   `create(login=...)`.

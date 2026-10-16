@@ -305,7 +305,11 @@ def test_live_view_has_the_manual_controls():
     page = (Path(server.WEB) / "view.html").read_text(encoding="utf-8")
     for control in ('id="files-btn"', 'id="copy"', 'id="keys"', 'id="open"', 'id="login"', 'id="files-input"'):
         assert control in page
+    # a phone: its keyboard only opens for a real text field, and the menu holds what the toolbar can't
+    for control in ('id="kbd-btn"', 'id="typein"', 'data-key="Return"', 'id="copy-sm"', 'id="freeze-sm"'):
+        assert control in page
     script = (Path(server.WEB) / "view.js").read_text(encoding="utf-8")
     for route in ("/files?path=", "/download?path=", "/upload?path=", '"/login"', '"/clipboard"'):
         assert route in script
+    assert 'pointerType === "touch"' in script and 'type: "click", button: "right"' in script  # tap, long press
     assert os.path.exists(Path(server.WEB) / "dashboard.js")

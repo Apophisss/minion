@@ -124,6 +124,9 @@ The live view (`minion view`) is for people as much as for watching agents:
 - **Keys** sends the keys your own browser would keep (Ctrl+W, Ctrl+T, Alt+Tab, Alt+F4, F11…), and the
   **Open** box opens a URL, an app or a file in the desktop.
 - **More › Save sign-in** saves the desktop as a sign-in (below).
+- **On a phone or tablet**, a tap clicks, a long press right-clicks, a swipe scrolls and two fingers zoom. **⌨**
+  opens a typing bar for the device's keyboard: type, then **Send** (🔒 hides what you type, for passwords), with
+  buttons for Enter, Backspace, Tab, Esc and scrolling. Copy, Paste and Freeze are under **More**.
 
 ## Sign in once
 

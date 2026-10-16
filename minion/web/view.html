@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Minion · live view</title>
   <link rel="icon" href="/static/logo.svg">
   <link rel="stylesheet" href="/static/app.css">
@@ -30,20 +30,38 @@
       <option value="alt+F4">Alt+F4 · close window</option>
       <option value="Escape">Esc</option>
     </select>
+    <button class="btn show-touch" id="kbd-btn" title="Type on the desktop with this device's keyboard">⌨</button>
     <button class="btn" id="files-btn" title="Files in the desktop: download, upload (or drop files on the screen)">Files</button>
     <button class="btn hide-sm" id="copy" title="Put the desktop's clipboard on this computer's clipboard">Copy</button>
     <button class="btn hide-sm" id="paste" title="Type your clipboard text into the desktop">Paste</button>
     <details class="menu" id="more">
       <summary class="btn">More</summary>
       <div class="menu-items">
+        <button class="only-sm" id="copy-sm">Copy from the desktop</button>
+        <button class="only-sm" id="paste-sm">Paste into the desktop</button>
+        <button class="only-sm" id="freeze-sm">Freeze</button>
         <button id="login" title="New desktops can start signed in as this one is now">Save sign-in…</button>
         <button id="shot">Screenshot</button>
         <button id="replay" title="Flight recorder: everything the agent did">Replay</button>
       </div>
     </details>
-    <button class="btn" id="freeze">Freeze</button>
+    <button class="btn hide-sm" id="freeze">Freeze</button>
     <button class="btn" id="control" title="Use your mouse and keyboard on the desktop (Esc ×2 to release)">🖐 Take control</button>
   </header>
+  <form class="typebar" id="typebar" hidden autocomplete="off">
+    <input id="typein" type="text" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"
+      enterkeyhint="send" placeholder="Type here, then Send">
+    <button type="button" class="btn small" id="type-hide" title="Hide what you type (for passwords)">🔒</button>
+    <button type="submit" class="btn small primary" id="type-send">Send</button>
+    <span class="typekeys">
+      <button type="button" class="btn small" data-key="Return" title="Enter">⏎</button>
+      <button type="button" class="btn small" data-key="BackSpace" title="Backspace">⌫</button>
+      <button type="button" class="btn small" data-key="Tab">Tab</button>
+      <button type="button" class="btn small" data-key="Escape">Esc</button>
+      <button type="button" class="btn small" data-scroll="up" title="Scroll up">▲</button>
+      <button type="button" class="btn small" data-scroll="down" title="Scroll down">▼</button>
+    </span>
+  </form>
   <div class="handoff" id="handoff">
     <span>🙋 <b>The agent needs you:</b> <span id="handoff-msg"></span></span>
     <input id="handoff-note" placeholder="Optional note for the agent (e.g. 'signed in')">
