@@ -248,3 +248,32 @@ def test_tiny_pictures_are_not_given_to_tesseract():
 
     assert list(ocr._read_lines(Image.new("RGB", (5, 40), "white"), ["eng"], 5.0)) == []
     assert os.path.exists(ocr.__file__)
+
+
+def test_a_saved_document_says_which_format_it_holds(tmp_path):
+    # agents spent a step on `file` after every ctrl+s to make sure LibreOffice hadn't kept its own format
+    xlsx = make_zip(tmp_path / "a.xlsx", {"[Content_Types].xml": CT, "xl/workbook.xml": "<workbook/>"})
+    assert server._office_kind(xlsx) == ", Excel format"
+    odf = make_zip(tmp_path / "b.xlsx", {"mimetype": "application/vnd.oasis.opendocument.spreadsheet"})
+    assert server._office_kind(odf) == ", but it holds OpenDocument, not Excel"
+    (tmp_path / "c.docx").write_text("half-written")
+    assert server._office_kind(str(tmp_path / "c.docx")) == ", not a valid document yet"
+    assert server._office_kind(str(tmp_path / "notes.txt")) == ""
+
+
+def test_a_cells_spaces_show_when_they_are_part_of_it():
+    # "  MiniONs   IN blACK " came out as "MiniONs IN blACK": the very thing the task was to clean up
+    cells = [
+        el("sheet", "Sheet1", text="visible A1:C3"),
+        el("cell", "B2", text="  MiniONs   IN blACK "),
+        el("cell", "C2", text="Clean"),
+    ]
+    cells[1].depth = cells[2].depth = 1
+    assert a11y.format_elements(cells)[1].endswith('B2 "  MiniONs   IN blACK " · @0 C2 Clean')
+
+
+def test_a_click_can_be_optional_and_hold_keys():
+    # a "Keep current format?" dialog that may never come must not fail the batch that saved the file
+    assert parse_step("click? 'Use Excel 2007-365!'") == ("click", {"target": "Use Excel 2007-365!", "optional": True})
+    assert parse_step("ctrl+click @12") == ("click", {"target": "@12", "modifiers": ["ctrl"]})
+    assert parse_step("ctrl+shift+click 100,200")[1]["modifiers"] == ["ctrl", "shift"]

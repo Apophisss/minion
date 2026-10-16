@@ -28,7 +28,8 @@ you can use them instead. The ideas are the same (`desktop`, `see`, `act`, `scri
 - `--full` keeps long text whole. `--window TITLE` describes another window.
 - `minion see --menus` lists every menu command with its shortcut. An open right-click menu is listed first.
 - `minion read FILE` prints any document as text: docx, xlsx (values and formulas), pptx, pdf, odt, epub, html.
-  It also says what the text alone doesn't: bold and filled cells, hidden rows, merged cells, zoom, frozen panes,
+  Dates and times come as dates. It also says what the text alone doesn't: bold and filled cells, hidden rows,
+  merged cells, zoom, frozen panes,
   conditional formats and charts in a sheet; tables, pictures, audio, video and speaker notes in a pptx; tracked
   changes, comments, images and page setup in a docx. `--details` adds formatting, to check your work: a slide's
   background and each shape's place and size in cm, bullets and fonts; a paragraph's alignment, spacing and
@@ -53,9 +54,10 @@ you can use them instead. The ideas are the same (`desktop`, `see`, `act`, `scri
 - `minion scroll down 5` · `minion drag @3 @9` · `minion wait-for "Saved"` (wait for text, not for time)
 - Batch steps into one call: `minion act "click @3" "type hello\n" "key Tab Tab Return"`.
   In act steps, `\n` is Return and `\t` is Tab (write `\\` for a backslash). `wait_for "Done" 60` waits up to 60 s,
-  `wait_for Loading --gone` until the text is gone. `rclick`, `dclick`, `scroll_to TEXT`, `goto URL` (in the current
-  tab), `close [WINDOW]` and `copy @12` (an element's whole text to the clipboard, so `key ctrl+v` pastes it
-  elsewhere) work as steps too. A step can name a control by its text before it exists ("click Next" "fill Street
+  `wait_for Loading --gone` until the text is gone. `fill`, `select`, `menu`, `path`, `rclick`, `dclick`,
+  `ctrl+click @12` (add to a selection), `scroll_to TEXT`, `goto URL` (in the current tab), `close [WINDOW]` and
+  `copy @12` (an element's whole text to the clipboard, so `key ctrl+v` pastes it elsewhere) work as steps too, and
+  `click? "Keep Current Format"` clicks a dialog's button if the dialog comes, and goes on if it doesn't. A step can name a control by its text before it exists ("click Next" "fill Street
   '5 Herzl St'"): a text target waits a moment for it to appear. If a pop-up takes a click, the batch stops and says so.
 - Each action reports what changed: new windows, focus, a page's dialog, and files saved, downloaded or deleted
   ("new file ~/Downloads/report.csv (12 KB)"). When it takes you somewhere (a new page or window, a dialog), or the

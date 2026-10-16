@@ -642,6 +642,10 @@ def _visible_cells(
             if cell is None:
                 continue
             content = _text(cell, 80) if "Text" in _interfaces(cell) else ""
+            if content:
+                raw = _cell_raw(cell)
+                if raw and raw != content and " ".join(raw.split()) == content:
+                    content = raw  # its spacing is part of it ("  MiniONs   IN blACK "): a task may be about it
             if not content:
                 empty.append((r, c, cell))
                 continue
@@ -656,7 +660,8 @@ def _visible_cells(
                     break
                 formula = _formula(cell)
                 if formula:
-                    found.append((f"{_col(c)}{r + 1}", "#ERROR", cell, _extents(cell) or (0, 0, 0, 0), formula, r, c))
+                    shown = "#N/A" if re.fullmatch(r"=\s*NA\(\s*\)", formula, re.I) else "#ERROR"
+                    found.append((f"{_col(c)}{r + 1}", shown, cell, _extents(cell) or (0, 0, 0, 0), formula, r, c))
         found.sort(key=lambda f: (f[5], f[6]))
     below = None
     if found and max(f[5] for f in found) == r1 and time.monotonic() < deadline:
@@ -702,6 +707,15 @@ def _data_below(table, r1: int, cols: list[int], deadline: float) -> int:
         else:
             hi = mid
     return lo
+
+
+def _cell_raw(cell, limit: int = 80) -> str:
+    """A cell's text as it is, spaces included (the usual reading collapses runs of spaces)."""
+    try:
+        n = Atspi.Text.get_character_count(cell)
+        return Atspi.Text.get_text(cell, 0, min(n, limit)) if n and n <= 400 else ""
+    except Exception:
+        return ""
 
 
 def _formula(cell) -> str:
@@ -2491,10 +2505,12 @@ def format_elements(elements: list[Element], max_depth: int = 6) -> list[str]:
             rows: dict[str, list[str]] = {}
             for c in elements[i:j]:
                 row = re.sub(r"^[A-Z]+", "", c.name)
-                text = _clip(" ".join((c.text or "").split()), 60)
+                raw = c.text or ""
+                spaced = raw != " ".join(raw.split()) and "\n" not in raw  # (spaces that are part of the content)
+                text = (raw if len(raw) <= 60 else raw[:59] + "…") if spaced else _clip(raw, 60)
                 formula = f" ({c.value})" if c.value.startswith("=") else ""
                 rows.setdefault(row, []).append(
-                    f"@{c.id} {c.name} {_q(text) if ' ' in text else text}{formula}".rstrip()
+                    f"@{c.id} {c.name} {_q(text) if ' ' in text or spaced else text}{formula}".rstrip()
                 )
             for row, cells in rows.items():
                 lines.append(f"{indent}row {row}: " + " · ".join(cells))

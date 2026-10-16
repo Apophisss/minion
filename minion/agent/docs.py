@@ -18,6 +18,7 @@ import shutil
 import subprocess
 import tempfile
 import zipfile
+from datetime import datetime, timedelta
 from html.parser import HTMLParser
 from pathlib import Path
 from xml.etree import ElementTree as ET
@@ -143,6 +144,14 @@ def _docx(p: Path, details: bool = False) -> str:
                         lines.extend(_docx_details(block, count[0]))
                 elif block.tag == f"{W}tbl":
                     lines.extend(_docx_table(block))
+                    if details:  # (what its text is set in: the runs of all its cells)
+                        looks: dict[str, int] = {}
+                        for r in block.iter(f"{W}r"):
+                            if "".join(t.text or "" for t in r.iter(f"{W}t")).strip():
+                                fmt = _docx_run_format(r.find(f"{W}rPr")) or "default formatting"
+                                looks[fmt] = looks.get(fmt, 0) + 1
+                        if looks:
+                            lines.append("    table runs: " + " · ".join(f"{k} ({n})" for k, n in looks.items()))
                     lines.append("")
                 elif block.tag == f"{W}sdt":  # a content control: a table of contents, a cover page
                     blocks(block.find(f"{W}sdtContent"))
@@ -303,11 +312,12 @@ def _docx_paragraph(par: ET.Element) -> str:
 
 
 def _docx_table(tbl: ET.Element) -> list[str]:
-    rows = []
+    rows, cols = [], 0
     for tr in tbl.iter(f"{W}tr"):
         cells = [" ".join(_docx_paragraph(p) for p in tc.iter(f"{W}p")).strip() for tc in tr.iter(f"{W}tc")]
         rows.append("| " + " | ".join(c.replace("|", "\\|") for c in cells) + " |")
-    return rows
+        cols = max(cols, len(cells))
+    return [f"[table: {len(rows)} rows x {cols} columns]", *rows]
 
 
 # Excel -----------------------------------------------------------------------------------
@@ -328,6 +338,12 @@ def _xlsx(p: Path, details: bool = False) -> str:
                 shared.append("".join(t.text or "" for t in si.iter(f"{S}t")))
         rels = _rels(z, "xl/workbook.xml")
         bold, fills = _xlsx_styles(z) if "xl/styles.xml" in names else (set(), [])
+        dates = _xlsx_date_styles(z) if "xl/styles.xml" in names else {}
+        wb = _xml(z, "xl/workbook.xml")
+        pr = wb.find(f"{S}workbookPr")
+        epoch = (
+            datetime(1904, 1, 1) if pr is not None and pr.get("date1904") in ("1", "true") else datetime(1899, 12, 30)
+        )
         looks = _xlsx_looks(z, details) if "xl/styles.xml" in names else {}
         out, budget = [], MAX_CELLS
         for sheet in _xml(z, "xl/workbook.xml").iter(f"{S}sheet"):
@@ -335,7 +351,7 @@ def _xlsx(p: Path, details: bool = False) -> str:
             if target not in names:
                 continue
             root = _xml(z, target)
-            text, used = _xlsx_sheet(root, shared, budget)
+            text, used = _xlsx_sheet(root, shared, budget, dates, epoch)
             budget -= used
             notes = _xlsx_notes(z, target, root, bold, fills) + _xlsx_layout(root, looks)
             out.append(f"## Sheet: {sheet.get('name', '?')}\n{text}" + ("\n" + "\n".join(notes) if notes else ""))
@@ -464,18 +480,105 @@ def _xlsx_notes(z: zipfile.ZipFile, target: str, root: ET.Element, bold: set, fi
     for drawing in (t for t in rels.values() if "drawings/" in t and t in z.namelist()):
         for chart in _rels(z, drawing).values():
             if chart in z.namelist() and "charts/" in chart:
-                plot = _xml(z, chart).find(".//{http://schemas.openxmlformats.org/drawingml/2006/chart}plotArea")
-                kinds = [
-                    el.tag.split("}")[1] for el in list(plot if plot is not None else []) if el.tag.endswith("Chart")
-                ]
-                refs = [
-                    f.text for f in _xml(z, chart).iter("{http://schemas.openxmlformats.org/drawingml/2006/chart}f")
-                ][:3]
-                notes.append(f"Chart: {', '.join(kinds) or 'chart'}" + (f" of {', '.join(refs)}" if refs else ""))
+                notes.append(_xlsx_chart(_xml(z, chart)))
     return notes
 
 
-def _xlsx_sheet(root: ET.Element, shared: list[str], budget: int) -> tuple[str, int]:
+_DATE_FORMATS = {
+    14: "date",
+    15: "date",
+    16: "date",
+    17: "date",
+    18: "time",
+    19: "time",
+    20: "time",
+    21: "time",
+    22: "datetime",
+    45: "time",
+    46: "time",
+    47: "time",
+}
+
+
+def _xlsx_date_styles(z: zipfile.ZipFile) -> dict[int, str]:
+    """Cell styles (by index) that show a number as a date, a time or both: a sheet stores 2022-06-01 as 44713."""
+    st = _xml(z, "xl/styles.xml")
+    custom = {}
+    for n in st.iter(f"{S}numFmt"):
+        code = re.sub(r'"[^"]*"|\\.|\[[^\]]*\]', "", (n.get("formatCode") or "").lower())  # (quoted text, colours)
+        has_date, has_time = bool(re.search(r"[yd]", code)), bool(re.search(r"[hs]", code))
+        if has_date or has_time:
+            custom[int(n.get("numFmtId", 0) or 0)] = (
+                "datetime" if has_date and has_time else "date" if has_date else "time"
+            )
+    out = {}
+    xfs = st.find(f"{S}cellXfs")
+    for i, xf in enumerate(list(xfs) if xfs is not None else []):
+        fmt = int(xf.get("numFmtId", 0) or 0)
+        kind = custom.get(fmt) or _DATE_FORMATS.get(fmt)
+        if kind:
+            out[i] = kind
+    return out
+
+
+def _as_date(value: str, kind: str, epoch: datetime) -> str:
+    try:
+        moment = epoch + timedelta(days=float(value))
+    except (ValueError, OverflowError):
+        return value
+    if kind == "time":
+        return moment.strftime("%H:%M:%S" if moment.second else "%H:%M")
+    if kind == "date" or (moment.hour, moment.minute, moment.second) == (0, 0, 0):
+        return moment.strftime("%Y-%m-%d")
+    return moment.strftime("%Y-%m-%d %H:%M")
+
+
+C = "{http://schemas.openxmlformats.org/drawingml/2006/chart}"
+
+
+def _xlsx_chart(root: ET.Element) -> str:
+    """A chart: its kind (column, clustered), title and every series with its data and categories."""
+    plot = root.find(f".//{C}plotArea")
+    kinds, series = [], []
+    for el in list(plot if plot is not None else []):
+        name = el.tag.split("}")[1]
+        if not name.endswith("Chart"):
+            continue
+        kind = name[: -len("Chart")]
+        bar = el.find(f"{C}barDir")
+        if bar is not None:
+            kind = "column" if bar.get("val") == "col" else "bar"
+        group = el.find(f"{C}grouping")
+        if group is not None and group.get("val") not in (None, "standard"):
+            kind += f", {group.get('val')}"
+        kinds.append(kind)
+        for ser in el.iter(f"{C}ser"):
+            label = ser.find(f"{C}tx")
+            title = ""
+            if label is not None:  # its name, or where its name comes from when the file keeps no copy of it
+                f, v = label.find(f".//{C}f"), label.find(f".//{C}v")
+                title = f'"{v.text}"' if v is not None and v.text else (f.text if f is not None else "")
+            vals, cats = ser.find(f"{C}val//{C}f"), ser.find(f"{C}cat//{C}f")
+            if vals is None:
+                vals = ser.find(f"{C}yVal//{C}f")
+            if cats is None:
+                cats = ser.find(f"{C}xVal//{C}f")
+            part = (f"{title} = " if title else "") + (vals.text if vals is not None else "?")
+            if cats is not None:
+                part += f" by {cats.text}"
+            series.append(part)
+    heading = root.find(f"{C}chart/{C}title")
+    text = " ".join(t.text or "" for t in heading.iter(f"{A}t")).strip() if heading is not None else ""
+    return (
+        f"Chart: {' + '.join(kinds) or 'chart'}"
+        + (f' "{text}"' if text else "")
+        + (": " + "; ".join(series) if series else "")
+    )
+
+
+def _xlsx_sheet(
+    root: ET.Element, shared: list[str], budget: int, dates: dict | None = None, epoch: datetime | None = None
+) -> tuple[str, int]:
     rows, formulas, used = [], [], 0
     for row in root.iter(f"{S}row"):
         cells = []
@@ -491,6 +594,8 @@ def _xlsx_sheet(root: ET.Element, shared: list[str], budget: int) -> tuple[str, 
                 value = "TRUE" if value == "1" else "FALSE"
             elif kind == "e":
                 value = value or "#ERROR"
+            elif value and dates and c.get("s", "").isdigit() and int(c.get("s")) in dates:
+                value = _as_date(value, dates[int(c.get("s"))], epoch or datetime(1899, 12, 30))
             f = c.find(f"{S}f")
             if f is not None and f.text:
                 formulas.append(f"{ref} ={f.text}")

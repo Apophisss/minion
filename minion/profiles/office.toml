@@ -18,6 +18,15 @@ packages = [
   # Python can write documents directly too (a script is often the fastest way to a spreadsheet or a report).
   "python3-openpyxl",
   "python3-docx",
+  # python-pptx's own needs (it isn't packaged in Debian: its wheel is installed below)
+  "python3-lxml",
+  "python3-pil",
+  "python3-xlsxwriter",
+  "python3-typing-extensions",
+]
+# python-pptx 1.0.2, pure Python, checked against its SHA-256: presentations, like documents and spreadsheets.
+setup = [
+  "python3 -c \"import hashlib, io, urllib.request, zipfile; url = 'https://files.pythonhosted.org/packages/d9/4f/00be2196329ebbff56ce564aa94efb0fbc828d00de250b1980de1a34ab49/python_pptx-1.0.2-py3-none-any.whl'; data = urllib.request.urlopen(url).read(); assert hashlib.sha256(data).hexdigest() == '160838e0b8565a8b1f67947675886e9fea18aa5e795db7ae531606d68e785cba', 'python-pptx wheel checksum'; zipfile.ZipFile(io.BytesIO(data)).extractall('/usr/lib/python3/dist-packages')\" && python3 -c 'import pptx'",
 ]
 env = { SAL_USE_VCLPLUGIN = "gtk3" }
 apps = [

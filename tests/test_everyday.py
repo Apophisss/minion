@@ -249,7 +249,9 @@ def test_the_reply_says_which_files_an_action_saved_or_downloaded(tmp_path):
     agent.home = home
     before = agent._files_state()
     time.sleep(0.01)
-    (tmp_path / "Documents/report.docx").write_text("changed!")
+    with zipfile.ZipFile(tmp_path / "Documents/report.docx", "w") as z:  # (a real save: a Word document)
+        z.writestr("word/document.xml", "<w:document/>")
+    size = os.path.getsize(tmp_path / "Documents/report.docx")
     (tmp_path / "Documents/letters/Avi.pdf").write_text("z" * 3000)
     (tmp_path / "Downloads/data.csv").write_text("")
     (tmp_path / "Downloads/data.csv.part").write_text("partial")
@@ -260,7 +262,7 @@ def test_the_reply_says_which_files_an_action_saved_or_downloaded(tmp_path):
         [
             "downloading ~/Downloads/data.csv (not finished yet)",
             "new file ~/Documents/letters/Avi.pdf (3 KB)",
-            "saved ~/Documents/report.docx (8 bytes)",
+            f"saved ~/Documents/report.docx ({size} bytes, Word format)",
             "deleted ~/Downloads/old.bin",
         ]
     )  # (the order follows modification times, which can tie on some systems)
@@ -326,7 +328,7 @@ def test_xlsx_shows_bold_frozen_panes_conditional_formats_and_charts(tmp_path):
     assert "Bold: A1, B1" in text
     assert "Frozen panes: rows and columns before A2 stay in view" in text
     assert "Conditional format: B2:B3 greaterThan 100000 → fill #FF0000" in text
-    assert "Chart: barChart" in text
+    assert "Chart: column, clustered: 'Sales'!B1 = 'Sales'!$B$2:$B$3" in text
 
 
 def test_a_picture_without_text_is_described_not_misread(tmp_path, monkeypatch):

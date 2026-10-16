@@ -19,6 +19,7 @@ import subprocess
 import sys
 import threading
 import time
+import zipfile
 from concurrent.futures import ThreadPoolExecutor
 
 from PIL import ImageDraw, ImageFont
@@ -347,6 +348,32 @@ def _escapes(text: str) -> str:
     return text.replace("\\\\", "\0").replace("\\n", "\n").replace("\\t", "\t").replace("\0", "\\")
 
 
+_OOXML = {"docx": ("word/", "Word"), "xlsx": ("xl/", "Excel"), "pptx": ("ppt/", "PowerPoint")}
+_ODF = {"odt": "text", "ods": "spreadsheet", "odp": "presentation"}
+
+
+def _office_kind(path: str) -> str:
+    """', Excel format' for a saved .xlsx that is one, and a warning when a document's content and name disagree
+    (LibreOffice can keep its own format under a Microsoft name): so nobody spends a step on `file` to check."""
+    ext = path.rsplit(".", 1)[-1].lower()
+    if ext not in _OOXML and ext not in _ODF:
+        return ""
+    try:
+        with zipfile.ZipFile(path) as z:
+            names = z.namelist()
+            mime = z.read("mimetype").decode(errors="replace") if "mimetype" in names else ""
+    except (OSError, zipfile.BadZipFile, KeyError):
+        return ", not a valid document yet"
+    if ext in _OOXML:
+        folder, label = _OOXML[ext]
+        if any(n.startswith(folder) for n in names):
+            return f", {label} format"
+        return (
+            f", but it holds OpenDocument, not {label}" if "opendocument" in mime else f", but it isn't a {label} file"
+        )
+    return f", OpenDocument {_ODF[ext]}" if "opendocument" in mime else ""
+
+
 CELL_REF = re.compile(r"(?:[A-Za-z_][\w ]*\.)?\$?[A-Za-z]{1,3}\$?[1-9]\d{0,6}(?::\$?[A-Za-z]{1,3}\$?[1-9]\d{0,6})?")
 
 
@@ -377,6 +404,13 @@ def parse_step(step) -> tuple[str, dict]:
         if not m:
             raise RpcError("empty action")
         verb, rest = m.group(1).lower(), (m.group(2) or "")
+        if verb in ("click?", "dclick?", "rclick?"):  # "click? 'Keep Current Format'": a dialog that may not come
+            canon, params = parse_step(f"{verb[:-1]} {rest}")
+            return canon, {**params, "optional": True}
+        held = re.fullmatch(r"((?:(?:ctrl|shift|alt|super)\+)+)(click|dclick|rclick|tclick)", verb)
+        if held:  # "ctrl+click @12": cells or files added to a selection, a link opened in a new tab
+            canon, params = parse_step(f"{held.group(2)} {rest}")
+            return canon, {**params, "modifiers": held.group(1).rstrip("+").split("+")}
         if verb not in ACTIONS:
             raise RpcError(
                 f"unknown action {verb!r}; actions: {', '.join(sorted(set(a for a, _ in ACTIONS.values())))}"
@@ -818,7 +852,12 @@ class Agent:
                 self._goto_cell(ref)  # B8, C2:C29: go there (empty cells and ranges have no @id)
                 return f"went to {ref} (in the Name Box)" if ":" not in ref else f"selected {ref} (in the Name Box)"
             else:
-                t = r(p["target"])
+                try:
+                    t = r(p["target"])
+                except TargetError:
+                    if p.get("optional"):
+                        return f"nothing to click: {p['target']!r} didn't show up (skipped)"
+                    raise
                 covered = a11y.cover(t.element, t.x, t.y) if isinstance(t.element, a11y.Element) else ""
                 if covered:  # a pop-up or a banner is on top: the click would go to it (an ad, "Subscribe")
                     self._covered = True
@@ -1888,10 +1927,11 @@ class Agent:
                 continue
             if path + ".part" in after or path + ".crdownload" in after:
                 continue  # the browser's placeholder for a download in progress
+            kind = _office_kind(path)
             if path not in before:
-                notes.append(f"new file {short(path)} ({size(n)})")
+                notes.append(f"new file {short(path)} ({size(n)}{kind})")
             elif before[path] != after[path]:
-                notes.append(f"saved {short(path)} ({size(n)})")
+                notes.append(f"saved {short(path)} ({size(n)}{kind})")
         if "\0partial" not in before and "\0partial" not in after:
             notes += [f"deleted {short(path)}" for path in before if path not in after]
         if len(notes) > 4:
