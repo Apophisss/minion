@@ -3,7 +3,7 @@
   "manifest_version": "0.4",
   "name": "minion",
   "display_name": "Minion desktops",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Give Claude its own Linux desktops: browser, office, dev, data and Windows apps that it reads as text and controls.",
   "long_description": "Minion gives Claude its own computers: featherweight Linux desktops with Firefox, LibreOffice, a terminal, developer and data tools, or Windows programs (through Wine). Claude reads the screen as text, clicks and types, runs commands and Python, and copies files in and out. Watch any desktop live in your browser and take over with one click.\n\n**You need Docker running:** Docker Desktop, OrbStack, Podman or Docker Engine. The first desktop of each kind downloads its image (199 to 717 MB). Python is not needed: Claude Desktop provides it through uv.\n\n**Try:** *Create an office desktop, write a one-page brief about otters in Writer and save it as brief.docx in my Downloads.*\n\n**Settings.** *Default desktop* is the profile Claude gets when it doesn't pick one. *Shared folder* is the only folder on your computer that Claude can copy files into a desktop from, or out of a desktop to.\n\nEach desktop is an isolated container on your computer. Treat what Claude reads on a screen as untrusted (prompt injection), and keep passwords out of desktops: hand control to Claude only after you sign in yourself.",
   "author": {

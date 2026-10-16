@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.1.1
+
+The live view on a phone or tablet.
+
+- A phone's keyboard only opens for a real text field, so the live view had no way to type, and its toolbar
+  overflowed a narrow screen. Now ⌨ opens a typing bar: type, then Send, with buttons for Enter, Backspace, Tab,
+  Esc and scrolling, and a lock that hides a password. On the screen, a tap clicks, a long press right-clicks, a
+  swipe scrolls and two fingers zoom. On a narrow screen the toolbar is one row, Copy, Paste and Freeze are under
+  More, and the screen sits at the top, above the phone's keyboard.
+
 ## 1.1.0
 
 Office work, measured on OSWorld, and the desktop for people too.
@@ -24,9 +34,6 @@ way in 1.0.0 is fixed here, and on the same tasks 1.1.0 took 18% fewer steps and
 - The clipboard both ways: Copy (and Ctrl+C while in control) puts the desktop's clipboard on your computer's.
 - A Keys menu for the keys your browser keeps (Ctrl+W, Ctrl+T, Alt+Tab, Alt+F4, F11), and an Open box for a URL,
   app or file.
-- The live view works on a phone: the toolbar fits, a tap clicks, a long press right-clicks, a swipe scrolls, and
-  ⌨ opens a typing bar for the phone's keyboard (which only opens for a real text field), with Enter, Backspace,
-  Tab and Esc buttons and a lock for passwords.
 - The dashboard can create a desktop signed in with a saved sign-in. The HTTP API has `files`, `download`,
   `upload`, `login` and `/api/logins`, and the SDK `Desktop.ls()`, `save_login()`, `logins()` and
   `create(login=...)`.
