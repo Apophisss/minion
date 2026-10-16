@@ -2,7 +2,8 @@
 
 `minion connect` adds Minion's MCP server to the agent apps on your computer. It supports Claude Desktop, Claude
 Code, Cursor, VS Code (and GitHub Copilot CLI), Devin Desktop (formerly Windsurf), Gemini CLI, Codex, LM Studio,
-Cline, Kiro and Zed. New to Minion? [install.md](install.md) covers installing it, and the one-click buttons.
+Cline, Kiro, Zed, opencode and OpenClaw. New to Minion? [install.md](install.md) covers installing it, and the
+one-click buttons.
 
 ```bash
 minion connect              # finds your apps and asks which ones to connect
@@ -244,6 +245,36 @@ Zed's settings file usually starts with comments, so Minion prints this snippet 
 ```
 
 Zed reloads its settings by itself. See [Zed and MCP](https://zed.dev/docs/ai/mcp).
+
+### opencode
+
+The file is `~/.config/opencode/opencode.json` (or `opencode.jsonc`; `$XDG_CONFIG_HOME/opencode/` if set). opencode
+1.x keeps servers under `mcp`:
+
+```json
+{
+  "mcp": {
+    "minion": { "type": "local", "command": ["/path/to/minion", "mcp"], "enabled": true }
+  }
+}
+```
+
+opencode 2 keeps them under `mcp.servers` (without `enabled`); Minion writes that layout when the file already uses
+it or when `opencode --version` says 2.x. Start a new `opencode` session to load it; `opencode mcp list` shows it
+connected. See [opencode MCP servers](https://opencode.ai/docs/mcp-servers/).
+
+### OpenClaw
+
+OpenClaw's config (`~/.openclaw/openclaw.json`) is JSON5, so Minion uses its CLI:
+
+```bash
+openclaw mcp add minion --command /path/to/minion --arg mcp --no-probe --connect-timeout 60 --timeout 900
+openclaw mcp doctor minion --probe     # checks that it answers
+```
+
+The longer timeouts cover a first `uvx` download and long tool calls (installs, hand-offs to you). Without the
+`openclaw` command, `minion connect` prints that line for you to run. See
+[OpenClaw and MCP](https://docs.openclaw.ai/tools/mcp).
 
 ### Goose
 

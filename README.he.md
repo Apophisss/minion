@@ -81,6 +81,7 @@ irm https://raw.githubusercontent.com/apophisss/minion/main/install.ps1 | iex   
 
 <p align="center"><img src="docs/assets/demo.gif" alt="סוכן מחפש בוויקיפדיה על שולחן עבודה של Minion, בהקלטה של הקופסה השחורה של Minion" width="720"></p>
 <p align="center" dir="rtl"><sub>סוכן שעובד על שולחן עבודה מסוג <code>research</code>. את ה-GIF יצרה הקופסה השחורה (flight recorder) המובנית של Minion, עם הפקודה <code>minion replay -o demo.gif</code>.</sub></p>
+<p align="center" dir="rtl"><sub>▶ <a href="https://apophisss.github.io/minion/assets/demo.mp4">לצפייה בסרטון ההדגמה (דקה)</a>: סוכן אוסף מידע על יעד לטיול בוויקיפדיה, בונה תקציב עם גרף בגיליון אלקטרוני ומייצא את התוכנית ל-PDF. ‏12 קריאות לכלים ו-2,372 טוקנים.</sub></p>
 
 <div dir="rtl">
 

@@ -61,8 +61,8 @@ app's connector settings ([how](docs/remote.md)).
 Then just ask: *"Create an office desktop, write a one-page brief about our Q3 numbers in Writer and save it as
 brief.docx."* Every way to install is in [docs/install.md](docs/install.md).
 
-<p align="center"><img src="docs/assets/demo.gif" alt="An agent searching Wikipedia on a Minion desktop, recorded by Minion's flight recorder" width="720"></p>
-<p align="center"><sub>An agent on a <code>research</code> desktop. The GIF was made by Minion's built-in flight recorder (<code>minion replay -o demo.gif</code>).</sub></p>
+<p align="center"><a href="https://apophisss.github.io/minion/assets/demo.mp4"><img src="docs/assets/demo-poster.png" alt="Play the one-minute demo: an agent researches Lisbon on Wikipedia, makes a budget with a chart in LibreOffice Calc and exports a plan as PDF from Writer" width="720"></a></p>
+<p align="center"><sub>▶ <a href="https://apophisss.github.io/minion/assets/demo.mp4">Watch the one-minute demo</a>: an agent researches a trip on Wikipedia, makes a budget with a chart and writes the plan as a PDF. 12 tool calls and 2,372 tokens of text; the same steps with screenshots would cost about 36,855. Recorded live with <code>python scripts/demo_video.py</code>, which makes the calls an agent would make.</sub></p>
 
 ---
 
@@ -130,7 +130,7 @@ minion cp :~/Documents/notes.md .        # copy files out (and in)
 
 | Your agent | Connect with |
 |---|---|
-| Claude Desktop/Code, Cursor, VS Code, Codex, Gemini CLI, Windsurf/Devin, LM Studio, Kiro, Goose | one click, `minion connect`, or `uvx minion-desktop mcp` ([install](docs/install.md)) |
+| Claude Desktop/Code, Cursor, VS Code, Codex, Gemini CLI, opencode, OpenClaw, Windsurf/Devin, LM Studio, Kiro, Goose | one click, `minion connect`, or `uvx minion-desktop mcp` ([install](docs/install.md)) |
 | Agent frameworks: OpenAI Agents SDK, LangChain/LangGraph, LlamaIndex, CrewAI, smolagents, Pydantic AI, Google ADK, AutoGen | the same MCP server ([verified recipes](docs/integrations.md)) |
 | ChatGPT, Claude.ai, Le Chat (web apps) | `minion share`: remote MCP over HTTPS ([docs](docs/remote.md)) |
 | Any model with function calling (OpenAI, Anthropic, Gemini, Mistral, local models via Ollama/vLLM) | `Toolkit().definitions("openai" \| "anthropic" \| "gemini")` + `Toolkit().run_calls()` ([docs](docs/agents.md#without-mcp-function-calling-with-any-model)) |
@@ -272,6 +272,10 @@ When pixels matter, `screenshot --marks` labels every control with its `@id`:
 
 ## Efficiency, measured
 
+**Five real tasks (a PDF report, a spreadsheet, a Wikipedia lookup, a web form, reading a document) cost an agent
+4,356 tokens with Minion and 50,505 with screenshots: 11.6× fewer.** The full table and method are in
+[docs/benchmarks.md](docs/benchmarks.md); reproduce it with `python scripts/bench_tasks.py`.
+
 | | Tokens | |
 |---|---|---|
 | Screenshot 1280×800 | ~1,365 | the baseline |
@@ -336,8 +340,10 @@ out of desktops unless a human hands off. Read [SECURITY.md](SECURITY.md).
 
 ## Contributing
 
-Issues and pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md). Good first contributions include new
-profiles (`minion/profiles/*.toml`), better `see` output for specific apps, and integration recipes.
+Questions and ideas are welcome in [Discussions](https://github.com/apophisss/minion/discussions), and bugs in
+[issues](https://github.com/apophisss/minion/issues). To help build Minion, pick a
+[good first issue](https://github.com/apophisss/minion/labels/good%20first%20issue) (translations, apps, agent apps,
+benchmark tasks), read [CONTRIBUTING.md](CONTRIBUTING.md), and see where it's going in the [roadmap](ROADMAP.md).
 
 ## License
 

@@ -10,6 +10,7 @@ post with it. Everything here is drafted from the repository's own docs. Nothing
 | [reddit.md](reddit.md) | r/LocalLLaMA, r/ClaudeAI, r/selfhosted, r/opensource | English |
 | [x-thread.md](x-thread.md) | X: an 8-post thread | English |
 | [linkedin.md](linkedin.md) | LinkedIn | English |
+| [youtube.md](youtube.md) | YouTube: title, description with chapters, tags and thumbnail for the demo video | English |
 | [hebrew.md](hebrew.md) | Israeli tech communities and LinkedIn | Hebrew |
 | [chinese.md](chinese.md) | V2EX, Juejin, Zhihu | Simplified Chinese |
 | [faq-responses.md](faq-responses.md) | Short answers to likely objections, for any thread | English |
@@ -75,6 +76,7 @@ Use these numbers as written. If the README changes, the README wins.
 | Fact | Say | Source |
 |---|---|---|
 | What it is | Featherweight Linux desktops that any AI agent can use; agents read the screen as text, act in batches or in code, and use any program or website | [README.md](../../README.md), [index.html](../index.html) |
+| Task cost | Five real tasks: 4,356 tokens with Minion vs. 50,505 with screenshots (11.6× fewer). The lead for any post about cost: the "Computer Use is 45x more expensive" HN thread (495 points) shows people care | [benchmarks.md](../benchmarks.md) |
 | Startup | Ready in about 1.5 s (1.2–1.8 s for every profile) | [README.md](../../README.md#efficiency-measured), [design.md](../design.md) |
 | Idle memory | 54–105 MB per desktop, about 60 MB typical. Firefox and LibreOffice add their own when open (a few hundred MB each) | [README.md](../../README.md#efficiency-measured), [faq.md](../faq.md) |
 | Freezing | Idle desktops freeze to 0% CPU and thaw in about 0.2 s | [README.md](../../README.md), [design.md](../design.md) |
@@ -116,7 +118,16 @@ Use these numbers as written. If the README changes, the README wins.
 | Security model | https://github.com/apophisss/minion/blob/main/SECURITY.md |
 | One-line install | `curl -fsSL https://raw.githubusercontent.com/apophisss/minion/main/install.sh \| sh` (macOS, Linux) · `irm https://raw.githubusercontent.com/apophisss/minion/main/install.ps1 \| iex` (Windows) |
 
-## Images
+## Video and images
+
+**The demo video** is [demo.mp4](../assets/demo.mp4): 1920×1080, 1:03, 2 MB, with captions and no narration, so it
+works with the sound off. An agent researches Lisbon on Wikipedia, makes a budget with a chart in LibreOffice Calc and
+exports the plan as a PDF from Writer. Each tool call and its result are shown next to the desktop, with a running
+count of tokens against what the same steps cost in screenshots: 12 calls and 2,372 tokens against about 36,855.
+`python scripts/demo_video.py` records it again. Upload the file itself to X and LinkedIn, which play it in the feed,
+and use it as the first post or the post's attachment. Put it on YouTube for Product Hunt ([youtube.md](youtube.md)).
+[demo-poster.png](../assets/demo-poster.png) is a frame with a play button, for links to the video, and
+[demo-thumbnail.jpg](../assets/demo-thumbnail.jpg) is the YouTube thumbnail.
 
 The two main images are 1280×640 (2:1), the size the landing page declares for its link card (`og:image`).
 

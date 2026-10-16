@@ -1,0 +1,52 @@
+[
+ {
+  "task": "Write a report and export it as PDF",
+  "minion_calls": 5,
+  "minion_tokens": 156,
+  "seconds": 7.7,
+  "gui_steps": 9,
+  "claude_screenshot_tokens": 12285,
+  "openai_screenshot_tokens": 9945,
+  "errors": []
+ },
+ {
+  "task": "Fill a spreadsheet with a formula and save it as .xlsx",
+  "minion_calls": 5,
+  "minion_tokens": 214,
+  "seconds": 9.0,
+  "gui_steps": 7,
+  "claude_screenshot_tokens": 9555,
+  "openai_screenshot_tokens": 7735,
+  "errors": []
+ },
+ {
+  "task": "Look something up on Wikipedia",
+  "minion_calls": 3,
+  "minion_tokens": 1689,
+  "seconds": 16.8,
+  "gui_steps": 5,
+  "claude_screenshot_tokens": 6825,
+  "openai_screenshot_tokens": 5525,
+  "errors": []
+ },
+ {
+  "task": "Fill in and submit a web form",
+  "minion_calls": 3,
+  "minion_tokens": 533,
+  "seconds": 7.4,
+  "gui_steps": 11,
+  "claude_screenshot_tokens": 15015,
+  "openai_screenshot_tokens": 12155,
+  "errors": []
+ },
+ {
+  "task": "Read a 2-page document",
+  "minion_calls": 1,
+  "minion_tokens": 1764,
+  "seconds": 0.1,
+  "gui_steps": 5,
+  "claude_screenshot_tokens": 6825,
+  "openai_screenshot_tokens": 5525,
+  "errors": []
+ }
+]

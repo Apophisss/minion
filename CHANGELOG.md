@@ -28,18 +28,25 @@ The first release of Minion: instant desktops that any AI agent can use.
 
 **Acting**
 - Actions wait for the screen to settle, for web pages and documents to be ready, and for dialogs that appear a moment
-  later. Each one reports what changed.
+  later. Each one reports what changed, including typing that an app still starting up only shows seconds later.
 - Text targets match exactly: "Delete" never clicks "Delete all". A miss fails with the closest controls and their
   `@ids` instead of clicking something else.
 - `fill` only types into text fields. `select` picks dropdown options. Unknown key names are errors.
-- `menu` runs any menu command by its path ("File > Export As > Export as PDF...") without opening menus.
-- `path` fills the open Open/Save/Export dialog with a full path and confirms; existing files are only replaced with
-  `overwrite`, and the app's error boxes are reported.
+- `menu` runs any menu command by its path ("File > Export As > Export as PDF...") without opening menus, and waits
+  for the dialog that a command ending in "…" opens.
+- `path` fills the open Open/Save/Export dialog with a full path and confirms (it waits for a dialog that is still
+  opening); existing files are only replaced with `overwrite`, and the app's error boxes are reported.
 - Targets can name a kind of control (`button:Save`, `link:Docs`, `field:Email`), and a control that is scrolled out
   of view is scrolled into view.
 - Typing in LibreOffice is lossless for any language, and its coordinates are correct from the first look.
 - **Code mode** (`script`): Python runs inside the desktop with a GUI API, so loops cost one call.
 - **Macros**: export the recorded session as a Python script that replays it without a model.
+
+**Measured**
+- Five real tasks cost an agent 4,356 tokens with Minion and 50,505 with a screenshot agent: 11.6× fewer
+  ([docs/benchmarks.md](docs/benchmarks.md), `python scripts/bench_tasks.py`).
+- A one-minute demo video: one job in a browser, a spreadsheet and a word processor in 12 tool calls and 2,372 tokens
+  ([docs/assets/demo.mp4](docs/assets/demo.mp4), `python scripts/demo_video.py`).
 
 **Every agent**
 - One toolset (`minion/tools.py`), served as:
@@ -56,7 +63,8 @@ The first release of Minion: instant desktops that any AI agent can use.
 
 **Getting started**
 - One-line installers (`install.sh`, `install.ps1`), the `minion setup` wizard, and `minion connect`, which adds
-  Minion to Claude Desktop, Claude Code, Cursor, VS Code, Windsurf/Devin, Gemini CLI, Codex, LM Studio, Cline and Kiro.
+  Minion to Claude Desktop, Claude Code, Cursor, VS Code, Windsurf/Devin, Gemini CLI, Codex, LM Studio, Cline, Kiro,
+  Zed, opencode and OpenClaw.
 - One-click installs: a Claude Desktop extension (`minion.mcpb`), buttons for VS Code, Visual Studio, Cursor,
   LM Studio, Goose and Kiro, a Claude Code plugin, and an MCP Registry entry.
 - `npx -y minion-desktop mcp` for MCP clients that expect an npx command: the npm package runs Minion from PyPI,

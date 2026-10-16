@@ -2,6 +2,14 @@
 
 Thanks for helping. Minion aims to be the simplest, lightest way to give an AI agent a computer.
 
+## Where to start
+
+- **Good first issues** are [small tasks with clear steps](https://github.com/apophisss/minion/labels/good%20first%20issue):
+  translations, apps an agent can open by name, agent apps for `minion connect`, benchmark tasks.
+- **Questions and ideas** go to [Discussions](https://github.com/apophisss/minion/discussions), and bugs to
+  [issues](https://github.com/apophisss/minion/issues).
+- **Bigger plans** are in [ROADMAP.md](ROADMAP.md). Comment on an item's issue before you start on it.
+
 ## Setup
 
 ```bash
@@ -30,6 +38,10 @@ MINION_TEST_DOCKER=1 pytest -m docker        # needs Docker; builds/pulls the ba
 ## Good contributions
 
 - **Profiles**: a new desktop for a job (design, video, GIS, accounting…) is often a 15-line TOML file.
+- **Apps by name**: an entry in `minion/agent/catalog_data.py`, then `python scripts/gen_apps_doc.py`.
+- **Agent apps**: an `App(...)` entry in `minion/connect.py`, with tests and a section in `docs/connect.md`.
+- **Translations**: a `README.<language>.md`, added to the language switcher in every README.
+- **Benchmark tasks**: a task in `scripts/bench_tasks.py`, then `python scripts/bench_tasks.py`.
 - **Better `see` for an app**: improvements in `minion/agent/a11y.py` that make a popular app's UI clearer
   or cheaper in tokens.
 - **Agent client recipes**: tested MCP setups for more clients in `docs/agents.md`.
@@ -37,5 +49,5 @@ MINION_TEST_DOCKER=1 pytest -m docker        # needs Docker; builds/pulls the ba
 
 ## Pull requests
 
-Keep changes focused, add or update tests, and update the docs when behavior changes. CI runs lint, unit tests
-on Python 3.11–3.14, local-backend integration tests, and an image build.
+Keep changes focused, add or update tests, and update the docs when behavior changes. CI runs lint, the unit
+tests on Linux, macOS and Windows (Python 3.11–3.14), integration tests on real desktops, and packaging checks.

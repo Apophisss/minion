@@ -61,6 +61,7 @@ irm https://raw.githubusercontent.com/apophisss/minion/main/install.ps1 | iex   
 
 <p align="center"><img src="docs/assets/demo.gif" alt="Minion のデスクトップで Wikipedia を検索するエージェント。Minion のフライトレコーダーで記録" width="720"></p>
 <p align="center"><sub><code>research</code> デスクトップで作業するエージェント。この GIF は Minion に組み込まれたフライトレコーダー（<code>minion replay -o demo.gif</code>）で作成しました。</sub></p>
+<p align="center"><sub>▶ <a href="https://apophisss.github.io/minion/assets/demo.mp4">1 分間のデモ動画を見る</a>：エージェントが Wikipedia で旅行を調べ、スプレッドシートでグラフ付きの予算を作り、計画を PDF に書き出します。ツール呼び出し 12 回、2,372 トークン。</sub></p>
 
 ## エージェントを接続する
 

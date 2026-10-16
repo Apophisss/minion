@@ -845,7 +845,14 @@ class Agent:
         except ValueError as e:
             raise RpcError(str(e)) from e
         label = " > ".join(parts)
+        dialog = a11y.opens_dialog(nodes[-1])
+        try:
+            before = {w.id for w in self.windows.list(with_states=False)} if dialog else set()
+        except WindowError:
+            dialog = False
         if a11y.press_menu(nodes):
+            if dialog:
+                self._wait_new_window(before)
             return f"chose {label}"
         # This app needs its menus opened: click through them like a person.
         for node in nodes:
@@ -861,7 +868,21 @@ class Agent:
             x, y, w, h = box
             self.xi.click(x + w // 2, y + h // 2)
             time.sleep(0.3)
+        if dialog:
+            self._wait_new_window(before)
         return f"chose {label} (clicked through the menus)"
+
+    def _wait_new_window(self, before: set, timeout: float = 4.0) -> bool:
+        """Wait for a window that wasn't open before (the dialog a "Chart…" command opens takes a moment)."""
+        end = time.monotonic() + timeout
+        while time.monotonic() < end:
+            time.sleep(0.15)
+            try:
+                if {w.id for w in self.windows.list(with_states=False)} - before:
+                    return True
+            except WindowError:
+                return False
+        return False
 
     PATH_LABEL = re.compile(r"^(file ?name|name|location|save as|file|path|object name|folder( name)?)\b", re.I)
     FILE_DIALOG = re.compile(
@@ -882,6 +903,22 @@ class Agent:
             return next((el for el in fields if "focused" in el.states), None), focused
         return None, focused
 
+    def _await_dialog(self, timeout: float = 5.0) -> None:
+        """Give a file dialog that is still opening (ctrl+s was pressed just now) time to take the focus, so the
+        path goes into the dialog and not into the app's own window."""
+        deadline, first = time.monotonic() + timeout, None
+        while time.monotonic() < deadline:
+            try:
+                focused = self.windows.focused()
+            except WindowError:
+                focused = None
+            if focused is not None:
+                first = first or focused.id
+                aw = a11y.window_for(focused) if a11y.AVAILABLE else None
+                if (aw or {}).get("role") != "frame" or focused.id != first:  # a dialog, or the focus moved on
+                    return
+            time.sleep(0.2)
+
     def _file_dialog(self, path: str, overwrite: bool = False) -> str:
         """Type a full path into the open file dialog (Open, Save As, Export, Upload, ...) and confirm."""
         if not path.strip():
@@ -889,6 +926,7 @@ class Agent:
         full = os.path.normpath(os.path.expanduser(path.strip()))
         if not os.path.isabs(full):
             full = os.path.join(self.home, full)
+        self._await_dialog()
         field, focused = self._path_field()
         if field is None:  # GTK's Open dialog has no path box until ctrl+L asks for one
             self.xi.key("ctrl+l")
@@ -970,11 +1008,11 @@ class Agent:
             focused, aw = self._focused_a11y()
         except RpcError:
             return ""
-        if aw is None:
-            return ""
+        if aw is None or aw.get("role") not in ("alert", "dialog", "file chooser"):
+            return ""  # back in the app's own window (whose status bar may well say "Overwrite"): no question asked
         snap = a11y.snapshot(aw, max_elements=120, budget=1.5, screen=self.size)
         said = " ".join(f"{el.name} {el.text}" for el in snap.elements)
-        if not re.search(r"already exists|replace it|overwrite", said, re.I):
+        if not re.search(r"already exists|replace it\b|overwrite it\b", said, re.I):
             return ""
         buttons = {(el.name or "").strip().lower(): el for el in snap.elements if el.role in ("push button", "button")}
         answer = next((buttons[n] for n in ("replace", "overwrite", "yes", "ok") if n in buttons), None)
@@ -1084,9 +1122,15 @@ class Agent:
                 and not change.get("changed")
                 and {w.id for w in wins_after} == set(wins_before)
             ):
-                # Dialogs often appear a moment after the key or click (ctrl+s, "Save changes?"): look again
-                # before reporting that nothing happened.
-                time.sleep(0.6)
+                # Dialogs often appear a moment after the key or click (ctrl+s, "Save changes?"), and an app that
+                # is still busy (starting up) can take in typing and only show it seconds later: keep looking for
+                # a while before reporting that nothing happened.
+                typed = sum(len(str(q.get("text") or "")) for a, q in parsed[: len(results)] if a in ("type", "paste"))
+                end = time.monotonic() + 1.5 + min(3.0, typed / 30)
+                while time.monotonic() < end:
+                    time.sleep(0.3)
+                    if diff(before, thumb(self.screen.grab()))[0]:
+                        break
                 settled, _, frame = settle(self.screen, timeout=1.5)
                 frac, bbox = diff(before, thumb(frame))
                 change = describe_change(frac, bbox)

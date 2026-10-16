@@ -1315,6 +1315,14 @@ def find_menu_path(window: dict, path: list[str]) -> list:
         return nodes
 
 
+def opens_dialog(node) -> bool:
+    """Whether a menu command opens a dialog: by convention its label ends with an ellipsis ("Chart…")."""
+    if not _init():
+        return False
+    with LOCK:
+        return _name(node).rstrip().endswith(("...", "…"))
+
+
 def press_menu(nodes: list) -> bool:
     """Activate a menu command through accessibility, without opening its menus. False if the app
     doesn't support that (the caller then opens the menus with the mouse)."""

@@ -216,3 +216,70 @@ def test_catalog_downloads_get_the_name_their_command_expects():
         catalog.install_name({"id": "postman", "command": "~/apps/postman/Postman/Postman --no-sandbox"}) == "postman"
     )
     assert catalog.install_name({"id": "x", "command": "/opt/x/bin/x"}) == "x"
+
+
+class _Win:
+    def __init__(self, wid):
+        self.id = wid
+
+
+class _Windows:
+    """Window lists over time: the dialog shows up on the third look."""
+
+    def __init__(self):
+        self.calls = 0
+
+    def list(self, with_states=True):
+        self.calls += 1
+        return [_Win("calc")] + ([_Win("chart wizard")] if self.calls >= 3 else [])
+
+
+def test_menu_waits_for_the_dialog_an_ellipsis_command_opens(monkeypatch):
+    from minion.agent.server import Agent
+
+    agent = object.__new__(Agent)
+    agent.windows = _Windows()
+    agent._focused_a11y = lambda: (None, {"node": "calc"})
+    monkeypatch.setattr(a11y, "find_menu_path", lambda window, parts: ["Insert", "Chart..."])
+    monkeypatch.setattr(a11y, "opens_dialog", lambda node: node.endswith("..."))
+    monkeypatch.setattr(a11y, "press_menu", lambda nodes: True)
+    assert agent._menu("Insert > Chart") == "chose Insert > Chart"
+    assert agent.windows.calls == 3  # it looked until the dialog was there
+
+    agent.windows = _Windows()
+    monkeypatch.setattr(a11y, "find_menu_path", lambda window, parts: ["Edit", "Undo"])
+    assert agent._menu("Edit > Undo") == "chose Edit > Undo"
+    assert agent.windows.calls == 0  # a plain command doesn't wait
+
+
+class _Focus:
+    """The focused window over time: the app, the app again, then the Save dialog."""
+
+    def __init__(self, ids):
+        self.ids, self.calls = list(ids), 0
+
+    def focused(self):
+        self.calls += 1
+        wid = self.ids[min(self.calls, len(self.ids)) - 1]
+        if wid is None:
+            return None
+        w = _Win(wid)
+        w.title, w.pid, w.x, w.y, w.w, w.h = wid, 1, 0, 0, 100, 100
+        return w
+
+
+def test_path_waits_for_the_file_dialog_to_take_the_focus(monkeypatch):
+    from minion.agent import server
+    from minion.agent.server import Agent
+
+    monkeypatch.setattr(server.time, "sleep", lambda s: None)
+    monkeypatch.setattr(a11y, "AVAILABLE", True)
+    monkeypatch.setattr(a11y, "window_for", lambda w: {"role": "frame" if w.title == "calc" else "file chooser"})
+    agent = object.__new__(Agent)
+    agent.windows = _Focus(["calc", None, "calc", "save"])  # ctrl+s was pressed a moment ago
+    agent._await_dialog()
+    assert agent.windows.calls == 4  # it waited for the dialog
+
+    agent.windows = _Focus(["save"])
+    agent._await_dialog()
+    assert agent.windows.calls == 1  # a dialog has the focus already

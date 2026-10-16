@@ -27,8 +27,9 @@ Alternatives: GitHub, Productivity.
 
 ## Gallery
 
-In this order. Product Hunt crops gallery images to its own frame, so check each one in the preview before you
-publish.
+Start the gallery with the demo video: Product Hunt takes a YouTube link, so upload [demo.mp4](../assets/demo.mp4)
+first ([youtube.md](youtube.md)). Then the images, in this order. Product Hunt crops gallery images to its own frame,
+so check each one in the preview before you publish.
 
 | # | Image | Caption |
 |---|---|---|

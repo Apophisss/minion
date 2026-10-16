@@ -1,6 +1,7 @@
 # LinkedIn
 
-Attach [hero.png](../assets/hero.png). LinkedIn doesn't render Markdown, so the post is plain text. Avoid typing
+Attach the demo video [demo.mp4](../assets/demo.mp4) (LinkedIn plays uploaded videos in the feed), or
+[hero.png](../assets/hero.png). LinkedIn doesn't render Markdown, so the post is plain text. Avoid typing
 `@` before ids: LinkedIn turns it into a mention. The post has about 1,700 characters (the limit is 3,000).
 
 ```text
