@@ -14,7 +14,7 @@ that the dashboard sets. Static assets (`/static/*`) are public. JSON in, JSON o
 | `GET /api/health` | | `{ok, version, backend}` |
 | `GET /api/profiles` | | profiles |
 | `GET /api/desktops` | `?stats=1` | desktops (with memory/CPU) |
-| `POST /api/desktops` | `{profile, name?, size?}` | the new desktop (201) |
+| `POST /api/desktops` | `{profile, name?, size?, login?}` | the new desktop (201). `login`: start signed in, from a saved sign-in (its profile) |
 | `GET /api/desktops/{name}` | | info + agent hello |
 | `GET /api/desktops/{name}/info` | | info without waking the desktop |
 | `DELETE /api/desktops/{name}` | | |
@@ -27,7 +27,12 @@ that the dashboard sets. Static assets (`/static/*`) are public. JSON in, JSON o
 | `POST /api/desktops/{name}/read` | `{path, max_chars?}` | `{text}`: any document as text (docx, xlsx, pptx, odt, pdf, epub, html, images by OCR, …) |
 | `POST /api/desktops/{name}/convert` | `{path, to, outdir?}` | `{path}` of the converted file (pdf, docx, xlsx, csv, pptx, png, md, …) |
 | `POST /api/desktops/{name}/run` | `{command, timeout?, background?}` | `{code, stdout, stderr, timed_out}` |
-| `POST /api/desktops/{name}/clipboard` | `{text?}` | set, or `{text}` |
+| `POST /api/desktops/{name}/clipboard` | `{text?}` | set, or `{text}` (all of it) |
+| `GET /api/desktops/{name}/files` | `?path=~/Downloads&hidden=1` | `{path, shown, home, entries: [{name, dir, size, modified}], total}`: folders first |
+| `GET /api/desktops/{name}/download` | `?path=~/Downloads/report.pdf` | the file as a download; a folder comes as a `.zip` |
+| `POST /api/desktops/{name}/upload` | `?path=FOLDER&name=FILE`, the file as the body | `{path, name, size}` (201). An existing name gets " (1)", as browsers do. Up to 2 GB (`MINION_UPLOAD_MAX_MB`) |
+| `POST /api/desktops/{name}/login` | `{name, site?}` | save the desktop as a sign-in that new desktops start from (201) |
+| `GET /api/logins` · `DELETE /api/logins/{name}` | | the saved sign-ins: `[{name, profile, site, created}]` |
 | `POST /api/desktops/{name}/freeze` · `thaw` · `stop` · `start` | | `{ok, state}` |
 | `POST /api/desktops/{name}/snapshot` | `{tag?}` | `{tag}` |
 | `POST /api/desktops/{name}/restore` | `{tag}` | |
@@ -35,7 +40,7 @@ that the dashboard sets. Static assets (`/static/*`) are public. JSON in, JSON o
 | `GET /api/desktops/{name}/replay` | `?format=gif` | HTML timeline or GIF |
 | `GET /api/desktops/{name}/frame` | `?since=KEY&wait=MS&max_width=` | JPEG, or `204` if unchanged (long poll; header `X-Frame-Key`) |
 | `POST /api/desktops/{name}/input` | `{type: move\|down\|up\|click\|scroll\|key\|type, ...}` | raw human input (used by the live view) |
-| `GET/POST/DELETE /api/desktops/{name}/handoff` | POST `{message}` to request, POST `{note}` to finish | the pending hand-off |
+| `GET/POST/DELETE /api/desktops/{name}/handoff` | POST `{message}` to request, POST `{note}` to finish | the pending hand-off. Files the person uploads meanwhile are added to the note |
 
 Pages: `/` is the dashboard and `/view/{name}` is the live view.
 
@@ -120,5 +125,5 @@ curl -s "$U" "${H[@]}" -H "Mcp-Session-Id: $S" \
 # data: {"jsonrpc":"2.0","id":3,"result":{"content":[{"type":"text","text":"Desktops:\n- …"}],"isError":false}}
 ```
 
-In `minion share`, `files` `upload`/`download` are off unless you pass `--files`, and waits inside a tool
-call (desktop creation, hand-offs) stop at 45 s so that chat apps get an answer before they give up.
+In `minion share`, `files` `upload`/`download` and saved sign-ins are off unless you pass `--files`, and waits
+inside a tool call (desktop creation, hand-offs) stop at 45 s so that chat apps get an answer before they give up.

@@ -50,19 +50,21 @@ Minion gives you real Linux computers (isolated desktops with GUI apps; any prog
 open() launches apps, URLs and files; any app by name ("gimp", "vscode", "chrome") is installed the first time,
 and web apps ("figma", "gmail") open in the browser. files() moves files, and reads any document as text (docx,
 xlsx, pptx, pdf, ...) or converts it (files(action="convert", to="pdf")). view() gives a human a live link or
-hands off (logins, CAPTCHAs) until they press Done.
+hands off (logins, CAPTCHAs) until they press Done; desktop(action="logins") lists sign-ins they saved, which
+desktop(action="create", login=NAME) starts signed in to.
 """
 
 COMPACT_INSTRUCTIONS = """\
 Minion gives you real Linux computers (isolated desktops with GUI apps; any program can be installed).
 Use the `computer` tool, one command per call:
-  create [office|browser|dev|research|data|windows|base] [--name NAME] [--count N]
+  create [office|browser|dev|research|data|windows|base] [--name NAME] [--count N] [--login NAME]
   see [--changes] [--full] [--ocr] [--lang=heb]  -> the screen as text; act on the @ids it lists
   click|dclick|rclick TARGET · type TEXT · key KEYS · fill TARGET TEXT · select TARGET OPTION · scroll up|down [N]
   menu File > Save As · path FILE [--overwrite] (in a file dialog) · see --menus (all menu commands)
   wait-for TEXT · scroll-to TEXT (on a long page) · close [WINDOW] · copy TARGET (its text to the clipboard)
   open APP|URL|FILE · run SHELL · script PYTHON · screenshot [--marks] [--low]
   read FILE (any document as text) · convert FILE FORMAT · list · use NAME · remove NAME · fork · view [MESSAGE]
+  logins (sign-ins the human saved: create --login NAME starts signed in)
 TARGET is @12 (from see), exact visible text ("Save"), button:Save, or x,y. open installs apps it doesn't
 have (open gimp). Prefer see to screenshots, and see --changes after acting. For loops, use script.
 """
@@ -89,7 +91,8 @@ TOOLS: list[dict] = [
             "name, size, count for several at once), list, profiles, remove, freeze (0% CPU; any later call "
             "wakes it), thaw, fork (clone disk state into a new desktop to try something risky), snapshot, "
             "restore, replay (HTML timeline of everything done), macro (the actions so far as a Python script that "
-            "replays them with the script tool, no model needed). Profiles: browser (Firefox, blocks ads and "
+            "replays them with the script tool, no model needed), logins (sign-ins the human saved: create with "
+            "login=NAME starts signed in). Profiles: browser (Firefox, blocks ads and "
             "cookie banners), office (LibreOffice + Firefox), dev (git, Python, Node.js, Chromium, IDE), "
             "research (Firefox + PDF/notes tools), data (office + pandas/matplotlib), windows (Windows .exe/.msi "
             "programs via Wine, x86-64 hosts), base (minimal)."
@@ -112,6 +115,7 @@ TOOLS: list[dict] = [
                         "replay",
                         "macro",
                         "info",
+                        "logins",
                     ],
                 },
                 "profile": {"type": "string", "description": "Profile for create (default: browser)."},
@@ -119,6 +123,7 @@ TOOLS: list[dict] = [
                 "desktop": DESKTOP_PROP,
                 "size": {"type": "string", "description": "Screen for create: 1280x800 (default), 1024x768 cheaper."},
                 "count": {"type": "integer", "description": "create: how many desktops (parallel work). Default 1."},
+                "login": {"type": "string", "description": "create: start signed in, from a sign-in the human saved."},
                 "tag": {"type": "string", "description": "Snapshot tag for snapshot/restore."},
             },
             "required": ["action"],
@@ -405,7 +410,7 @@ COMPUTER_TOOL = {
     "name": "computer",
     "description": (
         "Use Linux computers through one command per call (CLI syntax). Commands: "
-        "create [profile] [--name NAME] [--count N] · "
+        "create [profile] [--name NAME] [--count N] [--login NAME] · logins · "
         "list · use NAME · remove [NAME] · see [--changes] [--ocr] [--lang=X] [--full] · screenshot [--marks] [--low] "
         "[--zoom x,y,w,h] · click TARGET · dclick TARGET · rclick TARGET · type TEXT · key KEYS · "
         "scroll up|down [N] · scroll-to TEXT · fill TARGET TEXT · select TARGET OPTION · drag FROM TO · "
@@ -881,6 +886,17 @@ class Toolkit:
             return [_text("Desktops:\n" + "\n".join(lines))]
         if action == "create":
             return self._create(args, progress)
+        if action == "logins":
+            saved = Desktop.logins(be)
+            if not saved:
+                return [
+                    _text(
+                        "No saved sign-ins. The human saves one with `minion login NAME URL` (signing in by hand), "
+                        "or with Save sign-in in the live view after a hand-off."
+                    )
+                ]
+            lines = [f"- {x.name} ({x.profile}{', ' + x.site if x.site else ''})" for x in saved]
+            return [_text("Saved sign-ins (create with login=NAME to start signed in):\n" + "\n".join(lines))]
         if action != "fork" and args.get("name"):
             if args.get("desktop") and args["desktop"] != args["name"]:
                 raise ToolError(
@@ -940,10 +956,12 @@ class Toolkit:
         raise ToolError(f"unknown action {action!r}")
 
     def _create(self, args: dict, progress) -> list:
-        profile = args.get("profile") or config.DEFAULT_PROFILE
+        login = args.get("login") or None
+        profile = args.get("profile") or (None if login else config.DEFAULT_PROFILE)  # a sign-in has its own
         count = max(1, min(int(args.get("count") or 1), 20))
         name = args.get("name")
-        key = f"{profile}:{name or ''}:{count}"
+        key = f"{profile}:{name or ''}:{count}:{login or ''}"
+        signed = {"login": login} if login else {}
         with self._lock:
             fut = self._pending.get(key)
             if fut is None:
@@ -965,6 +983,7 @@ class Toolkit:
                                     size=args.get("size"),
                                     backend=self.backend,
                                     progress=progress,
+                                    **signed,
                                 )
                             ]
                         else:
@@ -975,6 +994,7 @@ class Toolkit:
                                 size=args.get("size"),
                                 backend=self.backend,
                                 progress=progress,
+                                **signed,
                             )
                         fut.set_result(made)
                     except BaseException as e:
@@ -998,12 +1018,15 @@ class Toolkit:
         for d in made:
             self.desktops[d.name] = d
         self.current = made[0].name
-        prof = profiles.get(profile)
         hello = made[0].hello()
+        profile = profile or hello.get("profile") or made[0].info().profile
+        prof = profiles.get(profile)
         w, h = hello["screen"]
         names = ", ".join(d.name for d in made)
         lines = [
-            f"Ready: {names} ({profile}, {w}x{h}). Current desktop: {made[0].name}"
+            f"Ready: {names} ({profile}, {w}x{h}"
+            + (f", signed in from the saved sign-in {login!r}" if login else "")
+            + f"). Current desktop: {made[0].name}"
             + (" (pass desktop=NAME to use the others)." if len(made) > 1 else "."),
             f"Apps you can open: {', '.join(a.lower() for a in hello.get('apps', []))}"
             + ("" if hello.get("windows") else " (no window is open yet: open one first)"),
@@ -1226,10 +1249,14 @@ class Toolkit:
             return " ".join(ws)
 
         if verb in ("create", "up", "new"):
-            # create [profile] [--name NAME | NAME] [--count N | -c N]; "-n X" is a count if X is a number
-            count, name, rest_words, it = 1, None, [], iter(words)
+            # create [profile] [--name NAME | NAME] [--count N | -c N] [--login NAME]; "-n X" is a count if X is a number
+            count, name, login, rest_words, it = 1, None, None, [], iter(words)
             for w in it:
-                if w in ("--count", "-c"):
+                if w in ("--login", "-l"):
+                    login = next(it, "") or None
+                elif w.startswith("--login="):
+                    login = w.split("=", 1)[1] or None
+                elif w in ("--count", "-c"):
                     count = int(next(it, "1"))
                 elif w.startswith("--count="):
                     count = int(w.split("=", 1)[1])
@@ -1242,7 +1269,9 @@ class Toolkit:
                 elif w.startswith("--name="):
                     name = w.split("=", 1)[1] or None
                 elif w.startswith("-"):
-                    raise ToolError(f"unknown option {w!r}: use create [profile] [--name NAME] [--count N]")
+                    raise ToolError(
+                        f"unknown option {w!r}: use create [profile] [--name NAME] [--count N] [--login NAME]"
+                    )
                 else:
                     rest_words.append(w)
             if len(rest_words) > 2:
@@ -1252,7 +1281,11 @@ class Toolkit:
             args_ = {"action": "create", "profile": rest_words[0] if rest_words else None, "count": count}
             if name:
                 args_["name"] = name
+            if login:
+                args_["login"] = login
             return self.t_desktop(args_, progress)
+        if verb == "logins":
+            return self.t_desktop({"action": "logins"}, progress)
         if verb in ("list", "ls"):
             return self.t_desktop({"action": "list"}, progress)
         if verb == "profiles":
@@ -1443,6 +1476,7 @@ _COMPACT_FLAGS = {
     "wait-for": {"--timeout", "--gone"},
     "wait_for": {"--timeout", "--gone"},
     "list": set(),
+    "logins": set(),
     "ls": set(),
     "windows": set(),
 }

@@ -11,6 +11,29 @@ const toast = (text, ms = 3000) => {
 };
 const post = (path, body) => fetch(BASE + path, { method: "POST", credentials: "same-origin",
   headers: { "Content-Type": "application/json", "X-Minion": "1" }, body: JSON.stringify(body || {}) });
+async function call(path, body) {  // POST that throws the server's error message
+  const r = await post(path, body);
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(data.error || r.statusText);
+  return data;
+}
+const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+const fmtSize = (n) => n == null ? "" : n < 1024 ? `${n} B` : n < 1 << 20 ? `${(n / 1024).toFixed(0)} KB`
+  : n < 1 << 30 ? `${(n / (1 << 20)).toFixed(1)} MB` : `${(n / (1 << 30)).toFixed(1)} GB`;
+const fmtTime = (t) => { const d = new Date(t * 1000), now = new Date();
+  return d.toDateString() === now.toDateString() ? d.toTimeString().slice(0, 5) : d.toISOString().slice(0, 10); };
+
+// A notice with buttons, bottom right: [[label, fn], ...]
+function notice(text, actions = [], ms = 12000) {
+  const box = $("#notice"); $("#notice-text").textContent = text;
+  const acts = $("#notice-actions"); acts.innerHTML = "";
+  for (const [label, fn] of actions) {
+    const b = document.createElement("button"); b.className = "btn small"; b.textContent = label;
+    b.onclick = () => { box.classList.remove("show"); fn(); }; acts.appendChild(b);
+  }
+  box.classList.add("show");
+  clearTimeout(notice._t); if (ms) notice._t = setTimeout(() => box.classList.remove("show"), ms);
+}
 
 function setStatus(kind, text) {
   $("#dot").className = "dot " + kind;
@@ -122,7 +145,9 @@ catcher.addEventListener("keydown", (e) => {
   if (e.key.length === 1 && !mods.length) { typeBuf += e.key; clearTimeout(typeTimer); typeTimer = setTimeout(flushType, 40); return; }
   if (e.shiftKey && (k.length > 1 || mods.length)) mods.push("shift");
   flushType();
-  send({ type: "key", keys: [...mods, k.length === 1 ? k.toLowerCase() : k].join("+") });
+  const keys = [...mods, k.length === 1 ? k.toLowerCase() : k].join("+");
+  send({ type: "key", keys });
+  if (/^ctrl\+(shift\+)?[cx]$/.test(keys)) setTimeout(() => copyOut(true), 300);  // copied in the desktop: here too
 });
 catcher.addEventListener("paste", (e) => {
   if (!control) return;
@@ -138,7 +163,10 @@ function setControl(on) {
   $("#control").textContent = on ? "✋ Release control" : "🖐 Take control";
   $("#hint").textContent = on ? "You are in control · press Esc twice to release" : "Watching · click “Take control” to use mouse and keyboard";
   catcher.style.cursor = on ? "crosshair" : "default";
-  if (on) catcher.focus();
+  if (on) {
+    catcher.focus();
+    call("/clipboard", {}).then((r) => (lastCopied = r.text)).catch(() => {});  // copy out only what changes
+  }
 }
 $("#control").onclick = () => setControl(!control);
 $("#paste").onclick = async () => {
@@ -149,6 +177,177 @@ $("#paste").onclick = async () => {
 };
 $("#shot").onclick = () => window.open(`${BASE}/screenshot?download=1`, "_blank");
 $("#replay").onclick = () => window.open(`${BASE}/replay`, "_blank");
+document.querySelectorAll("#more .menu-items button").forEach((b) => b.addEventListener("click", () => ($("#more").open = false)));
+document.addEventListener("click", (e) => { if (!$("#more").contains(e.target)) $("#more").open = false; });
+
+// -- clipboard out, keys, open ----------------------------------------------------
+let lastCopied = null;
+async function copyOut(auto = false) {
+  try {
+    const { text } = await call("/clipboard", {});
+    if (auto && (!text || text === lastCopied)) return;
+    lastCopied = text;
+    if (navigator.clipboard && window.isSecureContext) await navigator.clipboard.writeText(text);
+    else {  // plain http on another host: the old way
+      const ta = document.createElement("textarea"); ta.value = text; document.body.appendChild(ta);
+      ta.select(); document.execCommand("copy"); ta.remove();
+    }
+    toast(text ? `Copied ${text.length} characters from the desktop` : "The desktop's clipboard is empty");
+  } catch (e) { if (!auto) toast("Couldn't copy: " + e.message); }
+}
+$("#copy").onclick = () => copyOut(false);
+$("#keys").onchange = (e) => {
+  const keys = e.target.value; e.target.selectedIndex = 0;
+  if (keys) { send({ type: "key", keys }); toast(`Pressed ${keys}`, 1500); }
+  if (control) catcher.focus();
+};
+$("#open-form").onsubmit = async (e) => {
+  e.preventDefault();
+  const target = $("#open").value.trim(); if (!target) return;
+  toast(`Opening ${target}…`, 20000);
+  try {
+    const r = await call("/open", { target });
+    toast(r.window ? `Opened “${r.window.title || target}”` : `Opened ${target}`); $("#open").value = "";
+  } catch (err) { toast(err.message, 8000); }
+};
+$("#login").onclick = async () => {
+  const name = (prompt("Save this desktop's sign-ins as (e.g. github, work-mail):") || "").trim().toLowerCase();
+  if (!name) return;
+  toast("Saving… the desktop pauses for a moment", 120000);
+  try {
+    const r = await call("/login", { name });
+    notice(`Saved sign-in “${r.name}”. New desktops start signed in like this one: minion up --login ${r.name}`, [], 20000);
+    toast("Saved", 1500);
+  } catch (err) { toast(err.message, 8000); }
+};
+
+// -- files ----------------------------------------------------------------------
+let folder = "~/Downloads", uploadMax = null;
+const filesBox = $("#files");
+const drops = () => document.querySelectorAll(".drop-target").forEach((el) => (el.textContent = folder));
+async function listFolder(path) {
+  try {
+    const r = await fetch(`${BASE}/files?path=${encodeURIComponent(path)}`, { credentials: "same-origin" });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || r.statusText);
+    folder = data.shown; uploadMax = data.upload_max ?? uploadMax; drops();
+    $("#files-path").textContent = data.shown;
+    const parent = data.path === "/" ? null : (data.shown === "~" ? data.path : data.shown).replace(/\/[^/]+$/, "") || "/";
+    const rows = [];
+    if (parent && parent !== data.shown) rows.push(`<li class="dir" data-path="${esc(parent)}"><span class="n">⬆ ..</span></li>`);
+    for (const e of data.entries) {
+      const p = (data.shown === "/" ? "" : data.shown) + "/" + e.name;
+      rows.push(e.dir
+        ? `<li class="dir" data-path="${esc(p)}"><span class="n" title="${esc(e.name)}">📁 ${esc(e.name)}</span>
+           <span class="acts"><a class="btn small" href="${BASE}/download?path=${encodeURIComponent(p)}" title="Download as .zip">⬇</a></span></li>`
+        : `<li data-file="${esc(p)}"><span class="n" title="Download ${esc(e.name)}">📄 ${esc(e.name)}</span>
+           <span class="m">${fmtSize(e.size)} · ${fmtTime(e.modified)}</span>
+           <span class="acts"><a class="btn small" href="${BASE}/download?path=${encodeURIComponent(p)}" title="Download">⬇</a>
+           <button class="btn small open" title="Open it in the desktop">Open</button></span></li>`);
+    }
+    if (!data.entries.length) rows.push(`<li class="empty">Empty folder</li>`);
+    if (data.total > data.entries.length) rows.push(`<li class="empty">… and ${data.total - data.entries.length} more</li>`);
+    $("#files-list").innerHTML = rows.join("");
+  } catch (e) { toast(e.message, 6000); }
+}
+$("#files-list").onclick = (e) => {
+  if (e.target.closest("a")) return;  // a download link
+  const li = e.target.closest("li"); if (!li) return;
+  if (li.dataset.path) return listFolder(li.dataset.path);
+  if (!li.dataset.file) return;
+  if (e.target.closest(".open")) {
+    call("/open", { target: li.dataset.file }).then(() => toast("Opened in the desktop")).catch((err) => toast(err.message));
+  } else location.href = `${BASE}/download?path=${encodeURIComponent(li.dataset.file)}`;
+};
+document.querySelectorAll(".files-places button").forEach((b) => (b.onclick = () => listFolder(b.dataset.path)));
+function toggleFiles(show) {
+  filesBox.hidden = !(show ?? filesBox.hidden);
+  if (!filesBox.hidden) listFolder(folder);
+  fit();
+}
+$("#files-btn").onclick = () => toggleFiles();
+$("#files-close").onclick = () => toggleFiles(false);
+$("#files-up").onclick = () => $("#files-input").click();
+$("#files-input").onchange = (e) => { uploadAll([...e.target.files]); e.target.value = ""; };
+
+function uploadOne(file, into) {
+  return new Promise((resolve, reject) => {
+    if (uploadMax && file.size > uploadMax)  // (the server would close the connection without reading it)
+      return reject(new Error(`it's over ${Math.round(uploadMax / (1 << 20))} MB (MINION_UPLOAD_MAX_MB on the server raises the limit)`));
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", `${BASE}/upload?path=${encodeURIComponent(into)}&name=${encodeURIComponent(file.name)}`);
+    xhr.setRequestHeader("X-Minion", "1");
+    xhr.setRequestHeader("Content-Type", "application/octet-stream");
+    xhr.upload.onprogress = (e) => e.lengthComputable && toast(`Uploading ${file.name}… ${Math.round((e.loaded / e.total) * 100)}%`, 60000);
+    xhr.onload = () => {
+      let data = {}; try { data = JSON.parse(xhr.responseText); } catch (_) {}
+      xhr.status < 300 ? resolve(data) : reject(new Error(data.error || `upload failed (${xhr.status})`));
+    };
+    xhr.onerror = () => reject(new Error("the upload failed (connection lost)"));
+    xhr.send(file);
+  });
+}
+async function uploadAll(files) {
+  if (!files.length) return;
+  if (uploadMax == null)  // dropped before the Files panel was opened: learn the size limit first
+    try { uploadMax = (await fetch(`${BASE}/files?path=${encodeURIComponent(folder)}`, { credentials: "same-origin" }).then((r) => r.json())).upload_max ?? 0; } catch (_) {}
+  const done = [];
+  for (const f of files) {
+    try { done.push((await uploadOne(f, folder)).path); }
+    catch (e) { toast(`${f.name}: ${e.message}`, 8000); }
+  }
+  if (!done.length) return;
+  toast(done.length === 1 ? `Uploaded → ${done[0]}` : `Uploaded ${done.length} files → ${folder}`, 4000);
+  if (!filesBox.hidden) listFolder(folder);
+  const actions = done.length === 1 ? [["Open in the desktop", () => call("/open", { target: done[0] }).catch((e) => toast(e.message))]] : [];
+  try {  // a file dialog waiting for it (a site's Upload button): offer to choose it there
+    const wins = await fetch(`${BASE}/windows`, { credentials: "same-origin" }).then((r) => r.json());
+    const top = (wins || []).find((w) => w.focused);
+    if (done.length === 1 && top && /upload|open|choose|select|insert|attach|import/i.test(top.title || ""))
+      actions.unshift([`Choose it in “${top.title}”`, () => call("/act", { actions: [{ action: "path", path: done[0] }] })
+        .then((r) => toast(r.ok === false ? r.summary || "Couldn't choose it" : "Chosen")).catch((e) => toast(e.message))]);
+  } catch (_) {}
+  if (actions.length) notice(done.length === 1 ? `${done[0]} is in the desktop` : `${done.length} files are in ${folder}`, actions);
+}
+// Drop files anywhere on the page: they go to the folder the Files panel shows (~/Downloads at first)
+let dragDepth = 0;
+const hasFiles = (e) => [...(e.dataTransfer?.types || [])].includes("Files");
+window.addEventListener("dragenter", (e) => { if (!hasFiles(e)) return; dragDepth++; drops(); $("#stage").classList.add("dropping"); filesBox.classList.add("dropping"); });
+window.addEventListener("dragleave", () => { if (--dragDepth <= 0) { dragDepth = 0; $("#stage").classList.remove("dropping"); filesBox.classList.remove("dropping"); } });
+window.addEventListener("dragover", (e) => { if (hasFiles(e)) e.preventDefault(); });
+window.addEventListener("drop", (e) => {
+  if (!hasFiles(e)) return;
+  e.preventDefault(); dragDepth = 0;
+  $("#stage").classList.remove("dropping"); filesBox.classList.remove("dropping");
+  uploadAll([...e.dataTransfer.files]);
+});
+
+// Downloads finished in the desktop: offer them here
+let seenDownloads = null;
+async function watchDownloads() {
+  while (alive) {
+    await sleep(5000);
+    if (state !== "running" || document.hidden) continue;
+    try {
+      const r = await fetch(`${BASE}/files?path=${encodeURIComponent("~/Downloads")}`, { credentials: "same-origin" });
+      if (!r.ok) continue;
+      const data = await r.json();
+      const files = data.entries.filter((e) => !e.dir && !/\.(part|crdownload|tmp|download)$/i.test(e.name));
+      const now = new Map(files.map((e) => [e.name, `${e.size}:${e.modified}`]));
+      if (seenDownloads) {
+        const fresh = files.filter((e) => !seenDownloads.has(e.name) && Date.now() / 1000 - e.modified < 600);
+        if (fresh.length) {
+          const p = `${data.shown}/${fresh[0].name}`;
+          notice(`Downloaded in the desktop: ${fresh[0].name}${fresh.length > 1 ? ` (+${fresh.length - 1} more)` : ""}`,
+            [["Get it", () => (location.href = `${BASE}/download?path=${encodeURIComponent(p)}`)],
+             ["Show", () => { folder = data.shown; toggleFiles(true); }]]);
+          if (!filesBox.hidden && folder === data.shown) listFolder(folder);
+        }
+      }
+      seenDownloads = now;
+    } catch (_) {}
+  }
+}
 $("#freeze").onclick = async () => {
   const op = state === "paused" ? "thaw" : "freeze";
   const r = await post("/" + op);
@@ -188,4 +387,5 @@ $("#handoff-done").onclick = async () => {
 };
 
 $("#title").textContent = NAME;
-frames(); poll();
+drops();
+frames(); poll(); watchDownloads();

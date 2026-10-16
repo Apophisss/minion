@@ -34,6 +34,8 @@ def exercise(desk: Desktop) -> None:
 
     desk.write_text("~/minion-test.txt", "héllo")
     assert desk.read_text("~/minion-test.txt") == "héllo"
+    listing = desk.ls("~")  # (the live view's Files panel)
+    assert "minion-test.txt" in [e["name"] for e in listing["entries"]] and listing["home"]
 
     bad = desk.act({"click": "@9999"}, check=False)
     assert not bad.ok and "unknown" in bad.summary
@@ -83,5 +85,16 @@ def test_docker_backend_end_to_end():
             assert fork.read_text("~/minion-test.txt") == "héllo"
         finally:
             fork.remove()
+        saved = desk.save_login("itest-login", site="itest")  # a sign-in: new desktops start as this one is
+        try:
+            assert saved.profile == profile and "itest-login" in [x.name for x in Desktop.logins("docker")]
+            signed = Desktop.create(login="itest-login", name="itest-docker-signed", backend="docker")
+            try:
+                assert signed.info().profile == profile and signed.read_text("~/minion-test.txt") == "héllo"
+            finally:
+                signed.remove()
+        finally:
+            Desktop.remove_login("itest-login", "docker")
+        assert "itest-login" not in [x.name for x in Desktop.logins("docker")]
     finally:
         desk.remove()

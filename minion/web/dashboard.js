@@ -18,13 +18,31 @@ const fmtMem = (b) => (b == null ? "" : b > 1 << 30 ? (b / (1 << 30)).toFixed(1)
 const thumbs = new Map();
 let profiles = [];
 
+let logins = [];
 async function loadProfiles() {
   profiles = await api("/api/profiles");
   const sel = $("#profile");
   sel.innerHTML = profiles.map((p) => `<option value="${p.name}">${p.icon || "•"} ${p.title} (${p.name})</option>`).join("");
   sel.value = profiles.some((p) => p.name === "browser") ? "browser" : profiles[0].name;
-  const desc = () => { const p = profiles.find((x) => x.name === sel.value); $("#profile-desc").textContent = p ? p.description : ""; };
+  const desc = () => {
+    const l = logins.find((x) => x.name === $("#login").value);
+    const p = profiles.find((x) => x.name === sel.value);
+    $("#profile-desc").textContent = l ? `Starts signed in as the desktop saved as “${l.name}”${l.site ? ` (${l.site})` : ""}.` : p ? p.description : "";
+  };
   sel.onchange = desc; desc();
+  try { logins = await api("/api/logins"); } catch (_) { logins = []; }  // (off on a shared server)
+  const ls = $("#login");
+  if (logins.length) {
+    const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+    ls.innerHTML = `<option value="">Not signed in</option>` +
+      logins.map((l) => `<option value="${esc(l.name)}">Signed in: ${esc(l.name)}${l.site ? ` (${esc(l.site)})` : ""}</option>`).join("");
+    ls.hidden = false;
+  }
+  ls.onchange = () => {
+    const l = logins.find((x) => x.name === ls.value);
+    if (l && l.profile) sel.value = l.profile;
+    sel.disabled = !!l; desc();
+  };
 }
 
 function card(d) {
@@ -110,7 +128,9 @@ $("#create").onclick = async () => {
   const btn = $("#create"); btn.disabled = true; btn.textContent = "Creating…";
   toast("Creating desktop… the first one of a profile may download its image.", 60000);
   try {
-    const d = await api("/api/desktops", { method: "POST", body: JSON.stringify({ profile: $("#profile").value, size: $("#size").value }) });
+    const login = $("#login").value || undefined;
+    const d = await api("/api/desktops", { method: "POST",
+      body: JSON.stringify({ profile: login ? undefined : $("#profile").value, size: $("#size").value, login }) });
     toast(`${d.name} is ready`); refresh();
   } catch (e) { toast(e.message, 8000); }
   btn.disabled = false; btn.textContent = "Create";

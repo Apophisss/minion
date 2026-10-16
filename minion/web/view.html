@@ -13,24 +13,68 @@
     <span class="name" id="title"></span>
     <span class="status"><span class="dot" id="dot"></span><span id="state">connecting…</span></span>
     <div class="spacer"></div>
-    <button class="btn" id="control" title="Use your mouse and keyboard on the desktop (Esc ×2 to release)">🖐 Take control</button>
+    <form id="open-form" class="open-box hide-sm" autocomplete="off">
+      <input id="open" placeholder="Open a URL, app or file…" title="Opens in the desktop: github.com, writer, ~/Downloads/a.pdf">
+    </form>
+    <select class="btn hide-sm" id="keys" title="Keys your browser would keep for itself">
+      <option value="">Keys…</option>
+      <option value="ctrl+w">Ctrl+W · close tab</option>
+      <option value="ctrl+t">Ctrl+T · new tab</option>
+      <option value="ctrl+shift+t">Ctrl+Shift+T · reopen tab</option>
+      <option value="ctrl+Tab">Ctrl+Tab · next tab</option>
+      <option value="ctrl+n">Ctrl+N · new window</option>
+      <option value="ctrl+l">Ctrl+L · address bar</option>
+      <option value="F5">F5 · reload</option>
+      <option value="F11">F11 · full screen</option>
+      <option value="alt+Tab">Alt+Tab · next window</option>
+      <option value="alt+F4">Alt+F4 · close window</option>
+      <option value="Escape">Esc</option>
+    </select>
+    <button class="btn" id="files-btn" title="Files in the desktop: download, upload (or drop files on the screen)">Files</button>
+    <button class="btn hide-sm" id="copy" title="Put the desktop's clipboard on this computer's clipboard">Copy</button>
     <button class="btn hide-sm" id="paste" title="Type your clipboard text into the desktop">Paste</button>
-    <button class="btn hide-sm" id="shot" title="Download a screenshot">Screenshot</button>
-    <button class="btn hide-sm" id="replay" title="Flight recorder: everything the agent did">Replay</button>
+    <details class="menu" id="more">
+      <summary class="btn">More</summary>
+      <div class="menu-items">
+        <button id="login" title="New desktops can start signed in as this one is now">Save sign-in…</button>
+        <button id="shot">Screenshot</button>
+        <button id="replay" title="Flight recorder: everything the agent did">Replay</button>
+      </div>
+    </details>
     <button class="btn" id="freeze">Freeze</button>
+    <button class="btn" id="control" title="Use your mouse and keyboard on the desktop (Esc ×2 to release)">🖐 Take control</button>
   </header>
   <div class="handoff" id="handoff">
     <span>🙋 <b>The agent needs you:</b> <span id="handoff-msg"></span></span>
     <input id="handoff-note" placeholder="Optional note for the agent (e.g. 'signed in')">
     <button class="btn primary" id="handoff-done">Done — hand back</button>
   </div>
-  <div class="stage">
-    <div class="screen" id="screen">
-      <img id="img" alt="desktop" draggable="false">
-      <div class="catcher" id="catcher" tabindex="0"></div>
+  <div class="main">
+    <div class="stage" id="stage">
+      <div class="screen" id="screen">
+        <img id="img" alt="desktop" draggable="false">
+        <div class="catcher" id="catcher" tabindex="0"></div>
+      </div>
+      <div class="hint" id="hint">Watching · click “Take control” to use mouse and keyboard</div>
+      <div class="drop" id="drop">Drop to upload to <b class="drop-target"></b></div>
     </div>
-    <div class="hint" id="hint">Watching · click “Take control” to use mouse and keyboard</div>
+    <aside class="files" id="files" hidden>
+      <div class="files-head">
+        <b>Files</b><span class="spacer"></span>
+        <button class="btn small" id="files-up" title="Upload files from this computer">Upload</button>
+        <input type="file" id="files-input" multiple hidden>
+        <button class="btn small" id="files-close" title="Close">✕</button>
+      </div>
+      <div class="files-places">
+        <button data-path="~">Home</button><button data-path="~/Desktop">Desktop</button><button
+          data-path="~/Documents">Documents</button><button data-path="~/Downloads">Downloads</button>
+      </div>
+      <div class="files-path" id="files-path"></div>
+      <ul class="files-list" id="files-list"></ul>
+      <div class="files-foot">Drop files here or on the screen to upload them to <b class="drop-target"></b></div>
+    </aside>
   </div>
+  <div class="notice" id="notice"><span id="notice-text"></span><span class="notice-actions" id="notice-actions"></span></div>
   <div class="toast" id="toast"></div>
   <script src="/static/view.js"></script>
 </body>

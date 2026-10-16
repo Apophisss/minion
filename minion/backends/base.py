@@ -84,6 +84,33 @@ class Snapshot:
         return asdict(self)
 
 
+LOGIN_RE = re.compile(r"^[a-z0-9][a-z0-9_.-]{0,60}$")
+
+
+def check_login(name: str) -> str:
+    if not LOGIN_RE.match(name or ""):
+        raise MinionError(
+            f"invalid sign-in name {name!r}: use lowercase letters, digits, '.', '-' and '_' (e.g. github, work-mail)"
+        )
+    return name
+
+
+@dataclass
+class Login:
+    """A saved sign-in: a snapshot of a desktop someone signed in on, which new desktops start from
+    (`minion up --login NAME`), signed in as it was."""
+
+    name: str
+    profile: str
+    ref: str
+    site: str = ""  # what was signed in to, as the person saving it said (a URL or a note)
+    created: str = ""
+    size: str = ""
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+
 class Backend(ABC):
     name = "base"
 
@@ -157,3 +184,17 @@ class Backend(ABC):
     def prepare(self, profile: Profile, progress=None, pull: str | None = None) -> str:
         """Make sure everything needed to create `profile` desktops is ready (images...)."""
         return ""
+
+    # -- saved sign-ins (optional: backends that can start a desktop from a snapshot have them) --------
+    supports_logins = False
+
+    def save_login(self, name: str, login: str, site: str = "") -> Login:
+        raise MinionError(f"saved sign-ins need the Docker backend (this is the {self.name} backend)")
+
+    def logins(self) -> list[Login]:
+        return []
+
+    def delete_login(self, login: str) -> None:
+        from ..errors import NotFound
+
+        raise NotFound(f"no saved sign-in {login!r}")

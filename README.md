@@ -97,8 +97,9 @@ brief.docx."* Every way to install is in [docs/install.md](docs/install.md).
   TypeScript SDKs, and native adapters for **Claude, OpenAI and Gemini computer use**.
 - **⚡ Parallel by design.** `create count=8` starts a desktop per worker, `fork` clones one before a risky step,
   and sessions keep agents apart.
-- **🙋 Humans in the loop.** A live view in the browser offers one-click *take control*. Agents can **hand off**
-  ("please sign in") and wait for *Done*.
+- **🙋 Humans in the loop.** A live view in the browser offers one-click *take control*, moves files both ways
+  (drop them on the screen) and shares the clipboard. Agents can **hand off** ("please sign in") and wait for
+  *Done*, and a sign-in saved once by hand starts new desktops signed in.
 - **🎞️ Teach once, replay forever.** Every action is recorded. Export an HTML timeline or GIF, or turn the session
   into a **Python script that replays it with no model at all**.
 - **📦 Zero dependencies.** The host side is pure Python standard library. Desktops run in Docker or Podman
@@ -320,8 +321,14 @@ These were measured on a 2-vCPU VM. Reproduce them with `python scripts/bench.py
 
 `minion view` (or the `view` tool) opens a live view of any desktop in your browser. Click **Take control** to use
 your own mouse and keyboard. An agent can call `view(message="Please sign in to your Google account")`: you get a
-banner, sign in, press **Done**, and the agent continues. A good pattern is to log in once, `snapshot`, then `fork`
-the logged-in desktop for each task. `minion serve` adds a dashboard with live thumbnails:
+banner, sign in, press **Done**, and the agent continues. **Files** downloads from the desktop and uploads to it
+(or drop files on the screen), **Copy** brings the desktop's clipboard to yours, and **Keys** sends the ones your
+browser keeps (Ctrl+W, Alt+Tab).
+
+Sign in once and start desktops signed in: `minion login github https://github.com/login` opens a desktop there
+in the live view, you sign in and press **Done**, and from then on `minion up --login github` (or
+`desktop(action="create", login="github")`) starts desktops already signed in. The sign-in stays in your
+computer's Docker ([details](docs/cli.md#sign-in-once)). `minion serve` adds a dashboard with live thumbnails:
 
 <p align="center"><img src="docs/assets/dashboard.png" alt="The Minion dashboard with live desktop thumbnails" width="860"></p>
 

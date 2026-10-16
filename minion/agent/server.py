@@ -2432,7 +2432,33 @@ class Agent:
             out = subprocess.run(["xclip", "-selection", "clipboard", "-o"], capture_output=True, timeout=3)
         except subprocess.TimeoutExpired:
             return {"text": ""}
-        return {"text": _trim(out.stdout.decode("utf-8", "replace")) if out.returncode == 0 else ""}
+        limit = max(1000, min(int(p.get("limit") or MAX_OUTPUT), 50_000_000))  # the live view copies it whole
+        return {"text": _trim(out.stdout.decode("utf-8", "replace"), limit) if out.returncode == 0 else ""}
+
+    # -- files ---------------------------------------------------------
+    def m_ls(self, p: dict) -> dict:
+        """A folder's entries, folders first, then files by name (the live view's Files panel)."""
+        shown = str(p.get("path") or "~")
+        path = os.path.realpath(os.path.expanduser(shown))
+        if not os.path.isdir(path):
+            raise RpcError(f"no such folder in the desktop: {shown}")
+        entries = []
+        try:
+            with os.scandir(path) as it:
+                for e in it:
+                    if e.name.startswith(".") and not p.get("hidden"):
+                        continue
+                    try:
+                        folder, st = e.is_dir(), e.stat()
+                    except OSError:  # a broken link
+                        continue
+                    size = None if folder else st.st_size
+                    entries.append({"name": e.name, "dir": folder, "size": size, "modified": round(st.st_mtime, 3)})
+        except PermissionError:
+            raise RpcError(f"{shown} can't be read here (permission denied)") from None
+        entries.sort(key=lambda x: (not x["dir"], x["name"].lower()))
+        limit = max(1, min(int(p.get("limit") or 1000), 10_000))
+        return {"path": path, "home": self.home, "entries": entries[:limit], "total": len(entries)}
 
     # -- live view -----------------------------------------------------
     def m_frame(self, p: dict) -> dict:

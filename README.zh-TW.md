@@ -24,7 +24,7 @@ Minion 讓 AI Agent 擁有一台屬於自己的電腦，而不是直接使用你
 - **🪙 為節省 token 而設計。** 用差異取代重新讀取（`see(changes=true)`：約 80 個 token，而不是約 900 個）；程式碼模式只要一次呼叫就能跑完 50 步的 GUI 迴圈；精簡模式把工具定義從約 3,300 個 token 縮減到 450 個。
 - **🪶 超輕量。** 每個桌面只是一個小容器，沒有 VNC，也沒有桌面環境。約 1.5 秒就緒，閒置時約使用 60 MB 記憶體，並會自動凍結（0% CPU），約 0.2 秒就能喚醒。
 - **🔌 支援所有 Agent。** MCP（本機或遠端）、適用於 OpenAI、Anthropic、Gemini 和本機模型的 function calling、HTTP、CLI 和 Agent Skill、Python 與 TypeScript SDK，以及 Claude、OpenAI、Gemini 的 computer use。
-- **🙋 人隨時可以介入。** 在瀏覽器的即時畫面中，一鍵就能接管；Agent 可以把登入這類操作交給你，等你按下 *Done* 再繼續。每個步驟都有紀錄，還能匯出成不需要模型就能重播的 Python 腳本。
+- **🙋 人隨時可以介入。** 在瀏覽器的即時畫面中，一鍵就能接管，也能雙向傳檔（直接拖到畫面上即可），剪貼簿也互通；Agent 可以把登入這類操作交給你，等你按下 *Done* 再繼續。手動登入一次並儲存（`minion login github https://github.com/login`），之後新建的桌面一啟動就已登入。每個步驟都有紀錄，還能匯出成不需要模型就能重播的 Python 腳本。
 - **📦 零相依性。** 主機端只使用 Python 標準函式庫。桌面在 Docker 或 Podman 中執行（macOS、Windows、Linux）。
 
 ## 快速開始
