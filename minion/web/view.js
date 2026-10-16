@@ -35,6 +35,8 @@ function notice(text, actions = [], ms = 12000) {
   clearTimeout(notice._t); if (ms) notice._t = setTimeout(() => box.classList.remove("show"), ms);
 }
 
+const coarse = window.matchMedia && matchMedia("(pointer: coarse)").matches;  // a phone or tablet
+
 function setStatus(kind, text) {
   $("#dot").className = "dot " + kind;
   $("#state").textContent = text;
@@ -87,17 +89,47 @@ const point = (e) => {
 const BUTTONS = ["left", "middle", "right"];
 let lastMove = 0, pendingMove = null, moveTimer = null;
 
+// A finger (phones, tablets): a tap clicks, a long press right-clicks, a swipe scrolls, decided when it lifts.
+// Two fingers pinch-zoom the page (touch-action: pinch-zoom), which cancels the first finger.
+const TOUCH = (e) => e.pointerType === "touch" || e.pointerType === "pen";
+let touch = null;
 catcher.addEventListener("pointerdown", (e) => {
   if (!control) return;
+  if (TOUCH(e)) {
+    if (!e.isPrimary) { if (touch) clearTimeout(touch.timer); touch = null; return; }
+    touch = { ...point(e), cx: e.clientX, cy: e.clientY, long: false };
+    touch.timer = setTimeout(() => {
+      if (!touch) return;
+      touch.long = true; send({ type: "click", button: "right", x: touch.x, y: touch.y });
+    }, 600);
+    return;
+  }
   e.preventDefault(); catcher.focus(); catcher.setPointerCapture(e.pointerId);
   flushMove(); send({ type: "down", button: BUTTONS[e.button] || "left", ...point(e) });
 });
 catcher.addEventListener("pointerup", (e) => {
   if (!control) return;
+  if (TOUCH(e)) {
+    const t = touch; touch = null;
+    if (!t) return;
+    clearTimeout(t.timer);
+    if (t.long) return;
+    const dx = e.clientX - t.cx, dy = e.clientY - t.cy;
+    if (Math.hypot(dx, dy) < 12) return void send({ type: "click", button: "left", x: t.x, y: t.y });
+    const vertical = Math.abs(dy) >= Math.abs(dx), d = vertical ? dy : dx;  // the finger drags the page along
+    const amount = Math.max(1, Math.min(15, Math.round(Math.abs(d) / 40)));
+    send({ type: "scroll", direction: vertical ? (d < 0 ? "down" : "up") : (d < 0 ? "right" : "left"), amount, x: t.x, y: t.y });
+    return;
+  }
   e.preventDefault(); flushMove(); send({ type: "up", button: BUTTONS[e.button] || "left", ...point(e) });
 });
+catcher.addEventListener("pointercancel", () => { if (touch) clearTimeout(touch.timer); touch = null; });
 catcher.addEventListener("pointermove", (e) => {
   if (!control) return;
+  if (TOUCH(e)) {
+    if (touch && Math.hypot(e.clientX - touch.cx, e.clientY - touch.cy) > 12) clearTimeout(touch.timer);
+    return;
+  }
   pendingMove = { type: "move", ...point(e) };
   const now = performance.now();
   if (now - lastMove > 50) flushMove(); else if (!moveTimer) moveTimer = setTimeout(flushMove, 50);
@@ -160,23 +192,55 @@ function setControl(on) {
   control = on;
   screenEl.classList.toggle("control", on);
   $("#control").classList.toggle("on", on);
-  $("#control").textContent = on ? "✋ Release control" : "🖐 Take control";
-  $("#hint").textContent = on ? "You are in control · press Esc twice to release" : "Watching · click “Take control” to use mouse and keyboard";
+  const narrow = window.matchMedia && matchMedia("(max-width: 720px)").matches;
+  $("#control").textContent = on ? (narrow ? "✋ Release" : "✋ Release control") : (narrow ? "🖐 Control" : "🖐 Take control");
+  $("#hint").textContent = on
+    ? (coarse ? "You are in control · tap to click, hold to right-click, swipe to scroll, ⌨ to type" : "You are in control · press Esc twice to release")
+    : "Watching · click “Take control” to use mouse and keyboard";
   catcher.style.cursor = on ? "crosshair" : "default";
   if (on) {
-    catcher.focus();
+    if (!coarse) catcher.focus();
     call("/clipboard", {}).then((r) => (lastCopied = r.text)).catch(() => {});  // copy out only what changes
   }
 }
 $("#control").onclick = () => setControl(!control);
-$("#paste").onclick = async () => {
+async function pasteIn() {
   try {
     const text = await navigator.clipboard.readText();
     if (text) { send({ type: "type", text }); toast(`Typed ${text.length} characters`); }
-  } catch (_) { toast("Clipboard access was blocked — take control and press Ctrl+V instead"); }
+  } catch (_) { toast("Clipboard access was blocked — take control and press Ctrl+V, or type it with ⌨"); }
+}
+$("#paste").onclick = pasteIn;
+
+// -- typing from a phone: its keyboard only opens for a real text field --------------------------
+const typebar = $("#typebar"), typein = $("#typein");
+function toggleTyping(show, focus = true) {
+  typebar.hidden = !(show ?? typebar.hidden);
+  if (!typebar.hidden) { if (!control) setControl(true); if (focus) typein.focus(); }
+  $("#kbd-btn").classList.toggle("on", !typebar.hidden);
+  fit();
+}
+const flushTyped = () => { const text = typein.value; if (text) { send({ type: "type", text }); typein.value = ""; } };
+$("#kbd-btn").onclick = () => toggleTyping();
+typebar.onsubmit = (e) => { e.preventDefault(); flushTyped(); typein.focus(); };
+typebar.querySelectorAll("button").forEach((b) => b.addEventListener("pointerdown", (e) => e.preventDefault()));  // keep the keyboard up
+$("#type-hide").onclick = () => {
+  const hide = typein.type !== "password";
+  typein.type = hide ? "password" : "text";
+  $("#type-hide").classList.toggle("on", hide);
+  typein.focus();
 };
+typebar.querySelectorAll("[data-key]").forEach((b) => (b.onclick = () => {
+  if (["Return", "Tab"].includes(b.dataset.key)) flushTyped();  // "name, Tab, password, Enter"
+  send({ type: "key", keys: b.dataset.key });
+  typein.focus();
+}));
+typebar.querySelectorAll("[data-scroll]").forEach((b) => (b.onclick = () =>
+  send({ type: "scroll", direction: b.dataset.scroll, amount: 3, x: Math.round(screenW / 2), y: Math.round(screenH / 2) })));
 $("#shot").onclick = () => window.open(`${BASE}/screenshot?download=1`, "_blank");
 $("#replay").onclick = () => window.open(`${BASE}/replay`, "_blank");
+$("#copy-sm").onclick = () => copyOut(false);
+$("#paste-sm").onclick = () => pasteIn();
 document.querySelectorAll("#more .menu-items button").forEach((b) => b.addEventListener("click", () => ($("#more").open = false)));
 document.addEventListener("click", (e) => { if (!$("#more").contains(e.target)) $("#more").open = false; });
 
@@ -348,13 +412,13 @@ async function watchDownloads() {
     } catch (_) {}
   }
 }
-$("#freeze").onclick = async () => {
+$("#freeze").onclick = $("#freeze-sm").onclick = async () => {
   const op = state === "paused" ? "thaw" : "freeze";
   const r = await post("/" + op);
   if (r.ok) { state = (await r.json()).state; renderState(); toast(op === "freeze" ? "Frozen: 0% CPU. Thaw (or any agent action) resumes it." : "Running"); }
 };
 function renderState() {
-  $("#freeze").textContent = state === "paused" ? "Thaw" : "Freeze";
+  $("#freeze").textContent = $("#freeze-sm").textContent = state === "paused" ? "Thaw" : "Freeze";
   if (state === "paused") setStatus("frozen", "frozen — 0% CPU");
   else if (state !== "running") setStatus("err", state);
 }
@@ -373,7 +437,10 @@ async function poll() {
       const h = await fetch(`${BASE}/handoff`, { credentials: "same-origin" }).then((x) => x.json());
       const box = $("#handoff");
       if (h && !h.done) {
-        if (!box.classList.contains("show")) { setControl(true); toast("The agent handed you control"); }
+        if (!box.classList.contains("show")) {
+          setControl(true); toast("The agent handed you control");
+          if (coarse) toggleTyping(true, false);
+        }
         $("#handoff-msg").textContent = h.message; box.classList.add("show");
       } else box.classList.remove("show");
     } catch (_) {}
@@ -387,5 +454,6 @@ $("#handoff-done").onclick = async () => {
 };
 
 $("#title").textContent = NAME;
+setControl(false);  // (the label for this screen's width)
 drops();
 frames(); poll(); watchDownloads();

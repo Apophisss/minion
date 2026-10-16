@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.1.1
+
+The live view on a phone or tablet.
+
+- A phone's keyboard only opens for a real text field, so the live view had no way to type, and its toolbar
+  overflowed a narrow screen. Now ⌨ opens a typing bar: type, then Send, with buttons for Enter, Backspace, Tab,
+  Esc and scrolling, and a lock that hides a password. On the screen, a tap clicks, a long press right-clicks, a
+  swipe scrolls and two fingers zoom. On a narrow screen the toolbar is one row, Copy, Paste and Freeze are under
+  More, and the screen sits at the top, above the phone's keyboard.
+
 ## 1.1.0
 
 Office work, measured on OSWorld, and the desktop for people too.

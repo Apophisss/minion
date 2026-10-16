@@ -8,5 +8,5 @@ It must only depend on the standard library, Pillow and, optionally, PyGObject
 with AT-SPI (for the accessibility tree). Never import host-side modules here.
 """
 
-VERSION = "1.1.0"
+VERSION = "1.1.1"
 PROTOCOL = 1
