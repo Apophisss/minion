@@ -13,6 +13,9 @@
 # `irm | iex` runs this text in your own PowerShell session. So everything happens inside a script block:
 # no variables leak into your session, and nothing here closes it (there is no `exit`).
 & {
+    # A session set to stop on errors would stop here at uv's first note on stderr ("No tools installed"):
+    # Windows PowerShell 5.1 turns redirected stderr into errors. The installer checks exit codes instead.
+    $ErrorActionPreference = 'Continue'
     function Say([string]$Text) { Write-Host "==> $Text" -ForegroundColor Magenta }
     function Warn([string]$Text) { Write-Host "Warning: $Text" -ForegroundColor Yellow }
     function Fail([string]$Text) { Write-Host "Error: $Text" -ForegroundColor Red }
