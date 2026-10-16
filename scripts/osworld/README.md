@@ -3,8 +3,9 @@
 [OSWorld](https://github.com/xlang-ai/OSWorld) is the benchmark computer-use agents are compared on. This harness
 runs its tasks on Minion desktops and scores them with OSWorld's own checkers, so the same agent can be measured
 with two interfaces: **S**, screenshots and coordinates only (the computer-use loop: every action returns a
-screenshot), and **M**, Minion (the screen as text with @ids, batched actions, a shell and Python in the desktop).
-The results are in [docs/osworld.md](../../docs/osworld.md).
+screenshot), and Minion (the screen as text with @ids, batched actions, a shell and Python in the desktop), under
+any other letter: the published results have **M** for Minion 1.0.0 and **N** for 1.1.0, each run with
+`MINION_BIN` pointing at that version. The results are in [docs/osworld.md](../../docs/osworld.md).
 
 ## How a task runs
 
@@ -31,8 +32,9 @@ as 1,365, Claude's estimate) and the time from start to end.
 A Minion desktop runs Debian's LibreOffice 25.2. OSWorld's expected files were saved by an older LibreOffice on
 Ubuntu, and some of its checkers compare files closely. Two checks find the tasks this environment blocks:
 
-- [fidelity.py](fidelity.py) puts OSWorld's expected file where the agent's result goes, opens and saves it as the
-  task's post-steps do, and scores it. If the expected file itself fails, so would any result.
+- [fidelity.py](fidelity.py) puts OSWorld's expected file where the agent's result goes, opens it, saves it (and
+  checks that the file was written again: right after a big document opens, LibreOffice can drop the keys), runs
+  the task's post-steps and scores it. If the expected file itself fails, so would any result.
 - [feasible.py](feasible.py) also checks, for Impress, that saving the task's own file keeps the slide backgrounds
   the expected file has: LibreOffice 25.2 writes a white master background as "none", which OSWorld's
   `compare_pptx_files` counts as different on every slide.
@@ -45,6 +47,7 @@ and the tasks they replace.
 ```bash
 sh scripts/osworld/setup.sh                    # OSWorld at the commit used, the checkers' packages, the image
 PY=~/osworld-run/venv/bin/python
+$PY scripts/osworld/fidelity.py               # which tasks a perfect result can pass here (fidelity.jsonl)
 $PY scripts/osworld/bench.py plan s1 S 1273e544-688f-496b-8d89-3e0f40aa0606 66399b0d-8fda-4618-95c4-bfc6191617e9
 $PY scripts/osworld/bench.py bin s1            # the agent's command: ~/osworld-run/bin/s1 start, s1 shot, ...
 $PY scripts/osworld/bench.py brief s1          # its instructions: give them to the agent as its task

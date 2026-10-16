@@ -77,9 +77,9 @@ Codex, Gemini CLI, opencode, OpenClaw and any MCP client work too.
 ## 7/9
 
 ```text
-You stay in the loop: watch any desktop live, click Take control, or let the agent hand off ("Please sign in") and wait for Done.
+You stay in the loop: watch any desktop live, take control, drop files on it, or let the agent hand off ("Please sign in") and wait for Done. Sign in once, and new desktops start signed in.
 
-Every step is recorded. Export a GIF, an HTML timeline, or a Python script that replays the session with no model.
+Every step is recorded: a GIF, an HTML timeline, or a script that replays it.
 ```
 
 Image: [demo.gif](../assets/demo.gif). Alt text: *An agent searching Wikipedia on a Minion desktop, step by step,
@@ -88,9 +88,9 @@ recorded by Minion's flight recorder.*
 ## 8/9
 
 ```text
-Tested on everyday work: AI agents did 93 ordinary computer tasks with Minion, from "zip this folder" to "total the attachment of this email and reply".
+Measured on OSWorld: on 30 of its office tasks, the same agent sent the model half the tokens through Minion as through screenshots, for the same success.
 
-Fixing what they ran into cut the calls by 31%, the failed calls by half and the output tokens by 36%.
+On 93 everyday tasks, fixing what agents ran into cut their calls by 31%.
 ```
 
 ## 9/9

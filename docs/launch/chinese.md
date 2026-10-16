@@ -33,6 +33,8 @@
 - **轻**：约 1.5 秒就绪，空闲内存 54–105 MB，闲置时自动冻结（0% CPU），约 0.2 秒唤醒（2 vCPU 虚拟机上的测量结果）。
 - **接入方式多**：MCP 优先，Claude Code、Codex、Cursor、VS Code、Gemini CLI、opencode、OpenClaw 等都能一键或一条命令接入；也支持 OpenAI / Anthropic / Gemini 的 function calling、通过 Ollama / vLLM 运行的本地模型、带 OpenAPI 的 HTTP 接口、CLI，以及 Python / TypeScript SDK。
 - **用日常任务检验过**：发布前，我让 AI Agent 用它完成了 93 个日常电脑任务（从“压缩这个文件夹”到“汇总邮件附件里的数字并回复”），记录了每一次调用。修复它们遇到的问题之后，同样的任务调用次数少了 31%，失败的调用少了一半，输出的 token 少了 36%。
+- **在 OSWorld 上测过**：在 OSWorld 的 30 个 Office 任务上，同一个 Agent 通过 Minion 发给模型的 token 只有纯截图方式的一半左右，成功率相当（差异在统计误差范围内）。
+- **只需登录一次**：在实时画面里手动登录一次（`minion login github https://github.com/login`），之后新建的桌面一启动就已登录，Agent 看不到密码。
 - **人随时能介入**：浏览器里可以实时看桌面、一键接管；Agent 也可以把登录这类操作交给你，等你点 Done 再继续。
 
 **安装**（需要 Docker、OrbStack 或 Podman）：

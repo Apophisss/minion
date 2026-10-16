@@ -42,5 +42,8 @@
   "9cf05d24-6bd9-4dae-8967-f67d88f5d38a": "same",
   "73c99fb9-f828-43ce-b87a-01dc07faa224": "same",
   "7ae48c60-f143-4119-b659-15b8f485eb9a": "white backgrounds"
+ },
+ "found_after_the_runs": {
+  "e4ef0baf-4b52-4590-a47e-d4d464cca2d7": "blocked here too: saving in LibreOffice 25.2 changes slide 2, which the task leaves alone (a title's two runs become one); fidelity.py found it once its round trip checked that the save happened and tried each expected file. It stays in the published results, where every condition fails it"
  }
 }

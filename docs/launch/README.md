@@ -1,15 +1,15 @@
 # Minion launch kit
 
-Copy for announcing Minion 1.0, one file per channel, plus the facts the copy is allowed to use and the images to
-post with it. Everything here is drafted from the repository's own docs, and the numbers were measured again on the 1.0.0 release
-(2026-10-16). Nothing has been posted yet.
+Copy for announcing Minion, one file per channel, plus the facts the copy is allowed to use and the images to
+post with it. Everything here is drafted from the repository's own docs. The numbers were measured again on the 1.0.0
+release (2026-10-16), and the OSWorld results on 1.1.0. Nothing has been posted yet.
 
 | File | Channel | Language |
 |---|---|---|
 | [show-hn.md](show-hn.md) | Hacker News (Show HN): title and the author's first comment | English |
 | [product-hunt.md](product-hunt.md) | Product Hunt: name, tagline, description, topics, gallery, maker's comment | English |
 | [reddit.md](reddit.md) | r/LocalLLaMA, r/ClaudeAI, r/selfhosted, r/opensource | English |
-| [x-thread.md](x-thread.md) | X: an 8-post thread | English |
+| [x-thread.md](x-thread.md) | X: a 9-post thread | English |
 | [linkedin.md](linkedin.md) | LinkedIn | English |
 | [youtube.md](youtube.md) | YouTube: title, description with chapters, tags and thumbnail for the demo video | English |
 | [hebrew.md](hebrew.md) | Israeli tech communities and LinkedIn | Hebrew |
@@ -63,13 +63,19 @@ What follows for the copy:
    only web pages.
 5. **Measured on everyday work.** AI agents did 93 ordinary computer tasks with Minion, every call logged, and the
    fixes their notes led to were measured on the same tasks. The tasks and scripts are in the repository.
+6. **Measured on OSWorld.** On 30 of OSWorld's office tasks, the same agent sent the model half the tokens through
+   Minion as through screenshots, for the same success. Say "half the tokens" and "the same success"; don't call
+   it an OSWorld score or compare it with the leaderboard.
+7. **People at the desktop too.** Sign in once by hand and start desktops signed in; drop files on the live view.
+   That answers "what about logins?" before it's asked.
 
 Don't claim:
 
 - Support for an agent that the docs don't name ([connect.md](../connect.md) lists the apps `minion connect` sets
   up). "Any MCP client" is accurate. Test a specific agent before naming it.
 - Benchmarks other than the ones in the table below, user numbers, testimonials or comparisons with "the
-  fastest" or "the best".
+  fastest" or "the best". The OSWorld result is 30 office tasks: not "OSWorld", not a leaderboard position, and
+  not a success rate that beats screenshots (the difference is within noise).
 - GPU support. Rendering is software-only ([faq.md](../faq.md)).
 
 ## Key facts and their sources
@@ -80,6 +86,7 @@ Use these numbers as written. If the README changes, the README wins.
 |---|---|---|
 | What it is | Featherweight Linux desktops that any AI agent can use; agents read the screen as text, act in batches or in code, and use any program or website | [README.md](../../README.md), [index.html](../index.html) |
 | Task cost | Five real tasks: 8,668 tokens with Minion vs. 50,505 with screenshots (5.8× fewer). The lead for any post about cost: the "Computer Use is 45x more expensive" HN thread (495 points) shows people care | [benchmarks.md](../benchmarks.md) |
+| OSWorld | 30 of OSWorld's LibreOffice tasks, the same agent, OSWorld's own checkers: the computer returned 9,372 tokens per task through Minion against 17,974 through screenshots (about half), 0.9 screenshots per task against 12.8, and the same success within noise (96.6% vs 93.2%). Minion 1.1.0 took 18% fewer steps than 1.0.0 on the same tasks. Not comparable to the OSWorld leaderboard | [osworld.md](../osworld.md) |
 | Everyday work | 93 everyday tasks done by AI agents, from "what's the date?" to "total the attachment of Dana's email and reply with it". After the fixes their notes led to, the same tasks took 31% fewer calls (491 → 339), half the failed calls (28 → 14) and 36% fewer tokens of output (156,272 → 99,769); all 93 were done both times | [scenarios.md](../scenarios.md) |
 | Startup | Ready in about 1.5 s (1.2–1.8 s for every profile) | [README.md](../../README.md#efficiency-measured), [design.md](../design.md) |
 | Idle memory | 54–105 MB per desktop, about 60 MB typical. Firefox and LibreOffice add their own when open (a few hundred MB each) | [README.md](../../README.md#efficiency-measured), [faq.md](../faq.md) |
@@ -104,9 +111,10 @@ Use these numbers as written. If the README changes, the README wins.
 | Hosts | macOS, Windows and Linux with Docker Desktop, OrbStack, Colima or Podman; images for `amd64` and `arm64` (Apple Silicon runs them natively); `windows` profile `amd64` only; Linux can run desktops without Docker, but not isolated | [faq.md](../faq.md) |
 | Footprint | Zero dependencies: the host side is pure Python standard library (3.11+), about 10k lines (the agent inside the desktop is about as much again) | [README.md](../../README.md), [design.md](../design.md) |
 | Isolation | One unprivileged container per desktop, no host mounts by default, no open ports (the host uses `docker exec`), `--offline`, `--memory`, `--cpus`. Passwordless `sudo` inside the container | [README.md](../../README.md#security), [index.html](../index.html), [SECURITY.md](../../SECURITY.md) |
-| Humans | Live view with *Take control*, hand-off ("Please sign in") that waits for *Done*, a dashboard, and a flight recorder (HTML, GIF, or a Python script that replays the session with no model) | [README.md](../../README.md), [CHANGELOG.md](../../CHANGELOG.md) |
+| Humans | Live view with *Take control*, a Files panel (download, upload, drop files on the screen), the clipboard both ways, hand-off ("Please sign in") that waits for *Done*, a dashboard, and a flight recorder (HTML, GIF, or a Python script that replays the session with no model) | [README.md](../../README.md), [cli.md](../cli.md#working-at-a-desktop-yourself) |
+| Sign-ins | Sign in once by hand in the live view (`minion login github https://github.com/login`), and `minion up --login github` starts desktops signed in; agents ask for one by name. Kept in your computer's Docker | [cli.md](../cli.md#sign-in-once) |
 | Dogfooding | Claude agents used Minion for real office, web, development and MCP tasks, and every issue they found was fixed before 1.0 | [design.md](../design.md) |
-| Release | 1.0.0 (2026-10-16), the first release; MIT license; `minion-desktop` on PyPI and npm, `io.github.Apophisss/minion` in the MCP Registry, images on GHCR | [CHANGELOG.md](../../CHANGELOG.md), [README.md](../../README.md) |
+| Release | 1.1.0 ([release date]); 1.0.0 (2026-10-16) was the first; MIT license; `minion-desktop` on PyPI and npm, `io.github.Apophisss/minion` in the MCP Registry, images on GHCR | [CHANGELOG.md](../../CHANGELOG.md), [README.md](../../README.md) |
 
 ## Links
 
@@ -146,7 +154,7 @@ Other images in [docs/assets](../assets/):
 |---|---|---|
 | [demo.gif](../assets/demo.gif) | 720×480 | An agent on a `research` desktop searching Wikipedia, made by `minion replay -o demo.gif` |
 | [marks.png](../assets/marks.png) | 1280×800 | A Wikipedia page with an `@id` drawn on every clickable element (`screenshot --marks`) |
-| [live-view.png](../assets/live-view.png) | 1440×784 | The live view of an `office` desktop, with *Take control*, Paste, Screenshot, Replay and Freeze |
+| [live-view.png](../assets/live-view.png) | 1440×784 | The live view of an `office` desktop with the Files panel open: Open box, Keys, Files, Copy, Paste, More, Freeze and *Take control* |
 | [dashboard.png](../assets/dashboard.png) | 1440×784 | The `minion serve` dashboard with four live desktops. |
 | [office.png](../assets/office.png), [research.png](../assets/research.png), [dev.png](../assets/dev.png) | 1280×800 | Full-size desktops: a Writer document, Wikipedia in Firefox, Geany with a Minion script |
 | [packaging/mcpb/icon.png](../../packaging/mcpb/icon.png) | 512×512 | The square icon, for the Product Hunt thumbnail and avatars |

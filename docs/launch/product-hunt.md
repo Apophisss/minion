@@ -37,7 +37,7 @@ so check each one in the preview before you publish.
 | 2 | [social-preview.png](../assets/social-preview.png) | Agents read the screen as text. Every control gets a stable @id the agent can click. |
 | 3 | [demo.gif](../assets/demo.gif) | An agent on a research desktop, recorded by Minion's built-in flight recorder. |
 | 4 | [marks.png](../assets/marks.png) | When pixels matter, a screenshot can label every clickable element with its @id. |
-| 5 | [live-view.png](../assets/live-view.png) | Watch any desktop live, click Take control, or let the agent hand off for a sign-in. |
+| 5 | [live-view.png](../assets/live-view.png) | Watch any desktop live, take control, move files in and out, or sign in once and start desktops signed in. |
 | 6 | [office.png](../assets/office.png) | Office desktops save Microsoft formats by default and type exactly what the agent sends. |
 | 7 | [dashboard.png](../assets/dashboard.png) | One dashboard with live thumbnails of every desktop (`minion serve`). |
 
@@ -60,6 +60,8 @@ What makes it work for agents:
 • Honest actions. Every action waits for the screen to settle and reports what changed. A miss fails with the closest candidates instead of clicking the wrong thing.
 
 • Tested on everyday work. AI agents did 93 ordinary computer tasks with it before the release. Fixing what they ran into cut their tool calls by 31% and the failed ones by half.
+• Measured on OSWorld: on 30 of its office tasks, the same agent sent the model half the tokens through Minion as through screenshots, for the same success.
+• Sign in once by hand, and new desktops start signed in.
 
 • You stay in control. Watch live, take over with one click, or let the agent hand off for a sign-in and wait for you.
 

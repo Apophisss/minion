@@ -3,7 +3,8 @@
     bench.py AGENT start           the next task in AGENT's batch, on a fresh desktop set up as OSWorld sets it up
     bench.py AGENT do ARGS...      one step through AGENT's interface (S: screenshots and coordinates; M: Minion)
     bench.py AGENT end [--fail]    OSWorld's post-steps (activate the window, ctrl+s) and checker; --fail: "infeasible"
-    bench.py plan AGENT COND ID... give AGENT a batch of task ids in condition S or M
+    bench.py plan AGENT COND ID... give AGENT a batch of task ids: condition S (screenshots), or a letter for
+                                   the Minion in MINION_BIN (the published runs: M for 1.0.0, N for 1.1.0)
     bench.py bin AGENT             write AGENT's command ($OSWORLD_RUN/bin/AGENT), the only one it uses
     bench.py brief AGENT           print AGENT's instructions (briefs/), to give to the agent as its task
 
@@ -178,6 +179,77 @@ def step(name: str, s: dict) -> None:
         time.sleep(float(p["seconds"]))
     else:
         raise RuntimeError(f"setup step {kind} isn't supported on Minion desktops")
+
+
+def resave(name: str, path: str, tries: int = 3) -> bool:
+    """Save the open document (ctrl+s) and check that its file was written again. Right after a big document's
+    window appears, LibreOffice can still be loading and drop the keys, and a round trip whose save never happened
+    looks clean when it isn't."""
+
+    def stamp() -> str:
+        return dexec(name, f"stat -c '%y %s' {shlex.quote(path)}").stdout.strip()
+
+    before = stamp()
+    for _ in range(tries):
+        time.sleep(3)
+        subprocess.run([MINION, "act", "-d", name, "key ctrl+s"], capture_output=True, text=True, timeout=120)
+        time.sleep(3)
+        if stamp() != before:
+            return True
+    return False
+
+
+OFFICE = (".xlsx", ".xls", ".ods", ".docx", ".doc", ".odt", ".pptx", ".ppt", ".odp")
+
+
+def gold_roundtrip(name: str, task: dict, cache_dir: Path) -> tuple[float | None, str]:
+    """Can a perfect result pass here? Put OSWorld's expected file where the agent's result goes, open it, save it
+    (and check that the file was written again), run the task's post-steps and score it with the task's checker.
+    A task whose checkers compare one result with several expected files ("or") gets a round trip per expected
+    file, and the best counts. None: nothing to try, or the save never happened."""
+    ev = task["evaluator"]
+    many = isinstance(ev["func"], list)
+    results = ev.get("result") if many else [ev.get("result")]
+    expected = (ev.get("expected") or []) if many else [ev.get("expected")]
+    pairs = [
+        (r, e)
+        for r, e in zip(results, expected, strict=False)
+        if r
+        and e
+        and r.get("type") == "vm_file"
+        and e.get("type") == "cloud_file"
+        and not r.get("multi")
+        and not e.get("multi")
+    ]
+    if ev["func"] == "infeasible" or not pairs:
+        return None, "no expected file to try"
+    golds: dict[str, list[str]] = {}
+    for r, e in pairs:
+        golds.setdefault(inside(r["path"]), []).append(e["path"])
+    best: tuple[float | None, str] = (None, "")
+    for k in range(max(len(v) for v in golds.values())):
+        fresh(name)
+        opened = saved = False
+        for dest, urls in golds.items():
+            gold = cached(urls[min(k, len(urls) - 1)])
+            dexec(name, f"mkdir -p \"$(dirname '{dest}')\"")
+            subprocess.run(["docker", "cp", str(gold), f"minion-{name}:{dest}"], check=True, capture_output=True)
+            dexec(name, f"chown agent:agent '{dest}'", user="root")
+            if dest.lower().endswith(OFFICE) and not opened:
+                subprocess.run([MINION, "open", "-d", name, dest], capture_output=True, timeout=180)
+                opened = True
+                saved = resave(name, dest)
+        for s in ev.get("postconfig", []) if opened else []:
+            try:
+                step(name, s)
+            except Exception as exc:  # noqa: BLE001
+                print("post-step", s["type"], exc, file=sys.stderr)
+        value, notes = score(task, name, False, cache_dir / str(k))
+        if opened and not saved:
+            value, notes = None, "this LibreOffice didn't save the file"
+        if best[0] is None or (value is not None and value > best[0]):
+            best = (value, notes)
+    return best
 
 
 def fresh(name: str) -> None:

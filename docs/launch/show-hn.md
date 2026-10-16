@@ -40,13 +40,15 @@ How it works:
 
 - Idle desktops are paused with the cgroup freezer (0% CPU) and thaw in about 0.2 s on the next call.
 
-- A person can watch any desktop live in the browser (JPEG frames over HTTP long-polling, no VNC) and take control, and the agent can hand off ("please sign in") and wait until they press Done.
+- A person can watch any desktop live in the browser (JPEG frames over HTTP long-polling, no VNC), take control, and move files and the clipboard both ways, and the agent can hand off ("please sign in") and wait until they press Done. Sign in once by hand (minion login github https://github.com/login) and new desktops start signed in, so the agent never sees the password.
 
 On a 2-vCPU VM, every profile is ready in 1.2-1.8 s, an idle desktop uses 54-105 MB, and 3 desktops start in parallel in 3.0 s (python scripts/bench.py reproduces this). The 9 tool definitions cost about 3,300 tokens per request, or about 450 in compact mode (one "computer" tool with CLI-style commands), which suits small local models.
 
 It's MCP-first, over stdio or Streamable HTTP, and "minion share" gives web apps like ChatGPT and Claude.ai an HTTPS URL through a Cloudflare quick tunnel. The same tools are also function-calling definitions for OpenAI, Anthropic and Gemini, an HTTP API with OpenAPI, a CLI with an Agent Skill, Python and TypeScript SDKs, and adapters for Claude, OpenAI and Gemini computer use. The host side is about 10k lines of pure standard-library Python, with zero dependencies.
 
 Before 1.0, I had AI agents do 93 everyday computer tasks with it, from "zip this folder" to "find the email with the Q3 figures, total its attachment and reply with the total". Every call was logged, and each agent wrote down what got in its way. After fixing those, the same 93 tasks took 31% fewer calls, half as many failed calls and 36% fewer tokens of output. The tasks, a test website and the scripts are in the repo (docs/scenarios.md).
+
+I also ran 30 of OSWorld's LibreOffice tasks with the same agent twice: through screenshots and coordinates only, and through Minion, scored by OSWorld's own checkers. Success was the same within noise (96.6% vs 93.2% on 30 tasks), and the computer sent the model about half the tokens (9,372 per task vs 17,974). It's 30 office tasks, not the OSWorld leaderboard; docs/osworld.md says what it does and doesn't show.
 
 To try it, with Docker, OrbStack or Podman running:
 

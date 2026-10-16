@@ -18,7 +18,6 @@ import stubs  # noqa: E402,F401
 with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
     from pptx import Presentation
 
-OFFICE = (".xlsx", ".xls", ".ods", ".docx", ".doc", ".odt", ".pptx", ".ppt", ".odp")
 NAME = "osw-fid"
 
 
@@ -33,38 +32,9 @@ def parts(task):
 
 
 def gold_roundtrip(tid, task):
-    ev, results, expected, _ = parts(task)
-    pairs = [
-        (r, e)
-        for r, e in zip(results, expected, strict=False)
-        if r
-        and e
-        and r.get("type") == "vm_file"
-        and e.get("type") == "cloud_file"
-        and not r.get("multi")
-        and not e.get("multi")
-    ]
-    if not pairs:
-        return None
-    bench.fresh(NAME)
-    opened = False
-    for r, e in pairs:
-        gold, dest = bench.cached(e["path"]), bench.inside(r["path"])
-        bench.dexec(NAME, f"mkdir -p \"$(dirname '{dest}')\"")
-        subprocess.run(["docker", "cp", str(gold), f"minion-{NAME}:{dest}"], check=True, capture_output=True)
-        bench.dexec(NAME, f"chown agent:agent '{dest}'", user="root")
-        if dest.lower().endswith(OFFICE) and not opened:
-            subprocess.run([bench.MINION, "open", "-d", NAME, dest], capture_output=True, timeout=180)
-            opened = True
-    if opened:
-        for s in ev.get("postconfig", []):
-            try:
-                bench.step(NAME, s)
-            except Exception:  # noqa: BLE001
-                pass
     logging.disable(logging.CRITICAL)
     with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
-        value, _ = bench.score(task, NAME, False, bench.ROOT / "evalcache" / "feas" / tid)
+        value, _ = bench.gold_roundtrip(NAME, task, bench.ROOT / "evalcache" / "feas" / tid)
     return value
 
 
@@ -90,6 +60,7 @@ def background_ok(tid, task):
     bench.fresh(NAME)
     for s in task.get("config", []):
         bench.step(NAME, s)
+    bench.resave(NAME, bench.inside(results[0]["path"]))  # this LibreOffice's save of the task's own file
     for s in ev.get("postconfig", []):
         try:
             bench.step(NAME, s)
