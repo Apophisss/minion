@@ -1,7 +1,10 @@
 """What agents doing OSWorld's office tasks (LibreOffice Calc, Writer, Impress) ran into: each test pins one fix."""
 
 import os
+import sys
 import zipfile
+
+import pytest
 
 from minion.agent import a11y, docs, perceive, server
 from minion.agent.a11y import Element
@@ -133,6 +136,7 @@ def test_ocr_of_the_title_bar_is_dropped():
     assert not perceive._title_echo(body, win)  # (the same words in the document stay)
 
 
+@pytest.mark.skipif(not sys.platform.startswith("linux"), reason="the desktop agent runs on Linux")
 def test_the_window_list_says_where_the_document_is(tmp_path, monkeypatch):
     monkeypatch.setenv("HOME", str(tmp_path))
     perceive._DOC_PATHS.clear()

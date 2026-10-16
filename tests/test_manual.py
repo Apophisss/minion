@@ -3,6 +3,7 @@
 import io
 import json
 import os
+import sys
 import threading
 import types
 import urllib.error
@@ -42,7 +43,8 @@ class FakeDesk:
             for e in sorted(p.iterdir(), key=lambda e: (not e.is_dir(), e.name.lower()))
             if hidden or not e.name.startswith(".")
         ]
-        return {"path": str(p), "home": str(self.root), "entries": entries[:limit], "total": len(entries)}
+        # (a desktop's paths are always POSIX ones, whatever the host runs)
+        return {"path": p.as_posix(), "home": self.root.as_posix(), "entries": entries[:limit], "total": len(entries)}
 
     def download(self, src, dst="."):
         p = self._local(src)
@@ -97,6 +99,7 @@ def http(monkeypatch, tmp_path):
     yield types.SimpleNamespace(base=base, token=token, desk=desk, home=home, handler=httpd.RequestHandlerClass)
     httpd.shutdown()
     httpd.server_close()
+    server._handoffs.clear()  # (the server's state, shared by every test)
 
 
 def request(h, method, path, body=None, headers=None):
@@ -161,7 +164,6 @@ def test_a_file_uploaded_during_a_handoff_is_in_the_agents_note(http):
     request(http, "POST", path, {"note": "done"})
     _, _, body = request(http, "GET", path)
     assert json.loads(body)["note"] == "done (uploaded ~/Downloads/contract.pdf)"
-    request(http, "DELETE", path)  # (hand-offs are the server's state, shared by the tests)
 
 
 def test_clipboard_comes_out_whole(http):
@@ -203,6 +205,7 @@ def test_names_for_files_from_a_browser():
 
 
 # -- the agent's listing ------------------------------------------------------------------------------
+@pytest.mark.skipif(not sys.platform.startswith("linux"), reason="the desktop agent runs on Linux")
 def test_agent_lists_folders_first_and_hides_dotfiles(tmp_path):
     (tmp_path / "b.txt").write_text("hi")
     (tmp_path / "A").mkdir()
@@ -299,10 +302,10 @@ def test_shared_server_tools_hide_sign_ins():
 
 
 def test_live_view_has_the_manual_controls():
-    page = (Path(server.WEB) / "view.html").read_text()
+    page = (Path(server.WEB) / "view.html").read_text(encoding="utf-8")
     for control in ('id="files-btn"', 'id="copy"', 'id="keys"', 'id="open"', 'id="login"', 'id="files-input"'):
         assert control in page
-    script = (Path(server.WEB) / "view.js").read_text()
+    script = (Path(server.WEB) / "view.js").read_text(encoding="utf-8")
     for route in ("/files?path=", "/download?path=", "/upload?path=", '"/login"', '"/clipboard"'):
         assert route in script
     assert os.path.exists(Path(server.WEB) / "dashboard.js")
