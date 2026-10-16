@@ -372,6 +372,10 @@ TOOLS: list[dict] = [
                 },
                 "text": {"type": "string", "description": "write: the whole new content."},
                 "overwrite": {"type": "boolean", "description": "download: replace an existing local file."},
+                "details": {
+                    "type": "boolean",
+                    "description": "read: formatting too (shapes' sizes and slide backgrounds, spacing, fonts).",
+                },
                 "desktop": DESKTOP_PROP,
             },
             "required": ["action", "path"],
@@ -1164,7 +1168,7 @@ class Toolkit:
             dest.parent.mkdir(parents=True, exist_ok=True)
             return [_text(f"Downloaded {d.name}:{path} → {d.download(path, dest)}")]
         if action == "read":
-            text = d.read(path, max_chars=100_000)
+            text = d.read(path, max_chars=100_000, details=bool(args.get("details")))
             return [_text(text)]
         if action == "convert":
             if not args.get("to"):
@@ -1308,6 +1312,9 @@ class Toolkit:
                 **({"overwrite": True} if "--overwrite" in flags else {}),
             }
             return self.t_act({"actions": [step]}, progress)
+        if verb in ("read", "cat") and "--details" in flags:
+            path = " ".join(w for w in words if w != "--details")
+            return self.t_files({"action": "read", "path": _unquote(path), "details": True}, progress)
         if verb in ("read", "cat"):
             if not rest:
                 raise ToolError("read FILE: any document as text (docx, xlsx, pptx, pdf, ...)")
@@ -1341,7 +1348,11 @@ class Toolkit:
                     action = name
             return self.t_act({"actions": [{"action": action, "target": target(plain)}]}, progress)
         if verb == "type":  # the rest of the command, verbatim (\n = Return, \t = Tab), as in act steps
-            return self.t_act({"actions": [{"action": "type", "text": _escapes(_unquote(rest))}]}, progress)
+            raw = str(args.get("command") or "").lstrip()
+            raw = raw[len(raw.split(None, 1)[0]) :][1:]  # (after "type " itself: spaces at the end are typed too)
+            quoted = raw.strip()
+            text = quoted[1:-1] if len(quoted) >= 2 and quoted[0] == quoted[-1] and quoted[0] in "'\"" else raw
+            return self.t_act({"actions": [{"action": "type", "text": _escapes(text)}]}, progress)
         if verb in ("key", "press"):
             return self.t_act({"actions": [{"action": "key", "keys": k} for k in plain]}, progress)
         if verb == "scroll":

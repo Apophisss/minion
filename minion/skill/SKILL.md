@@ -28,8 +28,11 @@ you can use them instead. The ideas are the same (`desktop`, `see`, `act`, `scri
 - `--full` keeps long text whole. `--window TITLE` describes another window.
 - `minion see --menus` lists every menu command with its shortcut. An open right-click menu is listed first.
 - `minion read FILE` prints any document as text: docx, xlsx (values and formulas), pptx, pdf, odt, epub, html.
-  It also says what the text alone doesn't: bold cells, frozen panes, conditional formats and charts in a sheet;
-  tracked changes, comments, images and page setup in a docx.
+  It also says what the text alone doesn't: bold and filled cells, hidden rows, merged cells, zoom, frozen panes,
+  conditional formats and charts in a sheet; tables, pictures, audio, video and speaker notes in a pptx; tracked
+  changes, comments, images and page setup in a docx. `--details` adds formatting, to check your work: a slide's
+  background and each shape's place and size in cm, bullets and fonts; a paragraph's alignment, spacing and
+  indents and its runs' fonts and sizes (bold, subscript...); a sheet's number formats.
 - `minion scroll-to "Entry 87"` (or `find`) brings text into view wherever it is on a long page or list, loading
   more of an endless feed until it shows up, and prints the element it found.
 - `minion shot -o /tmp/s.png --marks` takes a screenshot with the @ids drawn on it. Read the file to view it.
@@ -41,6 +44,10 @@ you can use them instead. The ideas are the same (`desktop`, `see`, `act`, `scri
   autocomplete field it types the text and clicks the matching suggestion. `minion fill @9 70` sets a slider, and
   `minion fill @21 2027-03-15` a date field.
 - `minion menu "File > Export As > Export as PDF..."` runs any menu command, without opening the menus.
+- In LibreOffice Calc a target can be a cell or a range: `minion click C2:C29` selects it, `minion fill B8
+  "=SUM(B2:B7)"` enters a value or formula, and `minion fill C2:C29 "=PROPER(B2)"` fills the whole range (through
+  the Name Box, which `see` lists with the current cell; its "Input line" shows that cell's whole formula). `see`
+  lists the cells in view and says where the data goes on. LibreOffice dialogs measure in cm.
 - In an Open/Save/Export dialog, `minion path ~/Documents/out.pdf` types the full path and confirms
   (`--overwrite` replaces an existing file). That's easier than clicking through folders.
 - `minion scroll down 5` · `minion drag @3 @9` · `minion wait-for "Saved"` (wait for text, not for time)
@@ -53,7 +60,8 @@ you can use them instead. The ideas are the same (`desktop`, `see`, `act`, `scri
 - Each action reports what changed: new windows, focus, a page's dialog, and files saved, downloaded or deleted
   ("new file ~/Downloads/report.csv (12 KB)"). When it takes you somewhere (a new page or window, a dialog), or the
   app showed "Loading…"/"Generating…" (it waits that out), the reply includes what is on screen now, so you rarely
-  need another look. `--observe changes|see|summary` asks for more or less.
+  need another look. In LibreOffice it adds what the status bar now says (a shape selected or its text being
+  edited, the selection's position and size). `--observe changes|see|summary` asks for more or less.
 - A text target must match exactly. If nothing on screen does, a control scrolled out of view is scrolled into
   view; otherwise the action fails and suggests close matches with their @ids.
 - Keyboard shortcuts are the most reliable: `ctrl+l` (address bar), `ctrl+s`, `alt+Left`, `ctrl+Tab`, `F5`.
@@ -76,6 +84,9 @@ EOF
 
 To read a slideshow or a scanned document page by page in one call: `for i in range(30): print(see());
 key("Right")` (see() reads each page, OCR included, and a page that hasn't changed is read from a cache).
+`elements(role, name)` gives dicts with `id`, `role`, `name`, `text`, `value`, `x`, `y` (a label's words are its
+`text`); `cells()` has the cells in view (`read()` the saved file for all). A script stops after 120 s: pass
+`--timeout 600` for a long loop, and give your own shell command as long, or what it printed is lost.
 
 ## Shell and files
 - `minion run "CMD"` runs a shell command in the desktop, and `sudo` works. Prefer it for files and data.

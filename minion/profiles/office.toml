@@ -74,7 +74,14 @@ show_hidden=0
       <prop oor:name="ReplaceDoubleQuote" oor:op="fuse"><value>false</value></prop>
     </node>
   </oor:component-data>
+  <!-- Centimeters in every dialog, whatever the locale: "20 cm" typed into an inch field is stored rounded
+       (7.87" is 19.99 cm), while inches typed into a centimeter field ("1 in") come out exact (2.54 cm). -->
   <oor:component-data oor:name="Writer" oor:package="org.openoffice.Office">
+    <node oor:name="Layout">
+      <node oor:name="Other">
+        <prop oor:name="MeasureUnit" oor:op="fuse"><value>2</value></prop>
+      </node>
+    </node>
     <node oor:name="AutoFunction">
       <node oor:name="Format">
         <node oor:name="ByInput">
@@ -84,12 +91,28 @@ show_hidden=0
     </node>
   </oor:component-data>
   <oor:component-data oor:name="Calc" oor:package="org.openoffice.Office">
+    <node oor:name="Layout">
+      <node oor:name="Other">
+        <node oor:name="MeasureUnit">
+          <prop oor:name="Metric" oor:op="fuse"><value>2</value></prop>
+          <prop oor:name="NonMetric" oor:op="fuse"><value>2</value></prop>
+        </node>
+      </node>
+    </node>
     <node oor:name="Input">
       <!-- No AutoInput: typing "Co" in a column that has "Coffee" must not become "Coffee". -->
       <prop oor:name="AutoInput" oor:op="fuse"><value>false</value></prop>
     </node>
   </oor:component-data>
   <oor:component-data oor:name="Impress" oor:package="org.openoffice.Office">
+    <node oor:name="Layout">
+      <node oor:name="Other">
+        <node oor:name="MeasureUnit">
+          <prop oor:name="Metric" oor:op="fuse"><value>2</value></prop>
+          <prop oor:name="NonMetric" oor:op="fuse"><value>2</value></prop>
+        </node>
+      </node>
+    </node>
     <node oor:name="Misc">
       <node oor:name="NewDoc">
         <prop oor:name="AutoPilot" oor:op="fuse"><value>false</value></prop>

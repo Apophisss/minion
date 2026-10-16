@@ -347,6 +347,18 @@ def _escapes(text: str) -> str:
     return text.replace("\\\\", "\0").replace("\\n", "\n").replace("\\t", "\t").replace("\0", "\\")
 
 
+CELL_REF = re.compile(r"(?:[A-Za-z_][\w ]*\.)?\$?[A-Za-z]{1,3}\$?[1-9]\d{0,6}(?::\$?[A-Za-z]{1,3}\$?[1-9]\d{0,6})?")
+
+
+def _reads_as(shown: str, want: str) -> bool:
+    """Whether text read off the screen (OCR: "1.5 Lines" may come back as "1.5 Lines" or "15 Lines") is the
+    text that was asked for."""
+    import difflib
+
+    a, b = (" ".join(v.split()).casefold() for v in (shown, want))
+    return b in a or a in b or difflib.SequenceMatcher(None, a, b).ratio() >= 0.75
+
+
 def _first_word(rest: str) -> tuple[str, str]:
     """('"Customer name"', ' Ada') -> ('Customer name', 'Ada'): a target, then the verbatim rest."""
     rest = rest.lstrip()
@@ -370,8 +382,10 @@ def parse_step(step) -> tuple[str, dict]:
                 f"unknown action {verb!r}; actions: {', '.join(sorted(set(a for a, _ in ACTIONS.values())))}"
             )
         canon = ACTIONS[verb][0]
-        if canon in ("type", "paste"):  # the rest of the step, verbatim: quotes and spacing are kept
-            return canon, {**ACTIONS[verb][1], "text": _escapes(_unquote(rest.strip()))}
+        if canon in ("type", "paste"):  # the rest of the step, verbatim: spaces at either end are typed too
+            quoted = rest.strip()
+            text = quoted[1:-1] if len(quoted) >= 2 and quoted[0] == quoted[-1] and quoted[0] in "'\"" else rest
+            return canon, {**ACTIONS[verb][1], "text": _escapes(text)}
         if canon == "wait_for":  # wait_for Saved · wait_for "Report ready" 60 · wait_for Loading --gone
             text, extra = rest.strip(), {}
             if text.endswith(" --gone"):
@@ -688,7 +702,9 @@ class Agent:
     def m_read(self, p: dict) -> dict:
         """A document's text: docx, xlsx, pptx, odt/ods/odp, pdf, epub, html, images (OCR), doc/xls/ppt..."""
         try:
-            text, kind = docs.read(str(p.get("path") or ""), max_chars=int(p.get("max_chars") or 200_000))
+            text, kind = docs.read(
+                str(p.get("path") or ""), max_chars=int(p.get("max_chars") or 200_000), details=bool(p.get("details"))
+            )
         except docs.DocError as e:
             raise RpcError(str(e)) from e
         return {"text": text, "kind": kind}
@@ -758,6 +774,28 @@ class Agent:
             raise RpcError(str(e)) from e
 
     # -- actions -------------------------------------------------------
+    def _calc_ref(self, target) -> str | None:
+        """A cell or range reference (B8, $C$2:$C$29, Sheet2.A1) as a target in LibreOffice Calc's window."""
+        if not isinstance(target, str) or not CELL_REF.fullmatch(target.strip()):
+            return None
+        focused = self.windows.focused()
+        if focused is None or "LibreOffice Calc" not in (focused.title or ""):
+            return None
+        return target.strip()
+
+    def _goto_cell(self, ref: str) -> None:
+        """Go to a cell, or select a range, by typing its reference into Calc's Name Box."""
+        try:
+            box = self.perception.resolve("Name Box")
+        except (TargetError, RpcError) as e:
+            raise RpcError(f"can't go to {ref}: Calc's Name Box isn't on screen (View > Formula Bar shows it)") from e
+        self.xi.click(box.x, box.y)
+        time.sleep(0.15)
+        self.xi.key("ctrl+a")
+        self.xi.type(ref)
+        self.xi.key("Return")
+        time.sleep(0.25)
+
     def _mods(self, p: dict) -> list[str]:
         try:
             return normalize_modifiers(p.get("modifiers"))
@@ -776,6 +814,9 @@ class Agent:
                 self.xi.click(None, None, button, count, mods)
                 x, y = self.xi.position()
                 where = f"({x},{y})"
+            elif (ref := self._calc_ref(p["target"])) is not None and count == 1 and button == "left" and not mods:
+                self._goto_cell(ref)  # B8, C2:C29: go there (empty cells and ranges have no @id)
+                return f"went to {ref} (in the Name Box)" if ":" not in ref else f"selected {ref} (in the Name Box)"
             else:
                 t = r(p["target"])
                 covered = a11y.cover(t.element, t.x, t.y) if isinstance(t.element, a11y.Element) else ""
@@ -860,6 +901,19 @@ class Agent:
             return f"pasted {len(text)} chars"
         if action == "fill":
             text = str(p.get("text") if p.get("text") is not None else "")
+            ref = self._calc_ref(p.get("target"))
+            if ref is not None:  # a spreadsheet cell or range by its reference: B8, C2:C29
+                self._goto_cell(ref)
+                if text and not text.isascii():
+                    self._type_via_clipboard(text)
+                elif text:
+                    self.xi.type(text)
+                else:
+                    self.xi.key("Delete")
+                    return f"cleared {ref}"
+                # Return enters it; Alt+Return enters it into every cell of a selected range.
+                self.xi.key("alt+Return" if ":" in ref else "Return")
+                return f"filled {ref} with {len(text)} chars" + (" (every cell of the range)" if ":" in ref else "")
             t = r(p.get("target"), prefer_input=True)
             el = t.element
             if isinstance(el, a11y.Element) and el.role in ("slider", "scroll bar", "level bar") and text.strip():
@@ -951,13 +1005,36 @@ class Agent:
                     raise RpcError(f'no option "{option}" in {t.desc}; options: {" | ".join(options[:20])}')
             # The keyboard way: open it, type the option's text (type-ahead finds it), confirm. An autocomplete
             # field (a JS combo box) shows its suggestions as you type: click the one that matches.
+            focused = self.windows.focused()  # (before the click: an opened list becomes the active window)
+            aw = a11y.window_for(focused) if focused is not None and a11y.AVAILABLE else None
             self.xi.click(t.x, t.y)
             time.sleep(0.3)
+            if aw is not None and isinstance(el, a11y.Element) and not el.in_doc and not a11y.has_entry(el):
+                # A dialog's dropdown in LibreOffice or GTK opens its list in a window of its own, and says
+                # nothing of its options or value until then: pick the option from that list. (Typing its name
+                # instead only jumps by first letters: "Double" picked "Leading".)
+                items: list = []
+                end = time.monotonic() + 1.5
+                while time.monotonic() < end:
+                    items = [e for e in a11y.popup_menus(aw, screen=self.size) if e.role in a11y.PICKABLE]
+                    if items:
+                        break
+                    time.sleep(0.15)
+                if items:
+                    pick = a11y.best_option(items, option)
+                    if pick is None:
+                        self.xi.key("Escape")
+                        names = " | ".join(e.label() for e in items[:20])
+                        raise RpcError(f'no option "{option}" in {t.desc}; options: {names}')
+                    self.xi.click(*pick.center)
+                    time.sleep(0.3)
+                    shown = self.perception.shown_text(el)
+                    if shown and not _reads_as(shown, pick.label()):
+                        return f'clicked "{pick.label()}" in the list of {t.desc}, but it shows "{shown}": look'
+                    return f'selected "{pick.label()}" from the list of {t.desc}'
             if isinstance(el, a11y.Element) and a11y.is_editable(el):
                 self.xi.key("ctrl+a")
             self.xi.type(option)
-            focused = self.windows.focused()
-            aw = a11y.window_for(focused) if focused is not None and a11y.AVAILABLE else None
             deadline = time.monotonic() + 2.5
             while aw is not None and time.monotonic() < deadline:
                 time.sleep(0.35)
@@ -1384,6 +1461,7 @@ class Agent:
             except WindowError:
                 wins_before = {}
             focused_app = next((w.app for w in wins_before.values() if w.focused), None)
+            status_before = self._status_bar() if "libreoffice" in (focused_app or "").lower() else None
             if focused_app and focused_app != getattr(self, "_macro_app", None):
                 # A replay must type into the same app: record the switch (apps, not titles: "Untitled 2")
                 self.recorder.add_macro("focus", {"window": focused_app})
@@ -1544,7 +1622,22 @@ class Agent:
             out["crop"] = self._crop(frame, change["region"])
         if "see" in observe or "changes" in observe:
             out["see"] = self.perception.see(ocr=p.get("ocr", "auto"), changes="see" not in observe)
+        elif status_before is not None and error is None:
+            # LibreOffice's status bar says what a click did when the screen barely shows it: a shape selected
+            # or its text being edited, the selected object's position and size, the slide or page.
+            now = [t for t in self._status_bar() or [] if t not in status_before]
+            if now:
+                out["summary"] += "\n→ status bar: " + " · ".join(now[:5])
         return out
+
+    def _status_bar(self) -> list[str] | None:
+        """The texts of the focused LibreOffice window's status bar, or None."""
+        try:
+            focused = self.windows.focused()
+            aw = a11y.window_for(focused) if focused is not None and a11y.AVAILABLE else None
+        except Exception:
+            return None
+        return a11y.status_bar_texts(aw) if aw is not None else None
 
     def _crop(self, frame, region) -> dict:
         """Just the part of the screen that changed (with some context): far fewer image tokens."""

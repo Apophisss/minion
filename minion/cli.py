@@ -343,7 +343,9 @@ def cmd_see(args) -> int:
 
 def cmd_shot(args) -> int:
     d = desktop(args)
-    region = [int(v) for v in re.split(r"[,\s]+", args.region.strip())] if args.region else None
+    region = [int(v) for v in re.split(r"[,\s]+", " ".join(args.region).strip()) if v] if args.region else None
+    if region is not None and len(region) != 4:
+        raise MinionError("--region takes x,y,w,h: 4 numbers, e.g. --region 0,0,640,400")
     fmt = (
         "jpeg"
         if (args.output or "").lower().endswith((".jpg", ".jpeg"))
@@ -475,7 +477,7 @@ def cmd_path(args) -> int:
 
 def cmd_read(args) -> int:
     d = desktop(args)
-    text = d.read(desktop_path(args.file))
+    text = d.read(desktop_path(args.file), details=args.details)
     if args.json:
         emit_json({"path": args.file, "text": text})
     else:
@@ -546,8 +548,8 @@ def cmd_copy(args) -> int:
 
 def cmd_act(args) -> int:
     steps = []
-    for s in args.steps:
-        s = s.strip()
+    for raw in args.steps:
+        s = raw.strip()
         if s == "-":
             data = json.loads(sys.stdin.read())
             steps.extend(data if isinstance(data, list) else [data])
@@ -555,7 +557,7 @@ def cmd_act(args) -> int:
             data = json.loads(s)
             steps.extend(data if isinstance(data, list) else [data])
         else:
-            steps.append(s)
+            steps.append(raw.lstrip())  # (its end as given: "type hi " types the space)
     return act_and_print(args, *steps, observe=args.observe)
 
 
@@ -1020,7 +1022,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     sp = add("shot", cmd_shot, "take a screenshot", aliases=["screenshot"])
     sp.add_argument("-o", "--output", help="file (.png/.jpg/.webp) or - for stdout")
-    sp.add_argument("--region", help="only this part of the screen: x,y,w,h")
+    sp.add_argument("--region", nargs="+", help="only this part of the screen: x,y,w,h (or x y w h)")
     sp.add_argument("--zoom", action="store_true", help="magnify --region to 1024 px wide (small text, icons)")
     sp.add_argument("--max-width", type=int, help="scale down to at most this width (fewer image tokens)")
     sp.add_argument("--marks", action="store_true", help="label clickable elements with their @ids")
@@ -1088,6 +1090,13 @@ def build_parser() -> argparse.ArgumentParser:
 
     sp = add("read", cmd_read, "print any file in the desktop as text (docx, xlsx, pptx, pdf, odt, epub, html, images)")
     sp.add_argument("file")
+    sp.add_argument(
+        "--details",
+        action="store_true",
+        help="formatting too: slide backgrounds and shapes' place and size (cm), bullets, paragraph spacing and "
+        "indents, fonts and sizes (bold, subscript...), number formats",
+    )
+    sp.add_argument("--full", action="store_true", help=argparse.SUPPRESS)  # (`see --full`'s habit: read is whole)
 
     sp = add(
         "convert",

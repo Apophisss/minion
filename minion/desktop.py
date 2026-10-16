@@ -623,11 +623,14 @@ class Desktop:
         if not res.ok:
             raise MinionError(f"could not write {path}: {(res.stderr or res.stdout).strip()[-300:]}")
 
-    def read(self, path: str, max_chars: int = 200_000) -> str:
+    def read(self, path: str, max_chars: int = 200_000, details: bool = False) -> str:
         """Any file's text: text files as they are, and documents converted inside the desktop: docx, xlsx
-        (values and formulas), pptx, odt/ods/odp, pdf, epub, html, images (OCR), doc/xls/ppt, ..."""
+        (values and formulas), pptx, odt/ods/odp, pdf, epub, html, images (OCR), doc/xls/ppt, ...
+        `details` adds formatting: slide backgrounds and each shape's place and size, paragraph spacing and
+        indents, run fonts and sizes (bold, subscript...), number formats and text colours."""
+        params = {"path": path, "max_chars": max_chars, **({"details": True} if details else {})}
         try:
-            return self.call("read", {"path": path, "max_chars": max_chars}, timeout=900)["text"]
+            return self.call("read", params, timeout=900)["text"]
         except MinionError as e:
             if "unknown method" not in str(e):  # (a desktop made by an older Minion reads text files only)
                 raise
