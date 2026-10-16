@@ -150,7 +150,7 @@ def find_uv() -> str | None:
 
 def smoke(bundle: Path, ver: str) -> None:
     """Unpack the bundle, start its server with `uv run` (as the manifest says) and check the MCP handshake."""
-    with tempfile.TemporaryDirectory(prefix="minion-mcpb-") as tmp:
+    with tempfile.TemporaryDirectory(prefix="minion-mcpb-", ignore_cleanup_errors=True) as tmp:
         with zipfile.ZipFile(bundle) as zf:
             zf.extractall(tmp)
         uv = find_uv()
@@ -201,8 +201,14 @@ def smoke(bundle: Path, ver: str) -> None:
         except queue.Empty:
             pass
         finally:
-            proc.kill()
-            proc.wait()
+            # End the input, as MCP clients do: the server exits, and so does uv. Killing uv alone would leave
+            # its Python running on Windows, holding the folder that is about to be deleted.
+            proc.stdin.close()
+            try:
+                proc.wait(timeout=30)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.wait()
     info = replies.get(1, {}).get("result", {}).get("serverInfo", {})
     names = [t["name"] for t in replies.get(2, {}).get("result", {}).get("tools", [])]
     if info.get("version") != ver or sorted(names) != live_tools():
