@@ -24,7 +24,7 @@ tips = """
 Open a page with `open` and a URL (e.g. "github.com"); it opens in Firefox. Downloads land in ~/Downloads without a dialog.
 Firefox exposes the page to `see`: links, buttons and form fields get @ids you can click or fill.
 Cookie banners and most ads are blocked. PDFs open in Firefox's built-in viewer.
-Keys are cheaper than clicks: ctrl+l (address bar), ctrl+t / ctrl+w (new / close tab), ctrl+Tab, alt+Left (back),
+Keys are cheaper than clicks: ctrl+l (address bar), ctrl+t / ctrl+w (new / close tab), ctrl+Tab, alt+1..9 (tab N), alt+Left (back),
 ctrl+f (find), F5 (reload), space / shift+space (page down / up). Logged in somewhere? snapshot the desktop and fork it per task.
 """
 
@@ -59,6 +59,7 @@ ctrl+f (find), F5 (reload), space / shift+space (page down / up). Logged in some
       "browser.sessionstore.resume_from_crash": { "Value": false, "Status": "default" },
       "browser.startup.couldRestoreSession.count": { "Value": -1, "Status": "default" },
       "browser.translations.automaticallyPopup": { "Value": false, "Status": "default" },
+      "browser.urlbar.showSearchTerms.enabled": { "Value": false, "Status": "default" },
       "browser.download.alwaysOpenPanel": { "Value": false, "Status": "default" },
       "browser.download.open_pdf_attachments_inline": { "Value": true, "Status": "default" },
       "browser.uitour.enabled": { "Value": false, "Status": "default" },

@@ -240,14 +240,15 @@ def test_menu_waits_for_the_dialog_an_ellipsis_command_opens(monkeypatch):
     agent = object.__new__(Agent)
     agent.windows = _Windows()
     agent._focused_a11y = lambda: (None, {"node": "calc"})
-    monkeypatch.setattr(a11y, "find_menu_path", lambda window, parts: ["Insert", "Chart..."])
+    monkeypatch.setattr(a11y, "find_menu_path", lambda window, parts, check_enabled=True: ["Insert", "Chart..."])
     monkeypatch.setattr(a11y, "opens_dialog", lambda node: node.endswith("..."))
     monkeypatch.setattr(a11y, "press_menu", lambda nodes: True)
+    monkeypatch.setattr(a11y, "enabled", lambda node: True)
     assert agent._menu("Insert > Chart") == "chose Insert > Chart"
     assert agent.windows.calls == 3  # it looked until the dialog was there
 
     agent.windows = _Windows()
-    monkeypatch.setattr(a11y, "find_menu_path", lambda window, parts: ["Edit", "Undo"])
+    monkeypatch.setattr(a11y, "find_menu_path", lambda window, parts, check_enabled=True: ["Edit", "Undo"])
     assert agent._menu("Edit > Undo") == "chose Edit > Undo"
     assert agent.windows.calls == 0  # a plain command doesn't wait
 

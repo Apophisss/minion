@@ -361,6 +361,19 @@ def cmd_shot(args) -> int:
     if args.output == "-":
         sys.stdout.buffer.write(shot.data)
         return 0
+    if (args.output or "").startswith(":"):  # :~/Pictures/page.png — a file inside the desktop (to put in a document)
+        import tempfile
+
+        inside = desktop_path(args.output[1:])
+        with tempfile.TemporaryDirectory() as tmp:
+            local = Path(tmp) / Path(inside).name
+            shot.save(local)
+            d.upload(str(local), inside)
+        if args.json:
+            emit_json({"path": inside, "width": shot.width, "height": shot.height, "scale": shot.scale})
+        else:
+            print(f"{d.name}:{inside}")
+        return 0
     path = Path(args.output or f"{d.name}-{time.strftime('%H%M%S')}.{'jpg' if fmt == 'jpeg' else fmt}")
     shot.save(path)
     if args.json:
@@ -472,11 +485,16 @@ def cmd_read(args) -> int:
 
 def cmd_convert(args) -> int:
     d = desktop(args)
-    out = d.convert(desktop_path(args.file), args.format, desktop_path(args.outdir) if args.outdir else None)
+    to = desktop_path(args.format) if "/" in args.format else args.format
+    if len(args.file) > 1 and ("/" in to or "." in to.strip(".")):
+        raise MinionError("several files convert to a format (pdf, docx, ...), not to one file name")
+    outs = []
+    for f in args.file:
+        outs.append(d.convert(desktop_path(f), to, desktop_path(args.outdir) if args.outdir else None))
+        if not args.json:
+            ok(f"{f} → {outs[-1]}")
     if args.json:
-        emit_json({"path": out})
-    else:
-        ok(f"{args.file} → {out}")
+        emit_json({"path": outs[0]} if len(outs) == 1 else {"paths": outs})
     return 0
 
 
@@ -486,6 +504,44 @@ def cmd_wait_for(args) -> int:
         {"action": "wait_for", "text": " ".join(args.text), "timeout": args.timeout, "gone": args.gone},
         settle=False,
     )
+
+
+SCRIPT_API = """\
+The script runs inside the desktop; only what it prints comes back. Preloaded (targets as in act: @12, "Save",
+button:Save, x,y; a failed step raises MinionScriptError):
+  look:   see(changes=False) -> str · look() -> dict · elements(role=None, name=None) -> list[dict]
+          find(text) -> list[dict] · cells() -> {"A1": "Item", ...} · formulas() -> {"B7": "=SUM(B2:B6)"}
+          windows() -> list[dict] · menus() -> list[str] · screenshot(path) -> path
+  act:    click(target, button="left", count=1, modifiers=None) · double_click(target) · right_click(target)
+          move(target) · drag(start, end) · scroll(direction="down", amount=3, target=None)
+          write(text)  (\\n is Return, \\t is Tab) · paste(text) · key("ctrl+s", repeat=1) · hold_key(keys, seconds)
+          fill(target, text) · select(target, option) · menu("File > Save As") · path("~/out.pdf", overwrite=False)
+          scroll_to(text) · close(window=None) · copy(target) · focus(window) · act(*steps) -> summary
+  wait:   wait(seconds) · wait_for(text, timeout=10, gone=False) -> bool
+  apps:   launch("calc" | URL | FILE) -> dict · run(cmd, timeout=60) -> {"code", "stdout", "stderr"}
+          read(file) -> text · convert(file, to) -> new path · clipboard(text=None) -> str
+Example:
+  launch("calc")
+  for item, price in [("Coffee", 3.5), ("Bagel", 2.25)]:
+      write(f"{item}\\t{price}\\n")
+  print(cells())
+"""
+
+
+def cmd_scroll_to(args) -> int:
+    return act_and_print(args, {"action": "scroll_to", "text": " ".join(args.text), "timeout": args.timeout})
+
+
+def cmd_goto(args) -> int:
+    return act_and_print(args, {"action": "goto", "target": args.url})
+
+
+def cmd_close(args) -> int:
+    return act_and_print(args, {"action": "close", **({"window": " ".join(args.window)} if args.window else {})})
+
+
+def cmd_copy(args) -> int:
+    return act_and_print(args, {"action": "copy", "target": args.target}, settle=False)
 
 
 def cmd_act(args) -> int:
@@ -503,29 +559,43 @@ def cmd_act(args) -> int:
     return act_and_print(args, *steps, observe=args.observe)
 
 
+URLISH = re.compile(r"^([a-z][a-z0-9+.-]*://\S+|(www\.)?[\w-]+(\.[\w-]+)*\.[a-z]{2,}(:\d+)?(/\S*)?)$", re.I)
+
+
 def cmd_open(args) -> int:
+    targets = [desktop_path(t) for t in args.target]  # (~ expanded by this machine's shell means the desktop's)
+    if len(targets) > 1 and all(URLISH.match(t) for t in targets):  # open a.com b.org: one tab each
+        code = 0
+        for t in targets:
+            args.target = [t]
+            code = cmd_open(args) or code
+        return code
     d = desktop(args)
     if not args.no_install and not args.json:
-        info(f"opening {' '.join(args.target)} (an app that isn't installed yet is installed first)")
+        info(f"opening {' '.join(targets)} (an app that isn't installed yet is installed first)")
         sys.stdout.flush()
-    res = d.open(" ".join(args.target), wait=args.wait, install=not args.no_install)
+    res = d.open(" ".join(targets), wait=args.wait, install=not args.no_install)
     if args.json:
         emit_json(res)
         return 0 if "error" not in res else 1
     if res.get("installed"):
         ok(f"installed {res['installed']}")
     w = res.get("window")
+    if "error" in res:  # (an app may have opened only to show an error: "it opened, but shows an error: …")
+        if w:
+            info(f'opened {res["command"]} → "{w["title"]}"')
+        err(res["error"])
+        return 1
     if w:
         ok(f'opened {res["command"]} → "{w["title"]}"')
         if res.get("also"):
             info(f"  also opened: {', '.join(repr(t) for t in res['also'])}")
-    elif "error" in res:
-        err(res["error"])
-        return 1
     else:
         ok(f"launched {res['command']} (no new window yet)")
     if res.get("tips"):
         info(f"tips: {res['tips']}")
+    if res.get("look"):  # it opened on a dialog: what it asks
+        print(res["look"])
     return 0
 
 
@@ -572,6 +642,8 @@ def cmd_run(args) -> int:
     if res.timed_out:
         err(f"timed out after {args.timeout:g}s")
         return 124
+    if res.code and not res.stdout and not res.stderr:  # (a silent failure would look like success)
+        err(f"exited with code {res.code} and printed nothing")
     return res.code or 0
 
 
@@ -623,6 +695,9 @@ def cmd_windows(args) -> int:
 def cmd_focus(args) -> int:
     d = desktop(args)
     res = d.window(args.action, " ".join(args.window) if args.window else None)
+    if res.get("note"):  # e.g. closing: the app is asking something first
+        info(res["note"])
+        return 1
     ok(f'{args.action} "{res["window"]["title"]}"')
     return 0
 
@@ -1014,15 +1089,39 @@ def build_parser() -> argparse.ArgumentParser:
     sp = add("read", cmd_read, "print any file in the desktop as text (docx, xlsx, pptx, pdf, odt, epub, html, images)")
     sp.add_argument("file")
 
-    sp = add("convert", cmd_convert, "convert a document in the desktop: minion convert ~/report.docx pdf")
-    sp.add_argument("file")
-    sp.add_argument("format", help="pdf, docx, odt, xlsx, ods, csv, pptx, odp, html, txt, md, png, jpg")
+    sp = add(
+        "convert",
+        cmd_convert,
+        "convert documents in the desktop: minion convert ~/report.docx pdf · minion convert ~/a.csv ~/b.xlsx",
+    )
+    sp.add_argument("file", nargs="+")
+    sp.add_argument(
+        "format", help="pdf, docx, odt, xlsx, ods, csv, pptx, odp, html, txt, md, png, jpg, or the new file's name"
+    )
     sp.add_argument("--outdir", help="folder for the result (default: next to the file)")
 
     sp = add("wait-for", cmd_wait_for, "wait until text is visible on screen (or --gone)")
     sp.add_argument("text", nargs="+")
     sp.add_argument("--timeout", "-t", type=float, default=15, help="seconds to wait (15)")
     sp.add_argument("--gone", action="store_true", help="wait until the text is no longer visible")
+
+    sp = add(
+        "scroll-to",
+        cmd_scroll_to,
+        'bring text into view wherever it is on a long page (loading more of a feed): minion scroll-to "Entry 87"',
+        aliases=["find"],
+    )
+    sp.add_argument("text", nargs="+")
+    sp.add_argument("--timeout", "-t", type=float, default=20, help="seconds to keep loading more (20)")
+
+    sp = add("goto", cmd_goto, "load a URL in the browser's current tab (open URL makes a new tab)")
+    sp.add_argument("url")
+
+    sp = add("close", cmd_close, "close a window like its X button (the focused one, or by title or app)")
+    sp.add_argument("window", nargs="*")
+
+    sp = add("copy", cmd_copy, "copy an element's whole text to the clipboard: minion copy @12")
+    sp.add_argument("target")
 
     sp = add(
         "act",
@@ -1036,16 +1135,19 @@ def build_parser() -> argparse.ArgumentParser:
             "action strings: click|dclick|rclick|move TARGET · type TEXT (\\n is Return, \\t is Tab) · "
             "paste TEXT · key KEYS [N] (or a sequence: key Tab Tab Return) · fill TARGET TEXT · select TARGET OPTION · "
             "menu File > Save As · path FILE [--overwrite] · "
-            "scroll DIR [N] [TARGET] · drag FROM TO · wait SECONDS · wait_for TEXT · focus WINDOW. "
-            "The text of type/paste/fill is taken as is (one pair of outer quotes is removed). "
+            "scroll DIR [N] [TARGET] · drag FROM TO · wait SECONDS · wait_for TEXT [SECONDS] [--gone] · "
+            "scroll_to TEXT · goto URL · close [WINDOW] · copy TARGET · focus WINDOW. "
+            "The text of type/paste/fill is taken as is (one pair of outer quotes is removed), except that \\n is "
+            "Return, \\t is Tab and \\\\ a backslash; a Windows path (C:\\users\\x.txt) keeps its backslashes. "
             "Also JSON objects/lists, or - for JSON on stdin"
         ),
     )
     sp.add_argument(
         "--observe",
-        default="summary",
-        choices=["summary", "changes", "see", "crop"],
-        help="what to report after the actions (crop saves an image of the changed region)",
+        default="auto",
+        choices=["auto", "summary", "changes", "see", "crop"],
+        help="what to report after the actions: auto (what changed, when a page, window or dialog changed or the "
+        "app finished working), summary, changes, see, crop (saves an image of the changed region)",
     )
     sp.add_argument("--shot", metavar="FILE", help="also save a screenshot (or the --observe crop image) here")
 
@@ -1084,6 +1186,8 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--open", action="store_true")
 
     sp = add("script", cmd_script, "run Python inside the desktop with the GUI API (FILE, - or code)")
+    sp.epilog = SCRIPT_API
+    sp.formatter_class = argparse.RawDescriptionHelpFormatter
     sp.add_argument("code", help="a .py file, - for stdin, or Python code")
     sp.add_argument("--timeout", "-t", type=float, default=120.0)
 

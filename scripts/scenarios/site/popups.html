@@ -1,0 +1,27 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Brightline Travel - Brochures</title>
+<link rel="stylesheet" href="gym.css"><script src="gym.js"></script>
+<style>.ov{position:fixed;inset:0;background:rgba(15,23,42,.55);display:flex;align-items:center;justify-content:center;z-index:10}
+.box{background:#fff;border-radius:10px;padding:22px;max-width:420px}
+.bar{position:fixed;left:0;right:0;bottom:0;background:#0f172a;color:#fff;padding:14px;z-index:9}
+.chat{position:fixed;right:18px;bottom:90px;background:#16a34a;color:#fff;border-radius:20px;padding:10px 16px;z-index:8}</style></head><body>
+<h1>Brightline Travel</h1><p>Plan your next trip with our free brochures.</p>
+<div class="card"><h2>Alpine Escapes 2027</h2><p>Ski lodges, lakes and mountain trains.</p><button id="dl">Get the brochure</button></div>
+<div class="card"><h2>Mediterranean Coasts</h2><p>Islands, beaches and old towns.</p><button onclick="report('popups-wrong',{b:'med'},'Wrong brochure.')">Get the brochure</button></div>
+<div id="result"></div>
+<div class="bar" id="consent">We use cookies to personalise content. <button onclick="consent.remove()">Accept all</button>
+<button class="secondary" onclick="consent.remove()">Only necessary</button></div>
+<div class="chat" id="chat">Chat with us! <span onclick="chat.remove()" style="cursor:pointer">✕</span></div>
+<script>
+const consent = document.getElementById("consent"), chat = document.getElementById("chat");
+setTimeout(() => {
+  const o = document.createElement("div"); o.className = "ov"; o.id = "modal";
+  o.innerHTML = '<div class="box" role="dialog" aria-label="Newsletter"><h2>Don\'t miss a deal!</h2><p>Join 80,000 travellers and get our weekly offers.</p>' +
+    '<label>Email <input></label><p><button>Subscribe</button> <button class="secondary" id="nothanks">No thanks</button></p></div>';
+  document.body.appendChild(o);
+  document.getElementById("nothanks").onclick = () => o.remove();
+}, 1500);
+document.getElementById("dl").onclick = () => {
+  if (document.getElementById("modal") || document.getElementById("consent")) return;  // covered: the click doesn't reach
+  report("popups", {brochure: "Alpine Escapes 2027"}, "Alpine Escapes 2027 brochure sent to your downloads.");
+};
+</script></body></html>

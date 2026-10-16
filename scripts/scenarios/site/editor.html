@@ -1,0 +1,9 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Team blog - new post</title>
+<link rel="stylesheet" href="gym.css"><script src="gym.js"></script>
+<style>#ed{border:1px solid #cbd5e1;border-radius:8px;min-height:160px;padding:10px}</style></head><body>
+<h1>New blog post</h1><label>Title <input id="t" size="50"></label>
+<p><button class="secondary" onclick="document.execCommand('bold')"><b>B</b> Bold</button> <button class="secondary" onclick="document.execCommand('italic')"><i>I</i> Italic</button>
+<button class="secondary" onclick="document.execCommand('insertUnorderedList')">• List</button></p>
+<div id="ed" contenteditable="true" role="textbox" aria-multiline="true" aria-label="Post body"></div>
+<p><button id="pub">Publish</button></p><div id="result"></div>
+<script>document.getElementById("pub").onclick = () => report("editor", {title: document.getElementById("t").value, html: document.getElementById("ed").innerHTML}, "Published.");</script></body></html>

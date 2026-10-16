@@ -1,0 +1,11 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Draft editor</title>
+<link rel="stylesheet" href="gym.css"><script src="gym.js"></script>
+<style>.toast{position:fixed;top:16px;right:16px;background:#0f172a;color:#fff;padding:12px 16px;border-radius:8px}</style></head><body>
+<h1>New post</h1><label>Title <input id="t" size="40"></label><label>Body <textarea id="b" rows="5" cols="60"></textarea></label>
+<p><button id="s">Save draft</button></p>
+<script>
+document.getElementById("s").onclick = () => { const code = "D-" + (7000 + document.getElementById("t").value.length * 37);
+  const el = document.createElement("div"); el.className = "toast"; el.setAttribute("role", "status");
+  el.textContent = "Draft saved as " + code; document.body.appendChild(el); setTimeout(() => el.remove(), 2500);
+  report("toast", {code: code, title: document.getElementById("t").value}); document.getElementById("result") && 0; };
+</script></body></html>

@@ -1,0 +1,19 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Sprint board</title>
+<link rel="stylesheet" href="gym.css"><script src="gym.js"></script>
+<style>.cols{display:flex;gap:12px}.col{flex:1;background:#f1f5f9;border-radius:8px;padding:8px;min-height:260px}
+.item{background:#fff;border:1px solid #cbd5e1;border-radius:6px;padding:8px;margin:6px 0;cursor:grab}</style></head><body>
+<h1>Sprint board</h1><p class="muted">Drag cards between columns.</p>
+<div class="cols">
+<div class="col" data-col="To do"><h2>To do</h2><div class="item" draggable="true">Pay rent</div><div class="item" draggable="true">Book dentist</div><div class="item" draggable="true">Renew passport</div></div>
+<div class="col" data-col="In progress"><h2>In progress</h2><div class="item" draggable="true">Tax return</div></div>
+<div class="col" data-col="Done"><h2>Done</h2><div class="item" draggable="true">Car service</div></div></div>
+<div id="result"></div>
+<script>
+let dragged = null;
+function state() { const s = {}; document.querySelectorAll(".col").forEach(c => s[c.dataset.col] = [...c.querySelectorAll(".item")].map(i => i.textContent)); return s; }
+document.querySelectorAll(".item").forEach(i => i.addEventListener("dragstart", e => { dragged = i; e.dataTransfer.setData("text/plain", i.textContent); }));
+document.querySelectorAll(".col").forEach(c => {
+  c.addEventListener("dragover", e => e.preventDefault());
+  c.addEventListener("drop", e => { e.preventDefault(); if (dragged) { c.appendChild(dragged); dragged = null; report("kanban", state(), "Board saved: " + JSON.stringify(state())); } });
+});
+</script></body></html>

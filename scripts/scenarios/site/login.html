@@ -1,0 +1,10 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Harbor Bank - Sign in</title>
+<link rel="stylesheet" href="gym.css"><script src="gym.js"></script></head><body>
+<div id="in"><h1>Harbor Bank</h1><label>Customer ID <input id="u"></label><label>Password <input id="p" type="password"></label>
+<label><input type="checkbox" id="r"> Remember me</label><p><button id="b">Sign in</button></p><p id="err" style="color:#b91c1c"></p></div>
+<div id="home" hidden><h1>Welcome back, Dana</h1><table><tr><th>Account</th><th>Balance</th></tr><tr><td>Checking ••4410</td><td>$2,318.77</td></tr>
+<tr><td>Savings ••9031</td><td>$14,950.00</td></tr></table><h2>Recent activity</h2><ul><li>Oct 12 Grocery store -$84.20</li><li>Oct 11 Salary +$6,400.00</li><li>Oct 9 Electricity -$121.35</li></ul></div>
+<div id="result"></div>
+<script>let tries = 0; document.getElementById("b").onclick = () => { tries++;
+  if (u.value.trim() === "dana42" && p.value === "Harbor#2026") { document.getElementById("in").hidden = true; document.getElementById("home").hidden = false; report("login", {tries: tries, remember: r.checked}); }
+  else document.getElementById("err").textContent = "Customer ID or password is incorrect."; };</script></body></html>

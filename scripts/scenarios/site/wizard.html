@@ -1,0 +1,30 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Checkout - step by step</title>
+<link rel="stylesheet" href="gym.css"><script src="gym.js"></script></head><body>
+<h1>Checkout</h1><p class="muted" id="step">Step 1 of 3: Contact</p>
+<div id="s1"><label>Name <input id="name"></label><label>Email <input id="email"></label>
+<button onclick="go(2)">Next</button></div>
+<div id="s2" hidden><label>Street <input id="street"></label><label>City <input id="city"></label>
+<label>ZIP code <input id="zip" maxlength="10"></label><p id="zerr" style="color:#b91c1c"></p>
+<button class="secondary" onclick="go(1)">Back</button> <button onclick="go(3)">Next</button></div>
+<div id="s3" hidden><h2>Shipping</h2>
+<label><input type="radio" name="ship" value="Standard" checked> Standard (5-7 days, free)</label>
+<label><input type="radio" name="ship" value="Express"> Express (1-2 days, $15)</label>
+<div id="review" class="card"></div>
+<button class="secondary" onclick="go(2)">Back</button> <button onclick="place()">Place order</button></div>
+<div id="result"></div>
+<script>
+const $ = id => document.getElementById(id);
+function go(n) {
+  if (n === 3 && !/^\d{5}$/.test($("zip").value.trim())) { $("zerr").textContent = "ZIP code must be 5 digits."; return; }
+  $("zerr").textContent = "";
+  for (const i of [1, 2, 3]) $("s" + i).hidden = i !== n;
+  $("step").textContent = "Step " + n + " of 3: " + ["Contact", "Address", "Shipping and review"][n - 1];
+  if (n === 3) $("review").textContent = $("name").value + ", " + $("email").value + " - " + $("street").value + ", " + $("city").value + " " + $("zip").value;
+}
+function place() {
+  const d = {name: $("name").value, email: $("email").value, street: $("street").value, city: $("city").value,
+    zip: $("zip").value, shipping: document.querySelector("[name=ship]:checked").value};
+  $("s3").hidden = true;
+  report("wizard", d, "Order #48213 confirmed. Shipping: " + d.shipping + ".");
+}
+</script></body></html>

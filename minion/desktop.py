@@ -457,7 +457,7 @@ class Desktop:
     def act(
         self,
         *actions,
-        observe: str = "summary",
+        observe: str = "auto",
         screenshot: bool = False,
         see: bool = False,
         settle: bool = True,
@@ -481,7 +481,8 @@ class Desktop:
             **kw,
         }
         opens = any("open" in (a if isinstance(a, str) else json.dumps(a)) for a in flat)
-        res = self.call("act", params, timeout=300 + (INSTALL_TIME if opens else 0))  # `open` may install the app
+        typed = sum(len(a if isinstance(a, str) else json.dumps(a)) for a in flat)  # (typing at a person's pace)
+        res = self.call("act", params, timeout=300 + typed * 0.05 + (INSTALL_TIME if opens else 0))
         out = ActResult(
             ok=res["ok"],
             summary=res["summary"],

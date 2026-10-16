@@ -143,7 +143,22 @@ def install_app(app: dict, timeout: float = INSTALL_TIMEOUT) -> tuple[float, str
     targets = sources(app)
     if not app.get("apt"):
         targets = ["--name", install_name(app), *targets]
-    return install(targets, timeout)
+    took = install(targets, timeout)
+    configure(app)
+    return took
+
+
+def configure(app: dict) -> None:
+    """Write an app's settings files (e.g. no welcome dialog at every start) unless the user has their own."""
+    for path, text in (app.get("files") or {}).items():
+        target = Path(os.path.expanduser(path))
+        if target.exists():
+            continue
+        try:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(text)
+        except OSError:
+            pass
 
 
 def _runtime() -> Path:

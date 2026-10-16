@@ -1,0 +1,17 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Sign in to Quill</title>
+<link rel="stylesheet" href="gym.css"><script src="gym.js"></script></head><body>
+<h1>Sign in to Quill</h1>
+<p>By continuing you agree to the <a href="terms.html" target="_blank">Terms of Use</a>.</p>
+<p><label>Terms version you agree to <input id="ver" size="8"></label></p>
+<p><button id="sso">Continue with Single Sign-On</button></p><p>Account: <b id="acc">none</b></p>
+<p><button id="go">Finish sign-in</button></p><div id="result"></div>
+<script>
+let account = "";
+window.chooseAccount = a => { account = a; document.getElementById("acc").textContent = a; };
+document.getElementById("sso").onclick = () => window.open("accounts.html", "sso", "width=420,height=380");
+document.getElementById("go").onclick = () => {
+  const v = document.getElementById("ver").value.trim();
+  if (!account || !v) { document.getElementById("result").textContent = "Choose an account and enter the terms version."; return; }
+  report("newtab", {account: account, version: v}, "Signed in as " + account + " (terms " + v + ").");
+};
+</script></body></html>

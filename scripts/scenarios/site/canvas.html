@@ -1,0 +1,8 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Regional sales</title><link rel="stylesheet" href="gym.css"></head><body>
+<h1>Regional sales, 2026</h1><canvas id="c" width="760" height="380" aria-label="Sales chart"></canvas>
+<script>
+const d = [["North", 412], ["South", 287], ["East", 538], ["West", 365], ["Central", 199]], g = document.getElementById("c").getContext("2d");
+g.font = "16px DejaVu Sans"; g.fillStyle = "#0f172a"; g.fillText("Units sold (thousands)", 20, 24);
+d.forEach(([k, v], i) => { const x = 60 + i * 140, h = v * 0.55; g.fillStyle = ["#6366f1","#22c55e","#f97316","#06b6d4","#e11d48"][i];
+  g.fillRect(x, 340 - h, 80, h); g.fillStyle = "#0f172a"; g.fillText(k, x + 10, 362); g.fillText(String(v), x + 20, 334 - h); });
+</script></body></html>

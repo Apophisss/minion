@@ -79,11 +79,12 @@ brief.docx."* Every way to install is in [docs/install.md](docs/install.md).
   converts in one call (`convert report.docx pdf`).
 - **🧠 Agents read the screen as text.** `see` turns any window into a list of controls with **stable `@ids`**, taken
   from the accessibility tree with OCR as a fallback: `@12 button "Save" (210,62)`. Web pages, editors (with line
-  numbers), terminals, dropdowns with their options, and spreadsheets (`A1: value`) all come out as exact text.
+  numbers), terminals, dropdowns with their options, and spreadsheets (row by row: `row 2: A2 North · B2 120`) all come out as exact text.
   When pixels matter, screenshots can draw the `@ids` for you.
-- **🎯 Honest actions.** Every action waits for the screen to settle (and for web pages to load) and reports what
-  changed. Text targets must really be on screen: a miss fails with the closest candidates instead of clicking
-  something else.
+- **🎯 Honest actions.** Every action waits for the screen to settle (for web pages to load, and while an app says
+  "Loading…") and reports what happened: windows, a page's alert or prompt, files saved or downloaded, a pop-up that
+  took the click. Text targets must really be on screen: a miss fails with the closest candidates instead of
+  clicking something else. Tested on [93 everyday tasks](docs/scenarios.md) done by AI agents.
 - **🪙 Built to save tokens.** You get diffs instead of re-reads (`see(changes=true)`: about 60 tokens instead of
   about 900). **Code mode** runs a 50-step GUI loop in one call, crops and half-size screenshots cut image cost,
   a **compact mode** shrinks the tool definitions from about 2,100 tokens to 230, and the Agent Skill costs about

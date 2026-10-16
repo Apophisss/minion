@@ -1,0 +1,19 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Account settings</title>
+<link rel="stylesheet" href="gym.css"><script src="gym.js"></script></head><body>
+<h1>Account settings</h1>
+<div class="card"><h2>Display name</h2><p>Current: <b id="dn">user_4821</b></p><button id="rename">Change display name</button></div>
+<div class="card"><h2>Sessions</h2><button id="logout">Sign out of all devices</button></div>
+<div class="card"><h2>Danger zone</h2><button id="del">Delete account</button></div>
+<div id="result"></div>
+<script>
+const st = {};
+document.getElementById("rename").onclick = () => {
+  const v = prompt("Enter your new display name:", "");
+  if (v) { document.getElementById("dn").textContent = v; st.name = v; report("alerts", st, "Display name changed to " + v + "."); }
+};
+document.getElementById("logout").onclick = () => {
+  if (confirm("Sign out of all 3 devices?")) { st.logout = true; report("alerts", st, "Signed out of all devices."); }
+  else { st.logout = false; report("alerts", st, "Cancelled."); }
+};
+document.getElementById("del").onclick = () => { alert("Account deletion is disabled for this demo."); st.alerted = true; report("alerts", st); };
+</script></body></html>

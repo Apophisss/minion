@@ -17,6 +17,10 @@ you can use them instead. The ideas are the same (`desktop`, `see`, `act`, `scri
 
 ## Look: text first, because it is exact and cheap
 - `minion see` lists the windows, then the focused window's controls as `@id role "name" (x,y)`. Ids stay stable.
+  Tables come one row per line, toolbar buttons one row per line, and controls that share a label say where they
+  are (`@11 button "Reserve a seat" in "Session 40"`). A web form that goes on below the fold is listed to its end
+  ("The rest of the form…"): fill all of it in one `act`, since acting on an @id scrolls it into view.
+- A web page's alert/confirm/prompt dialog is listed first, with @ids for its field and buttons.
 - After your first look, use `minion see --changes`. It shows only what changed since your last look.
 - Text that accessibility doesn't have (slides, canvases, pictures of text, remote screens) is listed under
   "Text in the picture", read with OCR in the screen's language. `--ocr` also reads smaller pictures, and
@@ -24,19 +28,32 @@ you can use them instead. The ideas are the same (`desktop`, `see`, `act`, `scri
 - `--full` keeps long text whole. `--window TITLE` describes another window.
 - `minion see --menus` lists every menu command with its shortcut. An open right-click menu is listed first.
 - `minion read FILE` prints any document as text: docx, xlsx (values and formulas), pptx, pdf, odt, epub, html.
+  It also says what the text alone doesn't: bold cells, frozen panes, conditional formats and charts in a sheet;
+  tracked changes, comments, images and page setup in a docx.
+- `minion scroll-to "Entry 87"` (or `find`) brings text into view wherever it is on a long page or list, loading
+  more of an endless feed until it shows up, and prints the element it found.
 - `minion shot -o /tmp/s.png --marks` takes a screenshot with the @ids drawn on it. Read the file to view it.
   Use it only when layout or images matter. `--region x,y,w,h` crops it.
 
 ## Act: a target is @12 (best), exact visible text ("Save"), a kind and a label (button:Save, link:Docs), or x,y
 - `minion click @12` · `minion type "hello" --enter` · `minion key ctrl+s` · `minion fill "Name" "q3.xlsx"`
-- `minion select @14 "Title"` picks a dropdown option (`see` lists each dropdown's value and options).
+- `minion select @14 "Title"` picks a dropdown option (`see` lists each dropdown's value and options), and in an
+  autocomplete field it types the text and clicks the matching suggestion. `minion fill @9 70` sets a slider, and
+  `minion fill @21 2027-03-15` a date field.
 - `minion menu "File > Export As > Export as PDF..."` runs any menu command, without opening the menus.
 - In an Open/Save/Export dialog, `minion path ~/Documents/out.pdf` types the full path and confirms
   (`--overwrite` replaces an existing file). That's easier than clicking through folders.
 - `minion scroll down 5` · `minion drag @3 @9` · `minion wait-for "Saved"` (wait for text, not for time)
-- Batch steps into one call: `minion act "click @3" "type hello\n" "key Tab Tab Return" --observe changes`.
-  In act steps, `\n` is Return and `\t` is Tab (write `\\` for a backslash).
-- Each action reports what changed (new windows, focus, the changed region), so you often don't need another look.
+- Batch steps into one call: `minion act "click @3" "type hello\n" "key Tab Tab Return"`.
+  In act steps, `\n` is Return and `\t` is Tab (write `\\` for a backslash). `wait_for "Done" 60` waits up to 60 s,
+  `wait_for Loading --gone` until the text is gone. `rclick`, `dclick`, `scroll_to TEXT`, `goto URL` (in the current
+  tab), `close [WINDOW]` and `copy @12` (an element's whole text to the clipboard, so `key ctrl+v` pastes it
+  elsewhere) work as steps too. A step can name a control by its text before it exists ("click Next" "fill Street
+  '5 Herzl St'"): a text target waits a moment for it to appear. If a pop-up takes a click, the batch stops and says so.
+- Each action reports what changed: new windows, focus, a page's dialog, and files saved, downloaded or deleted
+  ("new file ~/Downloads/report.csv (12 KB)"). When it takes you somewhere (a new page or window, a dialog), or the
+  app showed "Loading…"/"Generating…" (it waits that out), the reply includes what is on screen now, so you rarely
+  need another look. `--observe changes|see|summary` asks for more or less.
 - A text target must match exactly. If nothing on screen does, a control scrolled out of view is scrolled into
   view; otherwise the action fails and suggests close matches with their @ids.
 - Keyboard shortcuts are the most reliable: `ctrl+l` (address bar), `ctrl+s`, `alt+Left`, `ctrl+Tab`, `F5`.
@@ -63,8 +80,10 @@ key("Right")` (see() reads each page, OCR included, and a page that hasn't chang
 ## Shell and files
 - `minion run "CMD"` runs a shell command in the desktop, and `sudo` works. Prefer it for files and data.
 - `minion convert ~/report.docx pdf` converts documents (pdf, docx, xlsx, csv, pptx, png, md), even while
-  LibreOffice is open.
-- Install anything: `minion run "minion-install gimp https://example.com/app.AppImage pip:yt-dlp npm:serve"`.
+  LibreOffice is open. Give a file name to name the result (`minion convert ~/a.csv ~/b.xlsx`), or several files
+  to convert them all.
+- Install anything: `minion run "minion-install gimp https://example.com/app.AppImage pip:yt-dlp npm:serve"`
+  (a `pip:` library is importable from `python3` too).
 - `minion cp report.pdf :~/Documents/` copies a file in. `minion cp :~/out.xlsx .` copies a file out.
 
 ## People, safety, cleanup

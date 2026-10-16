@@ -242,7 +242,7 @@ class XInput:
     def _move_args(self, x: int, y: int) -> list[str]:
         """xdotool arguments that put the pointer at (x, y) and wait until it is there. None when it is
         there already: --sync would then wait ~15 s for a move that never happens."""
-        x, y = int(x), int(y)
+        x, y = max(0, int(x)), max(0, int(y))  # (xdotool reads "-26" as an option: never pass a negative point)
         try:
             if self.position() == (x, y):
                 return []
@@ -291,17 +291,36 @@ class XInput:
         for m in modifiers or []:
             self._xdo("keydown", m)
         try:
+            # Hover first: a browser starts a drag only from an element the pointer has been seen over.
+            self.move(x1 + 3, y1)
+            time.sleep(0.08)
             self.move(x1, y1)
+            time.sleep(0.15)
             self._xdo("mousedown", b)
-            time.sleep(0.05)
+            time.sleep(0.12)
             last = (int(x1), int(y1))
-            for i in range(1, steps + 1):
-                point = (round(x1 + (x2 - x1) * i / steps), round(y1 + (y2 - y1) * i / steps))
+
+            def to(px: float, py: float, pause: float) -> None:
+                nonlocal last
+                point = (max(0, round(px)), max(0, round(py)))
                 if point != last:  # short drags repeat points, and --sync waits for a real move
                     self._xdo("mousemove", "--sync", str(point[0]), str(point[1]))
                     last = point
-                time.sleep(0.012)
-            time.sleep(0.05)
+                time.sleep(pause)
+
+            # Start slowly: toolkits wait for the pointer to pass a threshold, and a web page's drag-and-drop
+            # only begins with the dragstart that follows; a fast first move loses the whole drag.
+            dist = max(1.0, ((x2 - x1) ** 2 + (y2 - y1) ** 2) ** 0.5)
+            for k in (3, 6, 10):
+                if k < dist:
+                    to(x1 + (x2 - x1) * k / dist, y1 + (y2 - y1) * k / dist, 0.04)
+            time.sleep(0.08)
+            for i in range(1, steps + 1):
+                to(x1 + (x2 - x1) * i / steps, y1 + (y2 - y1) * i / steps, 0.02)
+            if dist >= 20:  # (a long drag: onto a drop target, which needs its dragover events before the drop)
+                for ox in (2, -2, 0):
+                    to(x2 + ox, y2, 0.05)
+                time.sleep(0.1)
             self._xdo("mouseup", b)
         finally:
             for m in reversed(modifiers or []):
@@ -346,7 +365,9 @@ class XInput:
         self._xdo("keyup", "--", keys)
         return keys
 
-    def type(self, text: str, delay_ms: int = 8) -> None:
+    def type(self, text: str, delay_ms: int = 8, key_pause: float = 0.0, repeat_pause: float = 0.0) -> None:
+        """Type text. key_pause waits after each Tab and Return; repeat_pause between two equal characters
+        ("00", "ll"), which some apps take for one held key and drop (a calculator turns 7006652 into 70652)."""
         if not text:
             return
         # Newlines and tabs become real Return/Tab key presses (xdotool would send
@@ -356,10 +377,33 @@ class XInput:
         for token in re.split(r"(\n|\t)", text):
             if token == "\n":
                 self._xdo("key", "--clearmodifiers", "Return")
+                time.sleep(key_pause)
             elif token == "\t":
                 self._xdo("key", "--clearmodifiers", "Tab")
+                time.sleep(key_pause)
             elif token:
-                for i in range(0, len(token), 200):
-                    part = token[i : i + 200]
-                    timeout = 30 + len(part) * (delay_ms + 30) / 1000
-                    self._xdo("type", "--clearmodifiers", "--delay", str(int(delay_ms)), "--", part, timeout=timeout)
+                runs = [token]
+                if repeat_pause:
+                    # Split between equal neighbours ("7006652" -> "70", "06", "652") and after operators ("12*",
+                    # "2="): an app that works on a key (a calculator on "*") drops the keys that follow too soon.
+                    runs, rest = [], token
+                    while rest:
+                        cut = next(
+                            (
+                                k
+                                for k in range(1, len(rest))
+                                if (rest[k] == rest[k - 1] and rest[k].isdigit()) or rest[k - 1] in "+-*/=%^"
+                            ),
+                            len(rest),
+                        )
+                        runs.append(rest[:cut])
+                        rest = rest[cut:]
+                for n, run in enumerate(runs):
+                    if n:
+                        time.sleep(repeat_pause)
+                    for i in range(0, len(run), 200):
+                        part = run[i : i + 200]
+                        timeout = 30 + len(part) * (delay_ms + 30) / 1000
+                        self._xdo(
+                            "type", "--clearmodifiers", "--delay", str(int(delay_ms)), "--", part, timeout=timeout
+                        )

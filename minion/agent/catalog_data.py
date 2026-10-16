@@ -213,7 +213,8 @@ APPS: list[dict] = [
         "aliases": ["gimp-3", "gnu image manipulation program"],
         "apt": ["gimp"],
         "command": "gimp",
-        "tips": "First start shows a Welcome dialog: Escape closes it. ctrl+shift+e Export As (PNG/JPG; ctrl+s saves .xcf only), ctrl+shift+v paste as new image, "
+        "files": {"~/.config/GIMP/3.0/gimprc": "(show-welcome-dialog no)\n(save-session-info no)\n"},
+        "tips": "ctrl+shift+e Export As (PNG/JPG; ctrl+s saves .xcf only), ctrl+shift+v paste as new image, "
         "ctrl+shift+j fit in window, shift+c crop, t text, Image > Scale Image. Batch: magick in.png "
         "-resize 50% out.jpg (minion-install imagemagick).",
         "size_mb": 90,
@@ -576,7 +577,8 @@ APPS: list[dict] = [
         "aliases": [],
         "apt": ["geany"],
         "command": "geany",
-        "tips": "ctrl+e toggle comment, ctrl+l go to line, ctrl+h replace, F8 compile, F9 build, F5 run.",
+        "tips": "ctrl+e toggle comment, ctrl+l puts the cursor in the toolbar's line box (type a number, Return), "
+        "ctrl+h replace, F8 compile, F9 build, F5 run.",
         "size_mb": 15,
     },
     {

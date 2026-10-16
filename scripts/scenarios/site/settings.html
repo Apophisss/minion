@@ -1,0 +1,20 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Preferences</title>
+<link rel="stylesheet" href="gym.css"><script src="gym.js"></script>
+<style>.sw{display:inline-block;width:44px;height:24px;border-radius:12px;background:#cbd5e1;position:relative;vertical-align:middle;cursor:pointer}
+.sw[aria-checked=true]{background:#4f46e5}.sw::after{content:"";position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:#fff}
+.sw[aria-checked=true]::after{left:23px}.row{display:flex;justify-content:space-between;align-items:center;max-width:420px;margin:10px 0}</style></head><body>
+<h1>Preferences</h1>
+<div class="row"><span id="l1">Dark mode</span><span class="sw" role="switch" tabindex="0" aria-checked="false" aria-labelledby="l1"></span></div>
+<div class="row"><span id="l2">Email notifications</span><span class="sw" role="switch" tabindex="0" aria-checked="true" aria-labelledby="l2"></span></div>
+<div class="row"><span id="l3">Autoplay videos</span><span class="sw" role="switch" tabindex="0" aria-checked="true" aria-labelledby="l3"></span></div>
+<div class="row"><label for="vol" style="margin:0">Volume</label><input id="vol" type="range" min="0" max="100" value="30"> <output id="vo">30</output></div>
+<div class="row"><span>Language</span><div role="radiogroup" aria-label="Language"><button class="secondary" role="radio" aria-checked="true">English</button> <button class="secondary" role="radio" aria-checked="false">Español</button> <button class="secondary" role="radio" aria-checked="false">Deutsch</button></div></div>
+<p><button id="save">Save preferences</button></p><div id="result"></div>
+<script>
+document.querySelectorAll(".sw").forEach(s => { const t = () => s.setAttribute("aria-checked", s.getAttribute("aria-checked") !== "true");
+  s.onclick = t; s.onkeydown = e => { if (e.key === " " || e.key === "Enter") { t(); e.preventDefault(); } }; });
+document.querySelectorAll("[role=radio]").forEach(r => r.onclick = () => document.querySelectorAll("[role=radio]").forEach(x => x.setAttribute("aria-checked", x === r)));
+const vol = document.getElementById("vol"); vol.oninput = () => document.getElementById("vo").textContent = vol.value;
+document.getElementById("save").onclick = () => { const d = {}; document.querySelectorAll(".sw").forEach(s => d[document.getElementById(s.getAttribute("aria-labelledby")).textContent] = s.getAttribute("aria-checked") === "true");
+  d.Volume = Number(vol.value); d.Language = document.querySelector("[role=radio][aria-checked=true]").textContent; report("settings", d, "Preferences saved."); };
+</script></body></html>

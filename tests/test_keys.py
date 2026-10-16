@@ -73,5 +73,8 @@ def test_pointer_moves_never_wait_for_a_move_that_cannot_happen():
     assert xi.calls == [("click", "--repeat", "2", "--delay", "25", "5")]
     xi.calls.clear()
     xi.drag(140, 100, 143, 100)  # 12 steps over 3 px: no repeated points
-    moves = [c for c in xi.calls if c[0] == "mousemove"]
+    down = xi.calls.index(("mousedown", "1"))
+    hover = [c[2:] for c in xi.calls[:down] if c[0] == "mousemove"]
+    assert hover == [("143", "100"), ("140", "100")]  # over the element first, then back on its spot
+    moves = [c for c in xi.calls[down:] if c[0] == "mousemove"]
     assert [c[2:] for c in moves] == [("141", "100"), ("142", "100"), ("143", "100")]

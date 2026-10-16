@@ -1,0 +1,8 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Conference sessions</title>
+<link rel="stylesheet" href="gym.css"><script src="gym.js"></script></head><body><h1>Conference sessions</h1><div id="all"></div><div id="result"></div>
+<script>
+const T = ["Scaling Postgres","Design systems","Rust in production","Edge caching","LLM evaluation","Accessibility audits","Incident reviews","Mobile performance","Data contracts","Zero-trust networks"];
+let h = ""; for (let i = 1; i <= 50; i++) h += `<div class="card"><h2>Session ${i}: ${T[i % 10]} ${Math.ceil(i / 10)}</h2><p class="muted">Room ${100 + i}, ${9 + (i % 8)}:00</p><p>Speakers discuss practical lessons and answer questions.</p><button data-s="${i}">Reserve a seat</button></div>`;
+document.getElementById("all").innerHTML = h;
+document.querySelectorAll("button[data-s]").forEach(b => b.onclick = () => { const s = b.dataset.s; b.textContent = "Reserved"; report("long", {session: Number(s)}, "Seat reserved in session " + s + "."); });
+</script></body></html>

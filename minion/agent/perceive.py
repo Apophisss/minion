@@ -41,6 +41,7 @@ def _within(box: tuple, region: tuple) -> tuple[int, int, int, int]:
 
 
 PICTURE_ROLES = {"image", "image map", "canvas", "graphic", "figure", "video", "embedded"}
+TEXT_HOLDERS = {"terminal", "text", "entry", "password text", "document text", "paragraph"}
 
 
 def _below_toolbar(elements, region: tuple) -> tuple:
@@ -52,6 +53,18 @@ def _below_toolbar(elements, region: tuple) -> tuple:
     return _within((region[0], top, region[2], region[1] + region[3] - top), region)
 
 
+def _overlaps_picture(box: tuple, elements) -> bool:
+    x, y, w, h = box
+    for e in elements:
+        if e.role not in PICTURE_ROLES or not e.w or not e.h:
+            continue
+        ix = max(0, min(x + w, e.x + e.w) - max(x, e.x))
+        iy = max(0, min(y + h, e.y + e.h) - max(y, e.y))
+        if ix * iy >= 0.5 * min(w * h, e.w * e.h):
+            return True
+    return False
+
+
 def _inside(point: tuple[int, int], boxes: list) -> bool:
     return any(x <= point[0] < x + w and y <= point[1] < y + h for x, y, w, h in boxes)
 
@@ -60,6 +73,14 @@ def _worth_reading(line) -> bool:
     """Text from a picture, not a smudge: logos and icons read as "Vv" or "WY"."""
     letters = sum(ch.isalnum() for ch in line.text)
     return letters >= 3 or (letters == 2 and line.conf >= 85)
+
+
+def _clear(line) -> bool:
+    """Words OCR is sure of: confident, mostly letters, a real word in it ("Total due", not "oO. Bp," or "/ io 2 8")."""
+    text = line.text.replace(" ", "")
+    letters = sum(ch.isalpha() for ch in text)
+    word = re.search(r"[^\W\d_]{3,}", line.text)
+    return line.conf >= 70 and letters >= 4 and letters >= 0.6 * len(text) and word is not None
 
 
 @dataclass
@@ -88,6 +109,8 @@ def _changed_lines(old_block, new_block, limit: int = 15) -> list[str]:
         return []
     role, new = new_block
     old = old_block[1] if old_block else ()
+    if role == "table":  # (filtered, sorted, paged: rows that only moved matter as much as new ones)
+        return list(new[:30]) + ([f"… {len(new) - 30} more rows"] if len(new) > 30 else [])
     if role == "terminal":
         overlap = 0  # the longest end of the old screen that starts the new one (scrolled output)
         for k in range(min(len(old), len(new)), 0, -1):
@@ -105,12 +128,23 @@ def _changed_lines(old_block, new_block, limit: int = 15) -> list[str]:
     return out[:limit]
 
 
+_BUTTONS = {"push button", "toggle button", "button", "split button", "menu button"}
+
+
+def _quoted_and_states(line: str) -> str:
+    """'@12 toggle button "Bold" [checked] (300,40)' -> '"Bold" [checked]'."""
+    m = re.search(r'("(?:[^"\\]|\\.)*")(\s*\[[^\]]*\])?', line)
+    return (m.group(1) + (m.group(2) or "")) if m else line
+
+
 def _same_content(a: tuple, b: tuple) -> bool:
     """Equal, ignoring how much of a long text was shown (a normal look vs. a full_text look)."""
     if a == b:
         return True
     if len(a) != len(b) or a[:2] != b[:2] or a[3:] != b[3:]:
         return False
+    if not (a[2] or "").endswith("…") and not (b[2] or "").endswith("…"):
+        return False  # neither was cut short: a terminal's or an editor's text grew, that is a change
     ta, tb = (a[2] or "").rstrip("…"), (b[2] or "").rstrip("…")
     return ta.startswith(tb) or tb.startswith(ta)
 
@@ -134,11 +168,14 @@ ROLE_FAMILIES = {
     "dropdown": {"combo box", "list box"},
     "image": {"image", "icon"},
     "slider": {"slider"},
+    "toggle": {"toggle button", "switch", "check box"},
+    "switch": {"toggle button", "switch", "check box"},
 }
 ROLE_WORDS = {
     **{w: w for w in ROLE_FAMILIES},
     **dict.fromkeys(("entry", "input", "textbox", "text box", "text field", "box"), "field"),
     **dict.fromkeys(("check", "check box"), "checkbox"),
+    **dict.fromkeys(("toggle button", "switch button"), "toggle"),
     **dict.fromkeys(("radio button", "option button"), "radio"),
     **dict.fromkeys(("menu item", "menuitem"), "menu"),
     **dict.fromkeys(("combo", "combobox", "combo box", "select", "list box"), "dropdown"),
@@ -266,6 +303,8 @@ class Perception:
     @staticmethod
     def _alt_key(el) -> tuple:
         label = el.label() if hasattr(el, "label") else getattr(el, "text", "")
+        if getattr(el, "role", "") in a11y.TEXT_INPUT:
+            label = el.name  # a field is the same field whatever it holds (LibreOffice's Find box: "", "14%")
         cx, cy = el.center
         return (getattr(el, "role", "ocr"), (label or "")[:40], cx // 10, cy // 10)
 
@@ -276,8 +315,10 @@ class Perception:
             key = self._key(el)
             eid = self._ids.get(key)
             if eid is None:
-                # Some apps (LibreOffice) recreate a control's node: same role, label and place = same id.
-                old = self._alt_ids.get(self._alt_key(el))
+                # Some apps (LibreOffice) recreate a control's node: same role, label and place = same id. Not in
+                # a web page, whose nodes last: there, after a scroll, another "Reserve a seat" button can sit where
+                # the old one was, and must not take its id.
+                old = None if getattr(el, "in_doc", False) else self._alt_ids.get(self._alt_key(el))
                 if old is not None and old not in used:
                     eid = old
                 else:
@@ -363,10 +404,16 @@ class Perception:
                     area = region[2] * region[3]
                     # Containers (most of the window) don't count as covering anything.
                     # An image's name is its file or alt text, not the text in it: images don't cover anything.
+                    # The boxes come from before compaction: a label that only repeats its field isn't listed,
+                    # but its text is known.
+                    boxes = (snap.boxes if snap and snap.boxes else []) + [
+                        (e.x, e.y, e.w, e.h, e.role) for e in elements if e.name or e.text
+                    ]
+                    # A terminal or an editor holds its text as text, however big it is: never read it again.
                     covered = [
-                        (e.x, e.y, e.w, e.h)
-                        for e in elements
-                        if (e.name or e.text) and e.w * e.h < area / 2 and e.role not in PICTURE_ROLES
+                        (x, y, w, h)
+                        for x, y, w, h, role in boxes
+                        if (w * h < area / 2 or (role in TEXT_HOLDERS and not forced)) and role not in PICTURE_ROLES
                     ]
                     # In a browser only the page counts, not its tabs and toolbar.
                     look = _within(snap.content, region) if snap and snap.content else _below_toolbar(elements, region)
@@ -389,19 +436,37 @@ class Perception:
                             x, y, w, h = box[0] - region[0], box[1] - region[1], box[2], box[3]
                             part = ocr_mod.mask(img.crop((x, y, x + w, y + h)), covered, box[:2])
                             part, (tx, ty) = ocr_mod.trim(part)
-                            lines = ocr_mod.read(part, langs, offset=(box[0] + tx, box[1] + ty))
-                            # Text accessibility already gives (a button over a slide) isn't repeated.
-                            fresh = [ln for ln in lines if _worth_reading(ln) and not _inside(ln.center, covered)]
+                            lines = ocr_mod.read(part, langs, offset=(box[0] + tx, box[1] + ty), ui=whole)
+                            # Text accessibility already gives (a button over a slide) isn't repeated. In an app
+                            # that describes itself well (GIMP's docks, a page with photos), a picture's stray
+                            # marks are noise: only clear words are kept, unless OCR was asked for.
+                            strict = not forced and useful >= 15
+                            fresh = [
+                                ln
+                                for ln in lines
+                                if _worth_reading(ln) and not _inside(ln.center, covered) and (not strict or _clear(ln))
+                            ]
                             pictures.append((box, fresh, whole))
                 except Exception as e:  # OCR is best-effort
                     ocr_note = f"OCR failed: {e}"
         ocr_refs = []
         for n, (_box, lines, _whole) in enumerate(pictures):
             ocr_refs += [OcrRef(0, ln.text, ln.x, ln.y, ln.w, ln.h, kind="pic", region=n) for ln in lines]
+        # A form that goes on below the fold: list the rest of its fields too, so it can be filled in one go.
+        offscreen, more = [], 0
+        if register and snap is not None and snap.content and aw is not None:
+            # (two fields to type into make a form; a page's settings radios don't)
+            fields = [e for e in elements if e.in_doc and not e.modal and e.role in a11y.TEXT_INPUT - {"terminal"}]
+            if len(fields) >= 2:
+                try:
+                    offscreen, more = a11y.offscreen_controls(aw, elements)
+                except Exception:
+                    offscreen, more = [], 0
         if register:
-            self._assign(list(elements) + ocr_refs)
+            self._assign(list(elements) + ocr_refs + offscreen)
             fresh = {el.id: el for el in elements}
             fresh.update({r.id: r for r in ocr_refs})
+            fresh.update({el.id: el for el in offscreen})
             keep = {
                 i: e for i, e in self.registry.items() if i not in fresh and self._look - self._reg_look.get(i, 0) <= 2
             }
@@ -416,6 +481,21 @@ class Perception:
         full = self._compose(
             (sw, sh), wins, where, elements, ocr_refs, snap, a11y_note, ocr_note, want_ocr or bool(pictures), pictures
         )
+        if offscreen:
+            full += "\n\nThe rest of the form, scrolled out of view (an action on an @id scrolls to it):"
+            line = " "
+            for el in offscreen:
+                part = f" @{el.id} {el.role} {a11y._q(el.label()[:60])}" + (
+                    f" [{', '.join(el.states)}]" if el.states else ""
+                )
+                part += f" in {a11y._q(el.context)}" if el.context else ""
+                if len(line) + len(part) > 160 and line.strip():
+                    full += "\n" + line.rstrip()
+                    line = " "
+                line += (" ·" if line.strip() else "") + part
+            full += "\n" + line.rstrip()
+            if more > len(offscreen):
+                full += f"\n  … and {more - len(offscreen)} more (scroll down and look)"
         view = self._view(wins, target, elements, ocr_refs)
         text = full
         diff = None
@@ -440,7 +520,7 @@ class Perception:
             "screen": [sw, sh],
             "windows": [w.to_dict() for w in wins],
             "focused": target.to_dict() if target else None,
-            "elements": [e.to_dict() for e in elements],
+            "elements": [e.to_dict() for e in elements] + [{**e.to_dict(), "offscreen": True} for e in offscreen],
             "ocr": [
                 {"id": f"@{r.id}", "text": r.text, "x": r.center[0], "y": r.center[1], "box": [r.x, r.y, r.w, r.h]}
                 for r in ocr_refs
@@ -482,7 +562,9 @@ class Perception:
                 for r in refs:
                     cx, cy = r.center
                     out.append(f'  @{r.id} "{r.text}" ({cx},{cy})')
-            elif not whole:
+            elif not whole and _overlaps_picture(box, elements):
+                # Only for a real picture (a photo, a chart without labels): an empty stretch of a page whose
+                # edges looked like one is not worth a word.
                 out.append(
                     f"(A picture at {x},{y} {w}x{h} has no text OCR could read. If it matters, look at just it:"
                     f" screenshot region={x},{y},{w},{h}.)"
@@ -498,9 +580,14 @@ class Perception:
     @staticmethod
     def _view(wins, target, elements, ocr_refs) -> dict:
         items = {}
-        for el in elements:
+        where = a11y._contexts(elements)  # (a new "Approve" button says which claim it is in, here too)
+        for k, el in enumerate(elements):
+            if el.inline:  # a table's cells change with their table's rows
+                continue
             cx, cy = el.center
             line = a11y.format_elements([el])[0].strip()
+            if k in where:
+                line += f" in {a11y._q(where[k])}"
             block = (el.role, tuple(el.lines)) if el.lines else None
             items[el.id] = ((el.role, el.name, el.text, el.value, tuple(el.states)), (cx // 6, cy // 6), line, block)
         for r in ocr_refs:
@@ -517,6 +604,10 @@ class Perception:
     def _diff(old: dict, new: dict) -> dict:
         """What changed between two looks; {"full": reason} when the full view is the better answer."""
         if old.get("focused") != new.get("focused"):
+            if not new.get("windows"):
+                return {"full": "no window is open now"}
+            if old.get("focused") not in new.get("windows", {}):
+                return {"full": "the window you looked at last is closed"}
             return {"full": "another window is in front"}
         o, n = dict(old["items"]), dict(new["items"])
         if any(v[0][0] != "ocr" for v in n.values()) and any(v[0][0] != "ocr" for v in o.values()):
@@ -525,7 +616,7 @@ class Perception:
             n = {k: v for k, v in n.items() if v[0][0] != "ocr"}
         added = [i for i in n if i not in o]
         removed = [i for i in o if i not in n]
-        changed = [i for i in n if i in o and not _same_content(o[i][0], n[i][0])]
+        changed = [i for i in n if i in o and (not _same_content(o[i][0], n[i][0]) or (n[i][3] and n[i][3] != o[i][3]))]
         moved = [i for i in n if i in o and i not in changed and o[i][1] != n[i][1]]
         if len(added) + len(changed) > max(25, 0.6 * max(1, len(n))):
             return {"full": "most of the screen changed"}
@@ -541,6 +632,19 @@ class Perception:
                 lines.append(f'  window closed: "{title}"')
         for i in added:
             lines.append("  + " + n[i][2])
+            if n[i][3]:  # new text (a message, a result, a terminal's output): show it, not just its box
+                role, body = n[i][3]
+                for k, ln in enumerate(body[:30], 1):
+                    lines.append(f"      {k:>4}  {ln}" if role not in ("terminal", "table") else f"      {ln}")
+                if len(body) > 30:
+                    lines.append(f"      … {len(body) - 30} more lines (see --full)")
+        # A word processor's toolbar follows the cursor (Bold, Align Left, Undo...): its buttons' new states fit on one
+        # line instead of dozens.
+        flips = [i for i in changed if n[i][0][0] in _BUTTONS and not n[i][3]]
+        if len(flips) >= 4:
+            changed = [i for i in changed if i not in flips]
+            parts = [_COORDS.sub("", n[i][2]).split(" ", 1)[0] + " " + _quoted_and_states(n[i][2]) for i in flips]
+            lines.append("  ~ buttons: " + " · ".join(parts))
         for i in changed:
             lines.append("  ~ " + n[i][2])
             lines.extend("      " + ln for ln in _changed_lines(o[i][3], n[i][3]))
@@ -588,7 +692,20 @@ class Perception:
             return self._ref(int(m.group(1)))
         if not allow_text:
             raise TargetError(f"expected coordinates or @id, got {s!r}")
-        return self._text(s, prefer_input)
+        # A control named in a batch may not be there yet: a wizard's next step, a dialog a click opens, a page
+        # still drawing. Give it a moment before calling it missing (as a person would look again).
+        deadline = time.monotonic() + 2.5
+        while True:
+            try:
+                return self._text(s, prefer_input)
+            except TargetError as e:
+                if time.monotonic() >= deadline or not str(e).startswith(
+                    ("no visible element", "no control is", "no ")
+                ):
+                    raise
+                if " is labeled exactly" not in str(e) and "matches" not in str(e):
+                    raise
+                time.sleep(0.4)
 
     def _point(self, x, y) -> Target:
         try:
@@ -615,7 +732,13 @@ class Perception:
         self._sync_coords()
         box = a11y.refresh(el)
         if box is None:
-            raise TargetError(f'@{rid} ({el.role} "{el.label()}") is gone: call `see` again')
+            # A page that redraws (React, a list that re-renders) replaces its elements: the same control, new
+            # node. If exactly one control with that role and label is near where it was, that is it.
+            again = self._refind(el)
+            if again is None:
+                raise TargetError(f'@{rid} ({el.role} "{el.label()}") is gone: call `see` again')
+            self.registry[rid] = el = again
+            box = a11y.refresh(el) or (el.x, el.y, el.w, el.h)
         x, y, w, h = box
         sw, sh = self.size
         if w > 0 and h > 0 and (x + w <= 0 or y + h <= 0 or x >= sw or y >= sh):
@@ -765,6 +888,32 @@ class Perception:
             t.desc += f" (first of {len(ties) + 1} matches; use @id to pick another)"
         return t
 
+    def _refind(self, old):
+        """The control that took the place of `old` after a redraw: same role and label, the only one near."""
+        label = " ".join((old.label() or "").split()).casefold()
+        if not label or not a11y.AVAILABLE or getattr(old, "in_doc", False):
+            # (never on a web page: after a row's "Delete" removed it, the next row's "Delete" can slide into its
+            # place, and it must not get the click)
+            return None
+        try:
+            focused = self.windows.focused()
+        except Exception:
+            return None
+        aw = a11y.window_for(focused) if focused is not None else None
+        if aw is None:
+            return None
+        time.sleep(0.3)  # (let the redraw finish)
+        sw, sh = self.size
+        snap = a11y.snapshot(aw, max_elements=600, budget=1.5, screen=(sw, sh))
+        same = [
+            e
+            for e in snap.elements
+            if e.role == old.role and not e.in_doc and " ".join(e.label().split()).casefold() == label
+        ]
+        ox, oy = old.center  # (an app that recreated the control, LibreOffice: same role, label and place)
+        near = [e for e in same if abs(e.center[0] - ox) <= 40 and abs(e.center[1] - oy) <= 40]
+        return near[0] if len(near) == 1 else None
+
     def _offscreen(self, query: str, prefer_input: bool = False) -> Target | None:
         """A control labeled exactly `query` that is scrolled out of view (a long form, a long page):
         scroll it into view and return where it is now."""
@@ -814,6 +963,23 @@ class Perception:
             best.desc += f" (first of {len(ties) + 1} matches; use @id to pick another)"
         return best
 
+    def _below(self, query: str) -> str:
+        """Where `query` is in the focused window but scrolled out of view, or ""."""
+        if not a11y.AVAILABLE:
+            return ""
+        try:
+            focused = self.windows.focused()
+        except Exception:
+            return ""
+        aw = a11y.window_for(focused) if focused is not None else None
+        if aw is None:
+            return ""
+        found, _, _ = a11y.search(aw, query, budget=1.0, words=True)  # ("Saved" is not in "Unsaved changes")
+        if found is None:
+            return ""
+        label = " ".join((found.label() or "").split())[:60]
+        return f'{found.role} "{label}", out of view (scroll_to "{query}" brings it into view)'
+
     def _visible_text(self, query: str) -> str:
         """Where the accessibility tree shows `query` as whole words (any element's name, text, value, or
         its editor/terminal lines), or ""."""
@@ -825,7 +991,8 @@ class Perception:
             return ""
         sw, sh = self.size
         q = _norm(query)
-        for el in a11y.snapshot(aw, max_elements=600, budget=2.5, screen=(sw, sh)).elements:
+        # Long paragraphs whole (a look clips them): the text may be anywhere in one.
+        for el in a11y.snapshot(aw, max_elements=600, budget=2.5, screen=(sw, sh), text_limit=4000).elements:
             for hay in (el.name, el.text, el.value, "\n".join(el.lines or [])):
                 if hay and _bounded(_norm(hay), q):
                     label = el.label()
@@ -880,6 +1047,8 @@ class Perception:
                 if gone or (tries % 3 == 1 and not late):
                     found = self.find_text(query, use_ocr=True, min_score=WAIT_MIN)
                     where = found[0][1].desc if found else ""
+                if not where and not gone and tries % 3 == 2:
+                    where = self._below(query)  # there, but further down the page
             if bool(where) != gone:
                 return True, time.monotonic() - start, where
             if time.monotonic() - start >= timeout:

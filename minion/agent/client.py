@@ -49,6 +49,9 @@ __all__ = [
     "convert",
     "wait",
     "wait_for",
+    "scroll_to",
+    "close",
+    "copy",
     "launch",
     "run",
     "screenshot",
@@ -147,7 +150,8 @@ def cells() -> dict[str, str]:
 # -- acting -----------------------------------------------------------------------
 def act(*actions, check: bool = True) -> str:
     """Run actions ({"click": "@3"} or "click @3" strings) and return the summary."""
-    res = _call("act", {"actions": list(actions)})
+    # (a script looks, and waits, when it wants to: no change view, no waiting out "Loading…")
+    res = _call("act", {"actions": list(actions), "observe": "summary", "wait_busy": False})
     if check and not res["ok"]:
         raise MinionScriptError(res.get("error") or res["summary"])
     return res["summary"]
@@ -240,11 +244,26 @@ def wait_for(text: str, timeout: float = 10.0, gone: bool = False) -> bool:
     return bool(res["ok"])
 
 
+def scroll_to(text: str, timeout: float = 20.0) -> str:
+    """Bring text into view wherever it is in the window (loading more of an endless feed); returns what it found."""
+    return act({"action": "scroll_to", "text": text, "timeout": timeout})
+
+
+def close(window: str | None = None) -> str:
+    """Close a window (the focused one, or by title or app) like its X button."""
+    return act({"action": "close", **({"window": window} if window else {})})
+
+
+def copy(target) -> str:
+    """Put an element's whole text on the clipboard."""
+    return act({"action": "copy", "target": target})
+
+
 # -- apps, shell, misc ------------------------------------------------------------
 def launch(target: str, wait: float = 12.0, install: bool = True) -> dict:
     """Open an app ("writer", "gimp", "vscode": installed first if needed), a URL, a file or a command,
     and wait for its window."""
-    return _call("open", {"target": target, "wait": wait, "install": install})
+    return _call("open", {"target": target, "wait": wait, "install": install, "look": False})
 
 
 def run(command: str, timeout: float = 60.0, input: str | None = None) -> dict:

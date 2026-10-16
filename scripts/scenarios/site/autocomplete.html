@@ -1,0 +1,19 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Shipping destination</title>
+<link rel="stylesheet" href="gym.css"><script src="gym.js"></script>
+<style>.sug{border:1px solid #cbd5e1;border-radius:6px;max-width:300px}.sug div{padding:6px;cursor:pointer}.sug div:hover,.sug .on{background:#e0e7ff}</style></head><body>
+<h1>Where should we ship?</h1>
+<label>Destination country <input id="c" autocomplete="off" role="combobox" aria-autocomplete="list" placeholder="Start typing..."></label>
+<div class="sug" id="s" role="listbox" hidden></div>
+<p><button id="ok">Continue</button></p><div id="result"></div>
+<script>
+const C = ["Iceland","India","Indonesia","Iran","Iraq","Ireland","Israel","Italy","Jamaica","Japan","Jordan","Kenya","Spain","Sweden","Switzerland"];
+const $ = id => document.getElementById(id); let pick = "", on = -1;
+function show(list) { $("s").innerHTML = list.map((x, i) => `<div role="option" data-v="${x}" class="${i === on ? "on" : ""}">${x}</div>`).join(""); $("s").hidden = !list.length;
+  $("s").querySelectorAll("div").forEach(d => d.onclick = () => choose(d.dataset.v)); }
+function choose(v) { pick = v; $("c").value = v; $("s").hidden = true; }
+$("c").oninput = () => { pick = ""; on = -1; const q = $("c").value.toLowerCase(); setTimeout(() => show(q ? C.filter(x => x.toLowerCase().startsWith(q)) : []), 400); };
+$("c").onkeydown = e => { const opts = [...$("s").querySelectorAll("div")];
+  if (e.key === "ArrowDown") { on = Math.min(on + 1, opts.length - 1); show(opts.map(o => o.dataset.v)); e.preventDefault(); }
+  if (e.key === "Enter" && on >= 0) { choose(opts[on].dataset.v); e.preventDefault(); } };
+$("ok").onclick = () => { if (!pick) { $("result").textContent = "Pick a country from the suggestions."; return; } report("autocomplete", {country: pick}, "Shipping to " + pick + "."); };
+</script></body></html>
