@@ -19,7 +19,7 @@ that the dashboard sets. Static assets (`/static/*`) are public. JSON in, JSON o
 | `GET /api/desktops/{name}/info` | | info without waking the desktop |
 | `DELETE /api/desktops/{name}` | | |
 | `GET /api/desktops/{name}/screenshot` | `?format=png\|jpeg\|webp&max_width=&marks=1&grid=1&download=1` | image |
-| `GET /api/desktops/{name}/see` | `?ocr=1&window=&menus=1` | `{text, elements, windows, focused, ocr}` (+ `menus` with `menus=1`) |
+| `GET /api/desktops/{name}/see` | `?ocr=1&lang=heb&window=&menus=1` | `{text, elements, windows, focused, ocr}` (+ `menus` with `menus=1`) |
 | `GET /api/desktops/{name}/windows` | | windows |
 | `GET /api/desktops/{name}/status` | | uptime, idle seconds, memory, recorder |
 | `POST /api/desktops/{name}/act` | `{actions: [...], screenshot?, see?}` | `{ok, summary, steps, change, opened, closed, focused, screenshot?}` |

@@ -216,6 +216,7 @@ class Snapshot:
     elapsed: float = 0.0
     error: str = ""
     header: list[str] = field(default_factory=list)
+    content: tuple[int, int, int, int] | None = None  # a browser's page area (x, y, w, h), without its toolbars
 
 
 def _init() -> bool:
@@ -648,6 +649,7 @@ def snapshot(
     deadline = start + budget
     sw, sh = screen or (100000, 100000)
     elements: list[Element] = []
+    frames: list[tuple[int, int, int, int]] = []  # boxes of the frames that hold web pages
 
     def walk(node, depth: int, shown_depth: int, in_doc: bool = False, view=None) -> None:
         if snap.truncated:
@@ -683,8 +685,14 @@ def snapshot(
                     x, y, w, h = x0, y0, x1 - x0, y1 - y0
             if depth > 0 and role in ("menu bar", "tool bar") and (w > 0) != (h > 0):
                 return  # a collapsed bar (e.g. LibreOffice's hidden twin menu bar): its items are phantoms
+            if boxed and role == "internal frame" and not in_doc:
+                frames.append((x, y, w, h))
         else:
             x = y = w = h = 0
+        if role in WEB_DOCS and not in_doc and snap.content is None:
+            # The page's area, whether or not the page itself is listed. Firefox sometimes gives the page no box
+            # (-1, -1, -1, -1): the frame that holds it has the right one.
+            snap.content = (x, y, w, h) if boxed else (frames[-1] if frames else None)
         name = _clip(_name(node), text_limit)
         ifaces = _interfaces(node)
         lines = None

@@ -26,7 +26,7 @@ created or `use`d last, otherwise the most recent running one.
 
 | Command | |
 |---|---|
-| `minion see` | The screen as text with `@ids`. `--changes` shows only what changed since the last look, `--ocr` always adds OCR, `--no-ocr` never does, `--window TITLE` describes another window, `--full` keeps paragraphs whole, and `--menus` adds every menu command of the app with its keyboard shortcut. An open right-click menu is listed first |
+| `minion see` | The screen as text with `@ids`. `--changes` shows only what changed since the last look, `--ocr` also reads small pictures (or the whole window) with OCR, `--lang heb` sets the OCR language when it isn't the screen's own, `--no-ocr` never runs OCR, `--window TITLE` describes another window, `--full` keeps paragraphs whole, and `--menus` adds every menu command of the app with its keyboard shortcut. An open right-click menu is listed first |
 | `minion read FILE` | Any file in the desktop as text: text files as they are, documents converted (docx, xlsx with values and formulas, pptx, odt/ods/odp, pdf, epub, html, images by OCR, doc/xls/ppt) |
 | `minion shot [-o FILE]` | A screenshot (`.png`, `.jpg`, `.webp` or `-` for stdout). Options: `--region x,y,w,h`, `--max-width N`, `--marks` (draw `@ids`), `--grid`, `--no-cursor` |
 | `minion windows` | List windows |

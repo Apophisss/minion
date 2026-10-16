@@ -435,21 +435,36 @@ def _pdf(p: Path) -> str:
 
 
 def _pdf_ocr(p: Path, max_pages: int = 20) -> str:
+    from PIL import Image
+
+    from . import ocr
+
     tool = _need("pdftoppm", "poppler-utils")
     with tempfile.TemporaryDirectory() as tmp:
+        # 300 dpi in grayscale (PGM: no PNG compression to wait for), the resolution Tesseract reads best.
         subprocess.run(
-            [tool, "-r", "150", "-png", "-l", str(max_pages), str(p), f"{tmp}/page"], capture_output=True, timeout=300
+            [tool, "-r", "300", "-gray", "-l", str(max_pages), str(p), f"{tmp}/page"], capture_output=True, timeout=300
         )
-        pages = sorted(Path(tmp).glob("page*.png"))
-        return "\n\n--- page break ---\n\n".join(_ocr(page) for page in pages)
+        pages, langs = [], ocr.ensure(ocr.langs_for(p.stem))[0]
+        for page in sorted(Path(tmp).glob("page*")):
+            with Image.open(page) as img:
+                text, langs = ocr.page_text(img, langs)  # the first page settles the language for the rest
+            pages.append(text)
+        return "\n\n--- page break ---\n\n".join(pages)
 
 
 def _ocr(p: Path) -> str:
-    tool = shutil.which("tesseract")
-    if not tool:
+    """A picture of text, read in its language: a Hebrew file name says Hebrew; otherwise English, unless it
+    reads poorly in English, when the script is detected and the picture read again."""
+    from PIL import Image
+
+    from . import ocr
+
+    if not shutil.which("tesseract"):
         raise DocError("OCR needs tesseract: run('minion-install tesseract-ocr')")
-    res = subprocess.run([tool, str(p), "-", "--psm", "3"], capture_output=True, timeout=180)
-    return res.stdout.decode("utf-8", errors="replace")
+    with Image.open(p) as img:
+        img.load()
+        return ocr.page_text(img, ocr.ensure(ocr.langs_for(p.stem))[0])[0]
 
 
 def office_profile() -> str:

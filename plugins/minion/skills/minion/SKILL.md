@@ -18,7 +18,10 @@ you can use them instead. The ideas are the same (`desktop`, `see`, `act`, `scri
 ## Look: text first, because it is exact and cheap
 - `minion see` lists the windows, then the focused window's controls as `@id role "name" (x,y)`. Ids stay stable.
 - After your first look, use `minion see --changes`. It shows only what changed since your last look.
-- `--full` keeps long text whole. `--window TITLE` describes another window. `--ocr` reads canvases and images.
+- Text that accessibility doesn't have (slides, canvases, pictures of text, remote screens) is listed under
+  "Text in the picture", read with OCR in the screen's language. `--ocr` also reads smaller pictures, and
+  `--lang heb` (ara, jpn, ...) sets the language when the screen doesn't show it.
+- `--full` keeps long text whole. `--window TITLE` describes another window.
 - `minion see --menus` lists every menu command with its shortcut. An open right-click menu is listed first.
 - `minion read FILE` prints any document as text: docx, xlsx (values and formulas), pptx, pdf, odt, epub, html.
 - `minion shot -o /tmp/s.png --marks` takes a screenshot with the @ids drawn on it. Read the file to view it.
@@ -53,6 +56,9 @@ for item, price in [("Coffee", 3.5), ("Bagel", 2.25)]:
 print(cells())                       # {"A1": "Coffee", "B1": "3.5", ...}
 EOF
 ```
+
+To read a slideshow or a scanned document page by page in one call: `for i in range(30): print(see());
+key("Right")` (see() reads each page, OCR included, and a page that hasn't changed is read from a cache).
 
 ## Shell and files
 - `minion run "CMD"` runs a shell command in the desktop, and `sudo` works. Prefer it for files and data.

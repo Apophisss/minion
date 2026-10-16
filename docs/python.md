@@ -31,7 +31,7 @@ Desktop.list(stats=False)        # [DesktopInfo(name, profile, state, size, memo
 
 | Method | Returns |
 |---|---|
-| `see(ocr="auto", window=None, full_text=False, changes=False)` | `Observation`. `str(obs)` is the text an agent reads, and `obs.find("Save")` filters elements. `changes=True` returns only what changed since the last look (ids are stable) |
+| `see(ocr="auto", window=None, full_text=False, changes=False)` | `Observation`. `str(obs)` is the text an agent reads, and `obs.find("Save")` filters elements. `changes=True` returns only what changed since the last look (ids are stable). Text accessibility doesn't have is read with OCR in the screen's language; `ocr=True` also reads small pictures, and `ocr="heb"` (or `"ara+eng"`, ...) sets the language |
 | `screenshot(path=None, *, region=None, max_width=None, scale=None, width=None, format="png", marks=False, grid=False, cursor=True)` | `Screenshot` with `.data`, `.width`, `.height`, `.scale`, `.save()`, `.base64()` and `.to_screen(x, y)` |
 | `zoom(region, width=1024)` | A magnified region |
 | `find(text)` | Matches with score and position, from the accessibility tree first and then OCR |
