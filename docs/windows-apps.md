@@ -100,7 +100,7 @@ On a 2-vCPU VM. "Idle" means no Windows program has run yet: Wine's services sta
 
 | | |
 |---|---|
-| Download | **707 MB** compressed (`browser` is 352 MB), 2.84 GB on disk |
+| Download | **717 MB** compressed (`browser` is 363 MB), 2.84 GB on disk |
 | Build from `browser` | 2 min 21 s |
 | Ready in | 1.5 s |
 | Idle RAM | **56 MB** |

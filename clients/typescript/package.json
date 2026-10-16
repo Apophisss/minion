@@ -1,6 +1,6 @@
 {
   "name": "minion-desktop",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Zero-dependency TypeScript client for Minion: instant Linux desktops for AI agents (Vercel AI SDK, Mastra, LangChain.js or plain fetch). `npx minion-desktop mcp` starts its MCP server.",
   "keywords": [
     "ai-agents",

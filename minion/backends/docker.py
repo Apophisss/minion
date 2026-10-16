@@ -10,6 +10,7 @@ from __future__ import annotations
 import io
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -23,7 +24,7 @@ from ..agent import VERSION
 from ..channel import Channel, ProcessTransport
 from ..errors import BackendError, MinionError, NotFound
 from ..profiles import Profile
-from .base import Backend, CreateOptions, DesktopInfo, Snapshot, check_name
+from .base import Backend, CreateOptions, DesktopInfo, Login, Snapshot, check_login, check_name
 
 PKG_DIR = Path(__file__).resolve().parent.parent
 AGENT_DIR = PKG_DIR / "agent"
@@ -31,6 +32,7 @@ BASE_DOCKERFILE = PKG_DIR / "images" / "base.Dockerfile"
 BRIDGE = "/opt/minion/minion_agent/bridge.py"
 HOME = "/home/agent"
 SNAPSHOT_REPO = "minion-snapshot"
+LOGIN_REPO = "minion-login"  # saved sign-ins: snapshots that new desktops start from
 L = config.LABEL
 
 
@@ -340,10 +342,16 @@ class DockerBackend(Backend):
         except NotFound:
             return False
 
-    def create(self, name: str, profile: Profile, options: CreateOptions, progress=None) -> DesktopInfo:
+    def create(
+        self, name: str, profile: Profile, options: CreateOptions, progress=None, login: Login | None = None
+    ) -> DesktopInfo:
         check_name(name)
         if self.exists(name):
             raise MinionError(f"a desktop named {name!r} already exists")
+        if login is not None:  # start from the saved sign-in's snapshot, signed in as it was
+            return self._create_from(
+                name, login.ref, profile, options, progress, extra_labels={f"{L}.login": login.name}
+            )
         image = self.prepare(profile, progress)
         return self._create_from(name, image, profile, options, progress)
 
@@ -515,8 +523,6 @@ class DockerBackend(Backend):
     # -- snapshots -----------------------------------------------------
     @staticmethod
     def _check_tag(tag: str) -> str:
-        import re
-
         if not re.match(r"^[a-z0-9][a-z0-9_.-]{0,60}$", tag or ""):
             raise MinionError(f"invalid snapshot tag {tag!r}: use lowercase letters, digits, '.', '-' and '_'")
         return tag
@@ -550,6 +556,52 @@ class DockerBackend(Backend):
 
     def delete_snapshot(self, name: str, tag: str) -> None:
         self._run("rmi", f"{SNAPSHOT_REPO}:{name}--{self._check_tag(tag)}", timeout=120)
+
+    # -- saved sign-ins ------------------------------------------------
+    supports_logins = True
+
+    def save_login(self, name: str, login: str, site: str = "") -> Login:
+        """Snapshot desktop `name` as the sign-in `login` (replacing one of that name). The desktop keeps
+        running; new desktops made with it start as this one is now."""
+        check_login(login)
+        info = self.get(name)
+        ref = f"{LOGIN_REPO}:{login}"
+        # (a LABEL value is parsed: no quotes, backslashes or $variables in it)
+        site = " ".join(re.sub(r'["\\$`]', "", str(site or "")).split())[:200]
+        changes = [
+            f"LABEL {L}.login={login}",
+            f"LABEL {L}.login.profile={info.profile}",
+            f'LABEL {L}.login.site="{site}"',
+            f"LABEL {L}.login.from={name}",
+        ]
+        args = [a for ch in changes for a in ("--change", ch)]
+        self._run("commit", *args, self.cname(name), ref, timeout=900)
+        return Login(login, info.profile, ref, site, time.strftime("%Y-%m-%d %H:%M:%S"))
+
+    def logins(self) -> list[Login]:
+        res = self._run("images", LOGIN_REPO, "--format", "{{json .}}", check=False, timeout=60)
+        out = []
+        for line in res.stdout.decode().splitlines():
+            try:
+                img = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            tag = img.get("Tag", "")
+            if not tag or tag == "<none>":
+                continue
+            ref = f"{LOGIN_REPO}:{tag}"
+            labels = self.image_labels(ref) or {}
+            profile = labels.get(f"{L}.login.profile") or labels.get(f"{L}.profile", "")
+            site = labels.get(f"{L}.login.site", "")
+            out.append(Login(tag, profile, ref, site, img.get("CreatedSince", ""), img.get("Size", "")))
+        return sorted(out, key=lambda x: x.name)
+
+    def delete_login(self, login: str) -> None:
+        check_login(login)
+        if not any(x.name == login for x in self.logins()):
+            raise NotFound(f"no saved sign-in {login!r} (see `minion login list`)")
+        # -f: desktops started from it keep running; only the name goes
+        self._run("rmi", "-f", f"{LOGIN_REPO}:{login}", timeout=120)
 
     def _profile_for(self, info: DesktopInfo) -> Profile:
         try:

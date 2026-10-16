@@ -110,8 +110,7 @@ TASKS = [
                         {"action": "wait_for", "text": "Analytical Engine"},
                     ]
                 },
-            ),
-            ("see", {}),
+            ),  # its reply shows the article it went to: no need to look again
         ],
         "gui": "look · open the browser at wikipedia.org · click the search box · type and press Enter · read the "
         "article",
@@ -119,8 +118,7 @@ TASKS = [
     {
         "name": "Fill in and submit a web form",
         "calls": [
-            ("open", {"target": "file:///home/agent/form.html"}),
-            ("see", {}),
+            ("open", {"target": "file:///home/agent/form.html"}),  # opening a page returns it, with its @ids
             (
                 "act",
                 {
@@ -200,6 +198,11 @@ def main(argv: list[str]) -> int:
     return 1 if any(r["errors"] for r in results) else 0
 
 
+def definitions(compact: bool) -> int:
+    """The tokens of the tool definitions, rounded to tens."""
+    return round(tokens(json.dumps(Toolkit().definitions("anthropic", compact=compact))), -1)
+
+
 def write_doc(results: list[dict]) -> None:
     total_m = sum(r["minion_tokens"] for r in results)
     total_c = sum(r["claude_screenshot_tokens"] for r in results)
@@ -236,8 +239,12 @@ def write_doc(results: list[dict]) -> None:
         "find things, and no zooming in to read small text. Real runs usually take more.",
         "- Minion's agent also gets exact text: cell values and formulas, a PDF's words, a form's labels, so "
         "nothing has to be read off pixels. It needs fewer calls because one `act` can do several steps.",
-        "- Tool definitions are sent with every request in both cases: Minion's 9 tools cost about 2,100 tokens, "
-        "or about 230 in compact mode.",
+        "- An action's reply includes what changed when the action went somewhere (a new page, window or dialog) or "
+        "changed the screen, which is the look an agent would take next. So the script doesn't look again after "
+        "one.",
+        f"- Tool definitions are sent with every request in both cases: Minion's 9 tools cost about "
+        f"{definitions(False):,} tokens, or about {definitions(True):,} in compact mode (Anthropic's format, "
+        "counted the same way).",
         f"- Measured on {dt.date.today().isoformat()} on a 2-vCPU VM.",
     ]
     out = ROOT / "docs" / "benchmarks.md"

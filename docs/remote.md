@@ -56,7 +56,7 @@ What `minion share` does:
 
 | Option | |
 |---|---|
-| `--files` | let the `files` tool upload and download between desktops and this computer, inside `MINION_FILES_ROOT` (default `files/` in Minion's data folder). Off by default: see [Security](#security) |
+| `--files` | let the `files` tool upload and download between desktops and this computer, inside `MINION_FILES_ROOT` (default `files/` in Minion's data folder), and let desktops start from your [saved sign-ins](cli.md#sign-in-once). Off by default: see [Security](#security) |
 | `--token TOKEN` | use your own token (at least 24 URL-safe characters) instead of a fresh one |
 | `--port 4748` | the local port (`MINION_SHARE_PORT`); another free port is used if it is taken |
 | `--compact` · `--no-images` | hand out a URL for the single `computer` tool, or text only (no screenshots) |
@@ -240,7 +240,9 @@ without `MINION_ALLOWED_HOSTS` any `Host` name is accepted, so the token is the 
   and `minion share` closes that folder too: `files` can't upload or download unless you pass `--files`. The
   remote side has no use for it anyway, because the chat app can't see that folder, while an attacker who
   got the URL could read what you dropped there or fill your disk. `files read`/`write` still work, since
-  they only touch the desktop.
+  they only touch the desktop. Saved sign-ins (`minion login`) are off too: whoever has the URL could
+  otherwise start a desktop signed in to your accounts. The live view's Files panel still moves files between
+  the desktop and the browser that shows it.
 - **Desktops browse from your network.** Pages they open see your IP address, and they can reach your local
   network (your router, your NAS). Keep that in mind before you share with anyone but yourself.
 - **Prompt injection.** Web pages and documents can carry instructions aimed at the model. Keep credentials
@@ -256,7 +258,7 @@ without `MINION_ALLOWED_HOSTS` any `Host` name is accepted, so the token is the 
 
 ## Timeouts and limits
 
-- **First desktops download an image** (187–707 MB). Chat apps stop waiting for a tool long before that
+- **First desktops download an image** (199–717 MB). Chat apps stop waiting for a tool long before that
   ends: Claude allows [240 seconds per tool call](https://claude.com/docs/connectors/building), and
   developers report that ChatGPT gives up after about a minute. Run `minion pull browser office` (and
   any other profile you want) before you share. In a share, `desktop create` replies "still preparing"

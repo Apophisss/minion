@@ -53,7 +53,10 @@ jobs:
           npx -y @anthropic-ai/mcpb@2.1.2 info dist/minion.mcpb
       - uses: softprops/action-gh-release@v2
         with:
-          files: dist/*
+          files: | # not dist/* : that also takes the .gitignore uv build writes there
+            dist/*.whl
+            dist/*.tar.gz
+            dist/minion.mcpb
           generate_release_notes: true
 
   npm:

@@ -27,11 +27,14 @@
 **几个特点**
 
 - **屏幕即文本**：`see` 把窗口转成一份控件列表，每个控件都有稳定的 `@id`（来自无障碍树，OCR 兜底），比如 `@12 button "Save" (210,62)`。Agent 直接 `click @12`，不用猜坐标。
-- **省 token**：打完一句话之后，`see(changes=true)` 只返回变化的部分，约 60 个 token（完整读一遍约 900）。精简模式下，工具定义从约 2,100 个 token 降到约 230 个。代码模式（`script`）在桌面里直接跑 Python，50 步的 GUI 循环一次调用就能完成。
+- **省 token**：打完一句话之后，`see(changes=true)` 只返回变化的部分，约 80 个 token（完整读一遍约 900）。精简模式下，工具定义从约 3,300 个 token 降到约 450 个。代码模式（`script`）在桌面里直接跑 Python，50 步的 GUI 循环一次调用就能完成。
 - **操作结果如实反馈**：每个操作都会等界面稳定后再报告变化；文本目标找不到就直接失败，并给出最接近的候选，不会乱点。
 - **不止浏览器**：LibreOffice、IDE、终端、文件对话框都能用，Windows 程序可以通过 Wine 运行。
 - **轻**：约 1.5 秒就绪，空闲内存 54–105 MB，闲置时自动冻结（0% CPU），约 0.2 秒唤醒（2 vCPU 虚拟机上的测量结果）。
-- **接入方式多**：MCP 优先，Claude Code、Codex、Cursor、VS Code、Gemini CLI 等都能一键或一条命令接入；也支持 OpenAI / Anthropic / Gemini 的 function calling、通过 Ollama / vLLM 运行的本地模型、带 OpenAPI 的 HTTP 接口、CLI，以及 Python / TypeScript SDK。
+- **接入方式多**：MCP 优先，Claude Code、Codex、Cursor、VS Code、Gemini CLI、opencode、OpenClaw 等都能一键或一条命令接入；也支持 OpenAI / Anthropic / Gemini 的 function calling、通过 Ollama / vLLM 运行的本地模型、带 OpenAPI 的 HTTP 接口、CLI，以及 Python / TypeScript SDK。
+- **用日常任务检验过**：发布前，我让 AI Agent 用它完成了 93 个日常电脑任务（从“压缩这个文件夹”到“汇总邮件附件里的数字并回复”），记录了每一次调用。修复它们遇到的问题之后，同样的任务调用次数少了 31%，失败的调用少了一半，输出的 token 少了 36%。
+- **在 OSWorld 上测过**：在 OSWorld 的 30 个 Office 任务上，同一个 Agent 通过 Minion 发给模型的 token 只有纯截图方式的一半左右，成功率相当（差异在统计误差范围内）。
+- **只需登录一次**：在实时画面里手动登录一次（`minion login github https://github.com/login`），之后新建的桌面一启动就已登录，Agent 看不到密码。
 - **人随时能介入**：浏览器里可以实时看桌面、一键接管；Agent 也可以把登录这类操作交给你，等你点 Done 再继续。
 
 **安装**（需要 Docker、OrbStack 或 Podman）：
@@ -134,9 +137,9 @@ Changes since your last look 1.0s ago (81 elements unchanged; their @ids still w
 | `screenshot(detail="low")`，半尺寸 | ~341 |
 | `act(observe="crop")`，只截变化的区域 | ~200 |
 | LibreOffice 窗口的 `see` | ~920 |
-| 打完一句话后的 `see(changes=true)` | ~60 |
+| 打完一句话后的 `see(changes=true)` | ~80 |
 | 终端的 `see` | ~50–90 |
-| 工具定义：9 个工具 / 精简模式下的一个 `computer` 工具 | ~2,100 / ~230 |
+| 工具定义：9 个工具 / 精简模式下的一个 `computer` 工具 | ~3,300 / ~450 |
 
 此外，代码模式 `script` 直接在桌面里运行 Python（`click`、`write`、`key`、`see`、`cells` 等），循环和数据录入只需要一次调用，只返回程序打印的内容。任务跑通之后，还可以导出成宏（一段 Python 脚本），以后不需要模型就能重放。
 
@@ -158,7 +161,7 @@ Changes since your last look 1.0s ago (81 elements unchanged; their @ids still w
 curl -fsSL https://raw.githubusercontent.com/apophisss/minion/main/install.sh | sh
 ```
 
-脚本会安装 `minion` 命令，然后运行 `minion setup`：检查 Docker、下载桌面镜像，并用 `minion connect` 把 Minion 接入你电脑上的 Agent 应用（Claude Desktop、Claude Code、Cursor、VS Code、Gemini CLI、Codex、LM Studio 等）。其他 MCP 客户端用这段配置即可：
+脚本会安装 `minion` 命令，然后运行 `minion setup`：检查 Docker、下载桌面镜像，并用 `minion connect` 把 Minion 接入你电脑上的 Agent 应用（Claude Desktop、Claude Code、Cursor、VS Code、Gemini CLI、Codex、LM Studio、opencode、OpenClaw 等）。其他 MCP 客户端用这段配置即可：
 
 ```json
 { "mcpServers": { "minion": { "command": "uvx", "args": ["minion-desktop", "mcp"] } } }
@@ -196,6 +199,10 @@ print(msg.content)
 - 和你电脑之间的文件传输只限于一个文件夹。
 - 容器内的用户有免密 `sudo`，方便 Agent 装软件。屏幕上的内容一律当作不可信输入，别把凭据放进桌面，登录、支付这类操作交给人：Agent 可以发起交接，等你在实时画面里操作完、点 Done 再继续。
 
+## 怎么检验的
+
+发布前，我让 AI Agent 用 Minion 完成了 93 个日常电脑任务：网页表单、Office 文档、文件管理器、计算器、网页邮件加电子表格的多应用流程、终端和 vim、GIMP，以及 Wine 里的 Windows 程序。每一次调用都记录下来，每个 Agent 都写下了卡住它的地方。按这些记录修复之后，再让新的 Agent 做同样的 93 个任务：调用次数从 491 降到 339（少 31%），失败的调用从 28 降到 14，输出的 token 从 156,272 降到 99,769（少 36%），两次 93 个任务全部完成。任务、测试网站和脚本都在仓库的 `scripts/scenarios` 里。
+
 ## 局限
 
 - 没有 GPU，纯软件渲染（llvmpipe / SwiftShader）。
@@ -205,7 +212,7 @@ print(msg.content)
 
 ## 最后
 
-Minion 采用 MIT 协议，宿主端是纯 Python 标准库、零依赖，总共约 1 万行 Python。欢迎试用、提 Issue 和 PR，特别是新的 profile、对某个应用更好的 `see` 输出，以及更多客户端的接入示例。
+Minion 采用 MIT 协议，宿主端是约 1 万行纯 Python 标准库代码，零依赖。欢迎试用、提 Issue 和 PR，特别是新的 profile、对某个应用更好的 `see` 输出，以及更多客户端的接入示例。
 
 - GitHub：https://github.com/apophisss/minion
 - 中文 README：https://github.com/apophisss/minion/blob/main/README.zh-CN.md

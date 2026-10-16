@@ -1,14 +1,15 @@
 # Minion launch kit
 
-Copy for announcing Minion 1.0, one file per channel, plus the facts the copy is allowed to use and the images to
-post with it. Everything here is drafted from the repository's own docs. Nothing has been posted yet.
+Copy for announcing Minion, one file per channel, plus the facts the copy is allowed to use and the images to
+post with it. Everything here is drafted from the repository's own docs. The numbers were measured again on the 1.0.0
+release (2026-10-16), and the OSWorld results on 1.1.0. Nothing has been posted yet.
 
 | File | Channel | Language |
 |---|---|---|
 | [show-hn.md](show-hn.md) | Hacker News (Show HN): title and the author's first comment | English |
 | [product-hunt.md](product-hunt.md) | Product Hunt: name, tagline, description, topics, gallery, maker's comment | English |
 | [reddit.md](reddit.md) | r/LocalLLaMA, r/ClaudeAI, r/selfhosted, r/opensource | English |
-| [x-thread.md](x-thread.md) | X: an 8-post thread | English |
+| [x-thread.md](x-thread.md) | X: a 9-post thread | English |
 | [linkedin.md](linkedin.md) | LinkedIn | English |
 | [youtube.md](youtube.md) | YouTube: title, description with chapters, tags and thumbnail for the demo video | English |
 | [hebrew.md](hebrew.md) | Israeli tech communities and LinkedIn | Hebrew |
@@ -56,17 +57,25 @@ What follows for the copy:
    qualifier: the docs call a desktop "a sandbox, not a vault" ([agents.md](../agents.md#security-notes),
    [faq.md](../faq.md), [computer-use.md](../computer-use.md)).
 2. **MCP-first.** Lead with one click in the agent app, or `minion connect`. Mention the MCP Registry entry.
-3. **Works with the agents people already use.** Claude Code, Codex, Cursor, VS Code, Gemini CLI, and any MCP
-   client.
+3. **Works with the agents people already use.** Claude Code, Codex, Cursor, VS Code, Gemini CLI, opencode,
+   OpenClaw, and any MCP client.
 4. **Beyond the browser.** Office documents, IDEs, terminals, file dialogs, installers and Windows programs, not
    only web pages.
+5. **Measured on everyday work.** AI agents did 93 ordinary computer tasks with Minion, every call logged, and the
+   fixes their notes led to were measured on the same tasks. The tasks and scripts are in the repository.
+6. **Measured on OSWorld.** On 30 of OSWorld's office tasks, the same agent sent the model half the tokens through
+   Minion as through screenshots, for the same success. Say "half the tokens" and "the same success"; don't call
+   it an OSWorld score or compare it with the leaderboard.
+7. **People at the desktop too.** Sign in once by hand and start desktops signed in; drop files on the live view.
+   That answers "what about logins?" before it's asked.
 
 Don't claim:
 
-- Support for OpenClaw, opencode or any other agent that the docs don't name. "Any MCP client" is accurate.
-  Test a specific agent before naming it.
+- Support for an agent that the docs don't name ([connect.md](../connect.md) lists the apps `minion connect` sets
+  up). "Any MCP client" is accurate. Test a specific agent before naming it.
 - Benchmarks other than the ones in the table below, user numbers, testimonials or comparisons with "the
-  fastest" or "the best".
+  fastest" or "the best". The OSWorld result is 30 office tasks: not "OSWorld", not a leaderboard position, and
+  not a success rate that beats screenshots (the difference is within noise).
 - GPU support. Rendering is software-only ([faq.md](../faq.md)).
 
 ## Key facts and their sources
@@ -76,7 +85,9 @@ Use these numbers as written. If the README changes, the README wins.
 | Fact | Say | Source |
 |---|---|---|
 | What it is | Featherweight Linux desktops that any AI agent can use; agents read the screen as text, act in batches or in code, and use any program or website | [README.md](../../README.md), [index.html](../index.html) |
-| Task cost | Five real tasks: 4,356 tokens with Minion vs. 50,505 with screenshots (11.6× fewer). The lead for any post about cost: the "Computer Use is 45x more expensive" HN thread (495 points) shows people care | [benchmarks.md](../benchmarks.md) |
+| Task cost | Five real tasks: 8,668 tokens with Minion vs. 50,505 with screenshots (5.8× fewer). The lead for any post about cost: the "Computer Use is 45x more expensive" HN thread (495 points) shows people care | [benchmarks.md](../benchmarks.md) |
+| OSWorld | 30 of OSWorld's LibreOffice tasks, the same agent, OSWorld's own checkers: the computer returned 9,372 tokens per task through Minion against 17,974 through screenshots (about half), 0.9 screenshots per task against 12.8, and the same success within noise (96.6% vs 93.2%). Minion 1.1.0 took 18% fewer steps than 1.0.0 on the same tasks. Not comparable to the OSWorld leaderboard | [osworld.md](../osworld.md) |
+| Everyday work | 93 everyday tasks done by AI agents, from "what's the date?" to "total the attachment of Dana's email and reply with it". After the fixes their notes led to, the same tasks took 31% fewer calls (491 → 339), half the failed calls (28 → 14) and 36% fewer tokens of output (156,272 → 99,769); all 93 were done both times | [scenarios.md](../scenarios.md) |
 | Startup | Ready in about 1.5 s (1.2–1.8 s for every profile) | [README.md](../../README.md#efficiency-measured), [design.md](../design.md) |
 | Idle memory | 54–105 MB per desktop, about 60 MB typical. Firefox and LibreOffice add their own when open (a few hundred MB each) | [README.md](../../README.md#efficiency-measured), [faq.md](../faq.md) |
 | Freezing | Idle desktops freeze to 0% CPU and thaw in about 0.2 s | [README.md](../../README.md), [design.md](../design.md) |
@@ -84,12 +95,12 @@ Use these numbers as written. If the README changes, the README wins.
 | Where measured | A 2-vCPU VM; `python scripts/bench.py` reproduces them | [README.md](../../README.md#efficiency-measured) |
 | Screenshot cost | 1280×800: about 1,365 tokens; `detail="low"`: about 341; `observe="crop"`: about 200 | [README.md](../../README.md#efficiency-measured) |
 | Text view | `see` of a LibreOffice window: about 920 tokens; of a terminal: about 50–90 | [README.md](../../README.md#efficiency-measured) |
-| Diffs | `see(changes=true)` after typing a sentence: about 60 tokens instead of about 900 | [README.md](../../README.md), [design.md](../design.md) |
-| Tool definitions | About 2,100 tokens for the 9 tools; about 230 in compact mode (one `computer` tool) | [README.md](../../README.md), [agents.md](../agents.md) |
-| Agent Skill | About 100 tokens until the agent uses it, then about 1,100 | [agents.md](../agents.md#shell-agents-and-agent-skills) |
+| Diffs | `see(changes=true)` after typing a sentence: about 80 tokens instead of about 900 | [README.md](../../README.md), [design.md](../design.md) |
+| Tool definitions | About 3,300 tokens for the 9 tools; about 450 in compact mode (one `computer` tool) | [README.md](../../README.md), [agents.md](../agents.md) |
+| Agent Skill | About 100 tokens until the agent uses it, then about 2,100 | [agents.md](../agents.md#shell-agents-and-agent-skills) |
 | Code mode | A 50-step GUI loop in one tool call; only what the code prints comes back | [README.md](../../README.md), [design.md](../design.md) |
-| Profiles | `browser`, `office`, `dev`, `research`, `data`, `windows` (Wine), `base`; images of 187–707 MB that share layers; your own profile is a short TOML file | [README.md](../../README.md#profiles), [install.md](../install.md) |
-| `minion connect` | Claude Desktop, Claude Code, Cursor, VS Code (and GitHub Copilot CLI), Devin Desktop/Windsurf, Gemini CLI, Codex, LM Studio, Cline, Kiro, Zed. One entry, a backup first, idempotent, reversible | [connect.md](../connect.md), [install.md](../install.md#minion-connect) |
+| Profiles | `browser`, `office`, `dev`, `research`, `data`, `windows` (Wine), `base`; images of 199–717 MB that share layers; your own profile is a short TOML file | [README.md](../../README.md#profiles), [install.md](../install.md) |
+| `minion connect` | Claude Desktop, Claude Code, Cursor, VS Code (and GitHub Copilot CLI), Devin Desktop/Windsurf, Gemini CLI, Codex, LM Studio, Cline, Kiro, Zed, opencode, OpenClaw. One entry, a backup first, idempotent, reversible | [connect.md](../connect.md), [install.md](../install.md#minion-connect) |
 | One click | A Claude Desktop extension (`minion.mcpb`, needs only Docker), buttons for VS Code, Visual Studio, Cursor, LM Studio, Goose and Kiro, a Claude Code plugin, and the MCP Registry entry `io.github.Apophisss/minion` | [README.md](../../README.md#get-started), [install.md](../install.md), [design.md](../design.md) |
 | One line | `install.sh` / `install.ps1` install uv and Minion, then `minion setup` checks Docker, prepares a desktop and runs `minion connect` | [install.md](../install.md), [design.md](../design.md) |
 | Web chat apps | ChatGPT, Claude.ai and Le Chat through `minion share`: a public HTTPS MCP URL (Cloudflare quick tunnel) with a fresh token; Ctrl+C stops it | [README.md](../../README.md), [install.md](../install.md#chatgpt-and-claudeai-on-the-web), [CHANGELOG.md](../../CHANGELOG.md) |
@@ -98,11 +109,12 @@ Use these numbers as written. If the README changes, the README wins.
 | Frameworks | Recipes for the OpenAI Agents SDK, LangChain/LangGraph, LlamaIndex, CrewAI, smolagents, Pydantic AI, Google ADK and AutoGen. Verified up to loading the tools; the model side of the recipes was not run | [README.md](../../README.md), [integrations.md](../integrations.md) |
 | Computer use | Claude's `computer_toolset_20260801` (all 17 actions) and the earlier `computer_20251124`; OpenAI and Gemini computer use | [README.md](../../README.md), [computer-use.md](../computer-use.md) |
 | Hosts | macOS, Windows and Linux with Docker Desktop, OrbStack, Colima or Podman; images for `amd64` and `arm64` (Apple Silicon runs them natively); `windows` profile `amd64` only; Linux can run desktops without Docker, but not isolated | [faq.md](../faq.md) |
-| Footprint | Zero dependencies: the host side is pure Python standard library (3.11+), about 10k lines | [README.md](../../README.md), [design.md](../design.md) |
+| Footprint | Zero dependencies: the host side is pure Python standard library (3.11+), about 10k lines (the agent inside the desktop is about as much again) | [README.md](../../README.md), [design.md](../design.md) |
 | Isolation | One unprivileged container per desktop, no host mounts by default, no open ports (the host uses `docker exec`), `--offline`, `--memory`, `--cpus`. Passwordless `sudo` inside the container | [README.md](../../README.md#security), [index.html](../index.html), [SECURITY.md](../../SECURITY.md) |
-| Humans | Live view with *Take control*, hand-off ("Please sign in") that waits for *Done*, a dashboard, and a flight recorder (HTML, GIF, or a Python script that replays the session with no model) | [README.md](../../README.md), [CHANGELOG.md](../../CHANGELOG.md) |
+| Humans | Live view with *Take control*, a Files panel (download, upload, drop files on the screen), the clipboard both ways, hand-off ("Please sign in") that waits for *Done*, a dashboard, and a flight recorder (HTML, GIF, or a Python script that replays the session with no model) | [README.md](../../README.md), [cli.md](../cli.md#working-at-a-desktop-yourself) |
+| Sign-ins | Sign in once by hand in the live view (`minion login github https://github.com/login`), and `minion up --login github` starts desktops signed in; agents ask for one by name. Kept in your computer's Docker | [cli.md](../cli.md#sign-in-once) |
 | Dogfooding | Claude agents used Minion for real office, web, development and MCP tasks, and every issue they found was fixed before 1.0 | [design.md](../design.md) |
-| Release | 1.0.0, the first release; MIT license; `pip install minion-desktop` | [CHANGELOG.md](../../CHANGELOG.md), [README.md](../../README.md) |
+| Release | 1.1.0 ([release date]); 1.0.0 (2026-10-16) was the first; MIT license; `minion-desktop` on PyPI and npm, `io.github.Apophisss/minion` in the MCP Registry, images on GHCR | [CHANGELOG.md](../../CHANGELOG.md), [README.md](../../README.md) |
 
 ## Links
 
@@ -142,15 +154,32 @@ Other images in [docs/assets](../assets/):
 |---|---|---|
 | [demo.gif](../assets/demo.gif) | 720×480 | An agent on a `research` desktop searching Wikipedia, made by `minion replay -o demo.gif` |
 | [marks.png](../assets/marks.png) | 1280×800 | A Wikipedia page with an `@id` drawn on every clickable element (`screenshot --marks`) |
-| [live-view.png](../assets/live-view.png) | 1440×784 | The live view of an `office` desktop, with *Take control*, Paste, Screenshot, Replay and Freeze |
+| [live-view.png](../assets/live-view.png) | 1440×784 | The live view of an `office` desktop with the Files panel open: Open box, Keys, Files, Copy, Paste, More, Freeze and *Take control* |
 | [dashboard.png](../assets/dashboard.png) | 1440×784 | The `minion serve` dashboard with four live desktops. |
 | [office.png](../assets/office.png), [research.png](../assets/research.png), [dev.png](../assets/dev.png) | 1280×800 | Full-size desktops: a Writer document, Wikipedia in Firefox, Geany with a Minion script |
 | [packaging/mcpb/icon.png](../../packaging/mcpb/icon.png) | 512×512 | The square icon, for the Product Hunt thumbnail and avatars |
 
+## The order
+
+1. **Directories first** ([directories.md](directories.md)): Glama and then the awesome-mcp-servers pull request,
+   the web forms (mcp.so, MCP Market, mcpservers.org, LobeHub, cursor.directory), and GitHub's MCP registry. Reviews
+   take days, and people who hear about Minion will look for it there.
+2. **The video on YouTube** ([youtube.md](youtube.md)), so that posts and Product Hunt can link it.
+3. **Show HN** ([show-hn.md](show-hn.md)) on a weekday morning, US Eastern time, when you can stay for the first
+   hours to answer.
+4. **X and LinkedIn** ([x-thread.md](x-thread.md), [linkedin.md](linkedin.md)) with the video, and the Hebrew posts
+   ([hebrew.md](hebrew.md)): the same day or the next.
+5. **Reddit** ([reddit.md](reddit.md)): one subreddit a day.
+6. **Product Hunt** ([product-hunt.md](product-hunt.md)): it goes live at 00:01 Pacific time, so pick a day you can
+   spend answering.
+7. **Chinese communities** ([chinese.md](chinese.md)).
+
 ## Before you post
 
 - [ ] Check the numbers against the README on the day, and fill in the placeholders in square brackets.
-- [ ] Try the one-line installer, the Claude Desktop extension and `uvx minion-desktop mcp` on a clean machine.
+- [x] Try the one-line installer, the Claude Desktop extension, `uvx minion-desktop mcp` and `npx -y minion-desktop mcp`
+      on a clean machine. Done for 1.0.0 in a clean Ubuntu 24.04, and the [Install workflow](../../.github/workflows/install.yml)
+      does it on clean macOS, Windows and Linux machines every week.
 - [ ] Set [social-preview.png](../assets/social-preview.png) as the repository's social preview on GitHub.
 - [ ] Decide how to talk about AI-assisted development. The git history shows most commits authored by Claude,
       and people will ask. There is a draft answer to fill in at the end of [faq-responses.md](faq-responses.md).

@@ -18,6 +18,7 @@ import shutil
 import subprocess
 import tempfile
 import zipfile
+from datetime import datetime, timedelta
 from html.parser import HTMLParser
 from pathlib import Path
 from xml.etree import ElementTree as ET
@@ -46,8 +47,10 @@ class DocError(Exception):
 
 
 # -- reading -----------------------------------------------------------------------------
-def read(path: str, max_chars: int = 200_000) -> tuple[str, str]:
-    """(text, kind) for a document at `path`. Raises DocError with advice when it can't."""
+def read(path: str, max_chars: int = 200_000, details: bool = False) -> tuple[str, str]:
+    """(text, kind) for a document at `path`. Raises DocError with advice when it can't. `details` adds what
+    formatting tasks are about: a slide's background and each shape's place, size, bullets and fonts; a Word
+    paragraph's alignment, spacing and indents and its runs' formatting; a sheet's number formats and text colors."""
     p = Path(os.path.expanduser(path))
     if not p.exists():
         raise DocError(f"no such file: {path}")
@@ -74,7 +77,7 @@ def read(path: str, max_chars: int = 200_000) -> tuple[str, str]:
     if ext in readers:
         kind, fn = readers[ext]
         try:
-            text = fn(p)
+            text = fn(p, details) if fn in (_docx, _xlsx, _pptx) else fn(p)
         except (zipfile.BadZipFile, ET.ParseError, KeyError) as e:
             raise DocError(f"{path} is not a valid {kind} ({e})") from e
     elif ext in IMAGE_EXT:
@@ -125,18 +128,30 @@ def _rels(z: zipfile.ZipFile, name: str) -> dict[str, str]:
 
 
 # Word ------------------------------------------------------------------------------------
-def _docx(p: Path) -> str:
+def _docx(p: Path, details: bool = False) -> str:
     with zipfile.ZipFile(p) as z:
         doc = _xml(z, "word/document.xml")
         body = doc.find(f"{W}body")
         lines: list[str] = []
+        count = [0]
 
         def blocks(parent) -> None:
             for block in list(parent if parent is not None else []):
                 if block.tag == f"{W}p":
+                    count[0] += 1
                     lines.append(_docx_paragraph(block))
+                    if details:
+                        lines.extend(_docx_details(block, count[0]))
                 elif block.tag == f"{W}tbl":
                     lines.extend(_docx_table(block))
+                    if details:  # (what its text is set in: the runs of all its cells)
+                        looks: dict[str, int] = {}
+                        for r in block.iter(f"{W}r"):
+                            if "".join(t.text or "" for t in r.iter(f"{W}t")).strip():
+                                fmt = _docx_run_format(r.find(f"{W}rPr")) or "default formatting"
+                                looks[fmt] = looks.get(fmt, 0) + 1
+                        if looks:
+                            lines.append("    table runs: " + " · ".join(f"{k} ({n})" for k, n in looks.items()))
                     lines.append("")
                 elif block.tag == f"{W}sdt":  # a content control: a table of contents, a cover page
                     blocks(block.find(f"{W}sdtContent"))
@@ -166,6 +181,115 @@ def _docx(p: Path) -> str:
         return "\n".join(lines)
 
 
+def _docx_details(par: ET.Element, n: int) -> list[str]:
+    """A paragraph's layout and its runs' formatting, as indented lines under its text (details mode)."""
+    ppr = par.find(f"{W}pPr")
+    props = []
+    if ppr is not None:
+        style = ppr.find(f"{W}pStyle")
+        if style is not None:
+            props.append(f"style {style.get(f'{W}val')}")
+        jc = ppr.find(f"{W}jc")
+        if jc is not None:
+            props.append({"both": "justified"}.get(jc.get(f"{W}val", ""), jc.get(f"{W}val", "")))
+        sp = ppr.find(f"{W}spacing")
+        if sp is not None:
+            line, rule = sp.get(f"{W}line"), sp.get(f"{W}lineRule", "auto")
+            if line and line.lstrip("-").isdigit():
+                props.append(
+                    f"line spacing {int(line) / 240:g}"
+                    if rule == "auto"
+                    else f"line spacing {int(line) / 20:g} pt ({rule})"
+                )
+            for k in ("before", "after"):
+                v = sp.get(f"{W}{k}")
+                if v and v.isdigit() and int(v):
+                    props.append(f"space {k} {int(v) / 20:g} pt")
+        ind = ppr.find(f"{W}ind")
+        if ind is not None:
+            for k, label in (
+                ("left", "indent"),
+                ("start", "indent"),
+                ("firstLine", "first line"),
+                ("hanging", "hanging"),
+            ):
+                v = ind.get(f"{W}{k}")
+                if v and v.lstrip("-").isdigit() and int(v):
+                    props.append(f"{label} {int(v) / 567:.2f} cm")
+        if ppr.find(f"{W}numPr") is not None:
+            props.append("list item")
+        tabs = [t for t in ppr.iter(f"{W}tab") if t.get(f"{W}pos")]
+        if tabs:
+            props.append(
+                "tab stops " + ", ".join(f"{t.get(f'{W}val')} {int(t.get(f'{W}pos')) / 567:.2f} cm" for t in tabs)
+            )
+    runs = []
+    for r in par.iter(f"{W}r"):
+        text = "".join(t.text or "" for t in r.iter(f"{W}t"))
+        if not text:
+            continue
+        fmt = _docx_run_format(r.find(f"{W}rPr"))
+        if runs and runs[-1][1] == fmt:
+            runs[-1][0] += text
+        else:
+            runs.append([text, fmt])
+    out = []
+    if props:
+        out.append(f"    ¶{n}: " + ", ".join(props))
+    if any(fmt for _, fmt in runs):
+        out.append(
+            f"    ¶{n} runs: "
+            + " · ".join(f"{_short(text)!r}" + (f" ({fmt})" if fmt else "") for text, fmt in runs[:40])
+            + (" · …" if len(runs) > 40 else "")
+        )
+    return out
+
+
+def _docx_run_format(rpr) -> str:
+    if rpr is None:
+        return ""
+    out = []
+
+    def on(tag: str) -> bool:
+        el = rpr.find(f"{W}{tag}")
+        return el is not None and el.get(f"{W}val", "true") not in ("0", "false", "none")
+
+    for tag, label in (
+        ("b", "bold"),
+        ("i", "italic"),
+        ("strike", "strikethrough"),
+        ("caps", "all caps"),
+        ("smallCaps", "small caps"),
+    ):
+        if on(tag):
+            out.append(label)
+    if on("u"):
+        out.append("underline")
+    va = rpr.find(f"{W}vertAlign")
+    if va is not None and va.get(f"{W}val") in ("subscript", "superscript"):
+        out.append(va.get(f"{W}val"))
+    sz = rpr.find(f"{W}sz")
+    if sz is not None and (sz.get(f"{W}val") or "").isdigit():
+        out.append(f"{int(sz.get(f'{W}val')) / 2:g} pt")
+    fonts = rpr.find(f"{W}rFonts")
+    if fonts is not None and fonts.get(f"{W}ascii"):
+        out.append(fonts.get(f"{W}ascii"))
+    color = rpr.find(f"{W}color")
+    if color is not None and color.get(f"{W}val") not in (None, "auto", "000000"):
+        out.append(f"#{color.get(f'{W}val')}")
+    hl = rpr.find(f"{W}highlight")
+    if hl is not None and hl.get(f"{W}val") not in (None, "none"):
+        out.append(f"highlight {hl.get(f'{W}val')}")
+    shd = rpr.find(f"{W}shd")
+    if shd is not None and shd.get(f"{W}fill") not in (None, "auto", "FFFFFF"):
+        out.append(f"shading #{shd.get(f'{W}fill')}")
+    return ", ".join(out)
+
+
+def _short(text: str, n: int = 50) -> str:
+    return text if len(text) <= n else text[: n - 1] + "…"
+
+
 def _docx_paragraph(par: ET.Element) -> str:
     parts = []
     for node in par.iter():
@@ -188,11 +312,12 @@ def _docx_paragraph(par: ET.Element) -> str:
 
 
 def _docx_table(tbl: ET.Element) -> list[str]:
-    rows = []
+    rows, cols = [], 0
     for tr in tbl.iter(f"{W}tr"):
         cells = [" ".join(_docx_paragraph(p) for p in tc.iter(f"{W}p")).strip() for tc in tr.iter(f"{W}tc")]
         rows.append("| " + " | ".join(c.replace("|", "\\|") for c in cells) + " |")
-    return rows
+        cols = max(cols, len(cells))
+    return [f"[table: {len(rows)} rows x {cols} columns]", *rows]
 
 
 # Excel -----------------------------------------------------------------------------------
@@ -204,7 +329,7 @@ def _col(n: int) -> str:
     return s
 
 
-def _xlsx(p: Path) -> str:
+def _xlsx(p: Path, details: bool = False) -> str:
     with zipfile.ZipFile(p) as z:
         names = set(z.namelist())
         shared: list[str] = []
@@ -213,15 +338,22 @@ def _xlsx(p: Path) -> str:
                 shared.append("".join(t.text or "" for t in si.iter(f"{S}t")))
         rels = _rels(z, "xl/workbook.xml")
         bold, fills = _xlsx_styles(z) if "xl/styles.xml" in names else (set(), [])
+        dates = _xlsx_date_styles(z) if "xl/styles.xml" in names else {}
+        wb = _xml(z, "xl/workbook.xml")
+        pr = wb.find(f"{S}workbookPr")
+        epoch = (
+            datetime(1904, 1, 1) if pr is not None and pr.get("date1904") in ("1", "true") else datetime(1899, 12, 30)
+        )
+        looks = _xlsx_looks(z, details) if "xl/styles.xml" in names else {}
         out, budget = [], MAX_CELLS
         for sheet in _xml(z, "xl/workbook.xml").iter(f"{S}sheet"):
             target = rels.get(sheet.get(f"{R}id", ""), "")
             if target not in names:
                 continue
             root = _xml(z, target)
-            text, used = _xlsx_sheet(root, shared, budget)
+            text, used = _xlsx_sheet(root, shared, budget, dates, epoch)
             budget -= used
-            notes = _xlsx_notes(z, target, root, bold, fills)
+            notes = _xlsx_notes(z, target, root, bold, fills) + _xlsx_layout(root, looks)
             out.append(f"## Sheet: {sheet.get('name', '?')}\n{text}" + ("\n" + "\n".join(notes) if notes else ""))
             if budget <= 0:
                 out.append("… [more cells not shown]")
@@ -258,6 +390,75 @@ def _xlsx_styles(z: zipfile.ZipFile) -> tuple[set, list]:
     return bold, fills
 
 
+def _xlsx_looks(z: zipfile.ZipFile, details: bool) -> dict[int, list[str]]:
+    """For each cell style (its index), what it shows beyond the defaults: its fill colour, and with details
+    its number format and text colour."""
+    st = _xml(z, "xl/styles.xml")
+    fills = []
+    for f in st.iter(f"{S}fill"):
+        pat = f.find(f"{S}patternFill")
+        color = pat.find(f"{S}fgColor") if pat is not None and pat.get("patternType") not in (None, "none") else None
+        fills.append(f"fill #{color.get('rgb')[-6:]}" if color is not None and color.get("rgb") else "")
+    fonts = []
+    for f in st.iter(f"{S}font"):
+        color = f.find(f"{S}color")
+        rgb = color.get("rgb", "")[-6:] if color is not None else ""
+        fonts.append(f"text #{rgb}" if rgb and rgb.upper() != "000000" else "")
+    formats = {n.get("numFmtId"): n.get("formatCode") for n in st.iter(f"{S}numFmt")}
+    out: dict[int, list[str]] = {}
+    xfs = st.find(f"{S}cellXfs")
+    for i, xf in enumerate(list(xfs) if xfs is not None else []):
+        parts = []
+        fill = int(xf.get("fillId", 0) or 0)
+        if fill < len(fills) and fills[fill]:
+            parts.append(fills[fill])
+        if details:
+            fmt = xf.get("numFmtId", "0")
+            if fmt in formats:
+                parts.append(f"format {formats[fmt]}")
+            font = int(xf.get("fontId", 0) or 0)
+            if font < len(fonts) and fonts[font]:
+                parts.append(fonts[font])
+        if parts:
+            out[i] = parts
+    return out
+
+
+def _xlsx_layout(root: ET.Element, looks: dict[int, list[str]]) -> list[str]:
+    """What a sheet looks like beyond its values: filled cells, hidden rows and columns, merged cells, a filter,
+    its zoom (and with details, number formats and text colours)."""
+    notes = []
+    groups: dict[str, list[str]] = {}
+    for c in root.iter(f"{S}c"):
+        st = c.get("s", "")
+        if st.isdigit() and int(st) in looks:
+            for part in looks[int(st)]:
+                groups.setdefault(part, []).append(c.get("r", ""))
+    for part, refs in sorted(groups.items()):
+        label = part[0].upper() + part[1:]
+        notes.append(f"{label}: " + ", ".join(refs[:40]) + (f" … ({len(refs)} cells)" if len(refs) > 40 else ""))
+    hidden = [r.get("r", "") for r in root.iter(f"{S}row") if r.get("hidden") in ("1", "true")]
+    if hidden:
+        notes.append("Hidden rows: " + ", ".join(hidden[:60]) + (" …" if len(hidden) > 60 else ""))
+    cols = []
+    for col in root.iter(f"{S}col"):
+        if col.get("hidden") in ("1", "true"):
+            lo, hi = int(col.get("min", 0) or 0), int(col.get("max", 0) or 0)
+            cols.append(_col(lo) if lo == hi else f"{_col(lo)}:{_col(min(hi, 16384))}")
+    if cols:
+        notes.append("Hidden columns: " + ", ".join(cols))
+    merged = [m.get("ref", "") for m in root.iter(f"{S}mergeCell")]
+    if merged:
+        notes.append("Merged: " + ", ".join(merged[:30]))
+    flt = root.find(f"{S}autoFilter")
+    if flt is not None:
+        notes.append(f"Filter: {flt.get('ref', '?')}")
+    view = root.find(f".//{S}sheetView")
+    if view is not None and view.get("zoomScale") not in (None, "100"):
+        notes.append(f"Zoom: {view.get('zoomScale')}%")
+    return notes
+
+
 def _xlsx_notes(z: zipfile.ZipFile, target: str, root: ET.Element, bold: set, fills: list) -> list[str]:
     """What a sheet's values don't show: bold cells, frozen panes, conditional formats, charts."""
     notes = []
@@ -279,18 +480,105 @@ def _xlsx_notes(z: zipfile.ZipFile, target: str, root: ET.Element, bold: set, fi
     for drawing in (t for t in rels.values() if "drawings/" in t and t in z.namelist()):
         for chart in _rels(z, drawing).values():
             if chart in z.namelist() and "charts/" in chart:
-                plot = _xml(z, chart).find(".//{http://schemas.openxmlformats.org/drawingml/2006/chart}plotArea")
-                kinds = [
-                    el.tag.split("}")[1] for el in list(plot if plot is not None else []) if el.tag.endswith("Chart")
-                ]
-                refs = [
-                    f.text for f in _xml(z, chart).iter("{http://schemas.openxmlformats.org/drawingml/2006/chart}f")
-                ][:3]
-                notes.append(f"Chart: {', '.join(kinds) or 'chart'}" + (f" of {', '.join(refs)}" if refs else ""))
+                notes.append(_xlsx_chart(_xml(z, chart)))
     return notes
 
 
-def _xlsx_sheet(root: ET.Element, shared: list[str], budget: int) -> tuple[str, int]:
+_DATE_FORMATS = {
+    14: "date",
+    15: "date",
+    16: "date",
+    17: "date",
+    18: "time",
+    19: "time",
+    20: "time",
+    21: "time",
+    22: "datetime",
+    45: "time",
+    46: "time",
+    47: "time",
+}
+
+
+def _xlsx_date_styles(z: zipfile.ZipFile) -> dict[int, str]:
+    """Cell styles (by index) that show a number as a date, a time or both: a sheet stores 2022-06-01 as 44713."""
+    st = _xml(z, "xl/styles.xml")
+    custom = {}
+    for n in st.iter(f"{S}numFmt"):
+        code = re.sub(r'"[^"]*"|\\.|\[[^\]]*\]', "", (n.get("formatCode") or "").lower())  # (quoted text, colours)
+        has_date, has_time = bool(re.search(r"[yd]", code)), bool(re.search(r"[hs]", code))
+        if has_date or has_time:
+            custom[int(n.get("numFmtId", 0) or 0)] = (
+                "datetime" if has_date and has_time else "date" if has_date else "time"
+            )
+    out = {}
+    xfs = st.find(f"{S}cellXfs")
+    for i, xf in enumerate(list(xfs) if xfs is not None else []):
+        fmt = int(xf.get("numFmtId", 0) or 0)
+        kind = custom.get(fmt) or _DATE_FORMATS.get(fmt)
+        if kind:
+            out[i] = kind
+    return out
+
+
+def _as_date(value: str, kind: str, epoch: datetime) -> str:
+    try:
+        moment = epoch + timedelta(days=float(value))
+    except (ValueError, OverflowError):
+        return value
+    if kind == "time":
+        return moment.strftime("%H:%M:%S" if moment.second else "%H:%M")
+    if kind == "date" or (moment.hour, moment.minute, moment.second) == (0, 0, 0):
+        return moment.strftime("%Y-%m-%d")
+    return moment.strftime("%Y-%m-%d %H:%M")
+
+
+C = "{http://schemas.openxmlformats.org/drawingml/2006/chart}"
+
+
+def _xlsx_chart(root: ET.Element) -> str:
+    """A chart: its kind (column, clustered), title and every series with its data and categories."""
+    plot = root.find(f".//{C}plotArea")
+    kinds, series = [], []
+    for el in list(plot if plot is not None else []):
+        name = el.tag.split("}")[1]
+        if not name.endswith("Chart"):
+            continue
+        kind = name[: -len("Chart")]
+        bar = el.find(f"{C}barDir")
+        if bar is not None:
+            kind = "column" if bar.get("val") == "col" else "bar"
+        group = el.find(f"{C}grouping")
+        if group is not None and group.get("val") not in (None, "standard"):
+            kind += f", {group.get('val')}"
+        kinds.append(kind)
+        for ser in el.iter(f"{C}ser"):
+            label = ser.find(f"{C}tx")
+            title = ""
+            if label is not None:  # its name, or where its name comes from when the file keeps no copy of it
+                f, v = label.find(f".//{C}f"), label.find(f".//{C}v")
+                title = f'"{v.text}"' if v is not None and v.text else (f.text if f is not None else "")
+            vals, cats = ser.find(f"{C}val//{C}f"), ser.find(f"{C}cat//{C}f")
+            if vals is None:
+                vals = ser.find(f"{C}yVal//{C}f")
+            if cats is None:
+                cats = ser.find(f"{C}xVal//{C}f")
+            part = (f"{title} = " if title else "") + (vals.text if vals is not None else "?")
+            if cats is not None:
+                part += f" by {cats.text}"
+            series.append(part)
+    heading = root.find(f"{C}chart/{C}title")
+    text = " ".join(t.text or "" for t in heading.iter(f"{A}t")).strip() if heading is not None else ""
+    return (
+        f"Chart: {' + '.join(kinds) or 'chart'}"
+        + (f' "{text}"' if text else "")
+        + (": " + "; ".join(series) if series else "")
+    )
+
+
+def _xlsx_sheet(
+    root: ET.Element, shared: list[str], budget: int, dates: dict | None = None, epoch: datetime | None = None
+) -> tuple[str, int]:
     rows, formulas, used = [], [], 0
     for row in root.iter(f"{S}row"):
         cells = []
@@ -306,6 +594,8 @@ def _xlsx_sheet(root: ET.Element, shared: list[str], budget: int) -> tuple[str, 
                 value = "TRUE" if value == "1" else "FALSE"
             elif kind == "e":
                 value = value or "#ERROR"
+            elif value and dates and c.get("s", "").isdigit() and int(c.get("s")) in dates:
+                value = _as_date(value, dates[int(c.get("s"))], epoch or datetime(1899, 12, 30))
             f = c.find(f"{S}f")
             if f is not None and f.text:
                 formulas.append(f"{ref} ={f.text}")
@@ -325,26 +615,190 @@ def _xlsx_sheet(root: ET.Element, shared: list[str], budget: int) -> tuple[str, 
 
 
 # PowerPoint ------------------------------------------------------------------------------
-def _pptx(p: Path) -> str:
+P14 = "{http://schemas.microsoft.com/office/powerpoint/2010/main}"
+EMU_CM = 360_000
+
+
+def _pptx(p: Path, details: bool = False) -> str:
     with zipfile.ZipFile(p) as z:
+        names = set(z.namelist())
+        pres = _xml(z, "ppt/presentation.xml")
         rels = _rels(z, "ppt/presentation.xml")
-        order = [
-            rels.get(s.get(f"{R}id", ""), "") for s in _xml(z, "ppt/presentation.xml").iter(f"{P}sldId")
-        ] or sorted(
-            (n for n in z.namelist() if re.fullmatch(r"ppt/slides/slide\d+\.xml", n)),
+        order = [rels.get(s.get(f"{R}id", ""), "") for s in pres.iter(f"{P}sldId")] or sorted(
+            (n for n in names if re.fullmatch(r"ppt/slides/slide\d+\.xml", n)),
             key=lambda n: int(re.search(r"(\d+)", n).group(1)),
         )
         out = []
+        size = pres.find(f"{P}sldSz")
+        if details and size is not None:
+            out.append(f"Slides are {int(size.get('cx', 0)) / EMU_CM:.2f} x {int(size.get('cy', 0)) / EMU_CM:.2f} cm")
         for i, name in enumerate(order, 1):
-            if name not in z.namelist():
+            if name not in names:
                 continue
-            paras = []
-            for par in _xml(z, name).iter(f"{A}p"):
-                line = "".join(t.text or "" for t in par.iter(f"{A}t")).strip()
-                if line:
-                    paras.append(line)
-            out.append(f"## Slide {i}\n" + "\n".join(paras))
+            slide = _xml(z, name)
+            folder, base = name.rsplit("/", 1)
+            srels = _rels(z, name) if f"{folder}/_rels/{base}.rels" in names else {}
+            lines = [f"## Slide {i}"]
+            if details:
+                lines.append(f"Background: {_pptx_background(slide)}")
+            tree = slide.find(f"{P}cSld/{P}spTree")
+            for shape in list(tree if tree is not None else []):
+                lines.extend(_pptx_shape(shape, srels, details, ""))
+            notes = next((t for t in srels.values() if "notesSlide" in t and t in names), None)
+            if notes:
+                text = _pptx_notes(_xml(z, notes))
+                if text:
+                    lines.append(f"Notes: {text}")
+            out.append("\n".join(lines))
         return "\n\n".join(out)
+
+
+def _pptx_background(slide: ET.Element) -> str:
+    bg = slide.find(f"{P}cSld/{P}bg")
+    if bg is None:
+        return "from the layout or master"
+    rgb = bg.find(f".//{A}srgbClr")
+    if rgb is not None:
+        return f"#{rgb.get('val')}" + (" (solid)" if bg.find(f".//{A}solidFill") is not None else "")
+    scheme = bg.find(f".//{A}schemeClr")
+    if scheme is not None:
+        return f"theme colour {scheme.get('val')}"
+    if bg.find(f".//{A}blipFill") is not None:
+        return "a picture"
+    if bg.find(f".//{A}gradFill") is not None:
+        return "a gradient"
+    return "set on the slide"
+
+
+def _pptx_box(shape: ET.Element) -> str:
+    xfrm = shape.find(f"{P}spPr/{A}xfrm")
+    if xfrm is None:
+        xfrm = shape.find(f"{P}xfrm")  # (a table's frame)
+    if xfrm is None:
+        xfrm = shape.find(f"{P}grpSpPr/{A}xfrm")
+    off, ext = (xfrm.find(f"{A}off"), xfrm.find(f"{A}ext")) if xfrm is not None else (None, None)
+    if off is None or ext is None:
+        return "placed by its layout"
+    x, y = int(off.get("x", 0)) / EMU_CM, int(off.get("y", 0)) / EMU_CM
+    w, h = int(ext.get("cx", 0)) / EMU_CM, int(ext.get("cy", 0)) / EMU_CM
+    return f"at {x:.2f}, {y:.2f} cm, {w:.2f} x {h:.2f} cm"
+
+
+def _pptx_shape(shape: ET.Element, srels: dict, details: bool, indent: str) -> list[str]:
+    tag = shape.tag.split("}")[-1]
+    props = shape.find(f".//{P}cNvPr")
+    name = props.get("name", "") if props is not None else ""
+    out: list[str] = []
+    if tag == "grpSp":
+        if details:
+            out.append(f"{indent}[group{_named(name)} {_pptx_box(shape)}]")
+        for kid in shape:
+            out.extend(_pptx_shape(kid, srels, details, indent + ("  " if details else "")))
+        return out
+    if tag == "pic":
+        media = []
+        for el in shape.iter():
+            kind = el.tag.split("}")[-1]
+            if kind in ("audioFile", "videoFile", "media"):
+                target = srels.get(el.get(f"{R}link") or el.get(f"{R}embed") or "", "")
+                media.append(f"{kind.replace('File', '')} {target.rsplit('/', 1)[-1] or '?'}")
+        what = media[0] if media else "picture"
+        out.append(f"{indent}[{what}{_named(name)}" + (f" {_pptx_box(shape)}" if details else "") + "]")
+        return out
+    if tag == "graphicFrame":
+        tbl = shape.find(f".//{A}tbl")
+        if tbl is not None:
+            rows = [
+                [
+                    " ".join("".join(t.text or "" for t in par.iter(f"{A}t")) for par in tc.iter(f"{A}p")).strip()
+                    for tc in tr.iter(f"{A}tc")
+                ]
+                for tr in tbl.iter(f"{A}tr")
+            ]
+            cols = max((len(r) for r in rows), default=0)
+            out.append(
+                f"{indent}[table{_named(name)}: {len(rows)} rows x {cols} columns"
+                + (f" {_pptx_box(shape)}" if details else "")
+                + "]"
+            )
+            out.extend(f"{indent}| " + " | ".join(c.replace("|", "\\|") for c in r) + " |" for r in rows if any(r))
+        elif details:
+            out.append(
+                f"{indent}[{shape.find(f'.//{A}graphicData').get('uri', 'object').rsplit('/', 1)[-1]}{_named(name)} {_pptx_box(shape)}]"
+            )
+        return out
+    body = shape.find(f"{P}txBody")
+    paras = list(body.iter(f"{A}p")) if body is not None else []
+    has_text = any("".join(t.text or "" for t in par.iter(f"{A}t")).strip() for par in paras)
+    box = _pptx_box(shape)
+    if details and not has_text and not name and box == "placed by its layout":
+        return out  # (an empty placeholder of the layout: nothing to say)
+    if details:
+        out.append(f"{indent}[shape{_named(name)} {box}]")
+    for par in paras:
+        text = "".join(t.text or "" for t in par.iter(f"{A}t")).strip()
+        if not text and not details:
+            continue
+        line = f"{indent}{'  ' if details else ''}{text}"
+        if details:
+            info = _pptx_paragraph(par)
+            line += f"  ({info})" if info else ""
+        if text or details:
+            out.append(
+                line if text else f"{indent}  (empty paragraph)" + (f"  ({_pptx_paragraph(par)})" if details else "")
+            )
+    return out
+
+
+def _named(name: str) -> str:
+    return f' "{name}"' if name else ""
+
+
+def _pptx_paragraph(par: ET.Element) -> str:
+    out = []
+    ppr = par.find(f"{A}pPr")
+    if ppr is not None:
+        if ppr.get("lvl") not in (None, "0"):
+            out.append(f"level {ppr.get('lvl')}")
+        if ppr.find(f"{A}buNone") is not None:
+            out.append("no bullet")
+        elif ppr.find(f"{A}buChar") is not None:
+            out.append(f"bullet {ppr.find(f'{A}buChar').get('char', '')!r}")
+        elif ppr.find(f"{A}buAutoNum") is not None:
+            out.append(f"numbered {ppr.find(f'{A}buAutoNum').get('type', '')}")
+        for k, label in (("marL", "indent"), ("indent", "first line")):
+            if ppr.get(k) not in (None, "0"):
+                out.append(f"{label} {int(ppr.get(k)) / EMU_CM:.2f} cm")
+        if ppr.get("algn"):
+            out.append(
+                {"l": "left", "ctr": "centered", "r": "right", "just": "justified"}.get(
+                    ppr.get("algn"), ppr.get("algn")
+                )
+            )
+    sizes, looks = set(), set()
+    for rpr in par.iter(f"{A}rPr"):
+        if rpr.get("sz"):
+            sizes.add(f"{int(rpr.get('sz')) / 100:g} pt")
+        for k, label in (("b", "bold"), ("i", "italic")):
+            if rpr.get(k) in ("1", "true"):
+                looks.add(label)
+        if rpr.get("u") not in (None, "none"):
+            looks.add("underline")
+        rgb = rpr.find(f"{A}solidFill/{A}srgbClr")
+        if rgb is not None:
+            looks.add(f"#{rgb.get('val')}")
+    out += sorted(sizes) + sorted(looks)
+    return ", ".join(out)
+
+
+def _pptx_notes(notes: ET.Element) -> str:
+    for sp in notes.iter(f"{P}sp"):
+        ph = sp.find(f".//{P}ph")
+        if ph is not None and ph.get("type") == "body":
+            return " ".join(
+                "".join(t.text or "" for t in par.iter(f"{A}t")).strip() for par in sp.iter(f"{A}p")
+            ).strip()
+    return ""
 
 
 # OpenDocument ----------------------------------------------------------------------------

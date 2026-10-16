@@ -516,6 +516,8 @@ def _read_lines(img: Image.Image, langs: list[str], timeout: float, ui: bool = F
     - with ui=True (a whole window without accessibility: a Windows program), a sparse pass that finds lone
       words a layout pass skips, such as the OK, Cancel and Apply of a dialog."""
     lang = "+".join(langs)
+    if img.width < 8 or img.height < 8:  # (a sliver: Tesseract's binarization fails on it, and it holds no text)
+        return Lines()
     lines = recognize(img, lang=lang, timeout=timeout)
     if langs == ["eng"] and lines.words >= 5 and lines.conf < DOUBTFUL:  # probably another language
         other, _ = ensure(detect(img))

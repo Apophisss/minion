@@ -634,7 +634,7 @@ def _visible_cells(
     for r in range(r0, r1 + 1):
         for c in range(c0, c1 + 1):
             if time.monotonic() > deadline or len(found) >= max_cells:
-                return (r0, c0, r1, c1), found
+                return (r0, c0, r1, c1), [f[:5] for f in found], None
             try:
                 cell = Atspi.Table.get_accessible_at(table, r, c)
             except Exception:
@@ -642,6 +642,10 @@ def _visible_cells(
             if cell is None:
                 continue
             content = _text(cell, 80) if "Text" in _interfaces(cell) else ""
+            if content:
+                raw = _cell_raw(cell)
+                if raw and raw != content and " ".join(raw.split()) == content:
+                    content = raw  # its spacing is part of it ("  MiniONs   IN blACK "): a task may be about it
             if not content:
                 empty.append((r, c, cell))
                 continue
@@ -656,9 +660,62 @@ def _visible_cells(
                     break
                 formula = _formula(cell)
                 if formula:
-                    found.append((f"{_col(c)}{r + 1}", "#ERROR", cell, _extents(cell) or (0, 0, 0, 0), formula, r, c))
+                    shown = "#N/A" if re.fullmatch(r"=\s*NA\(\s*\)", formula, re.I) else "#ERROR"
+                    found.append((f"{_col(c)}{r + 1}", shown, cell, _extents(cell) or (0, 0, 0, 0), formula, r, c))
         found.sort(key=lambda f: (f[5], f[6]))
-    return (r0, c0, r1, c1), [f[:5] for f in found]
+    below = None
+    if found and max(f[5] for f in found) == r1 and time.monotonic() < deadline:
+        # The data reaches the bottom of the view: say where it ends (rows below the view have no @ids, and a
+        # look that stops at row 25 hides rows 26 to 29).
+        cols = sorted({f[6] for f in found})[:6]
+        last = _data_below(table, r1, cols, min(deadline, time.monotonic() + 0.6))
+        below = last if last > r1 else None
+    return (r0, c0, r1, c1), [f[:5] for f in found], below
+
+
+# LibreOffice gives a date cell's text as you would type it ("06/01/2022"), not as its number format shows it
+# ("6/1/2022"); Find & Replace and the eye see the latter.
+_TYPED_DATE = re.compile(r"\d{2}/\d{2}/\d{4}\b")
+
+
+def _data_below(table, r1: int, cols: list[int], deadline: float) -> int:
+    """The last row (0-based) after r1 that has data in `cols`, for data in one block: rows r1+1, r1+2, r1+4…
+    until an empty one, then halving the gap. r1 when the row after it is empty."""
+
+    def has_data(r: int) -> bool:
+        for c in cols:
+            try:
+                cell = Atspi.Table.get_accessible_at(table, r, c)
+            except Exception:
+                return False
+            if cell is not None and "Text" in _interfaces(cell) and _text(cell, 20):
+                return True
+        return False
+
+    lo, step, hi = r1, 1, None
+    while hi is None:
+        if time.monotonic() > deadline or lo + step > 1_048_575:
+            return lo
+        if has_data(lo + step):
+            lo, step = lo + step, step * 2
+        else:
+            hi = lo + step
+    while hi - lo > 1 and time.monotonic() < deadline:
+        mid = (lo + hi) // 2
+        if has_data(mid):
+            lo = mid
+        else:
+            hi = mid
+    return lo
+
+
+def _cell_raw(cell, limit: int = 80) -> str:
+    """A cell's text as it is, spaces included (the usual reading collapses runs of spaces)."""
+    try:
+        n = Atspi.Text.get_character_count(cell)
+        return Atspi.Text.get_text(cell, 0, min(n, limit)) if n and n <= 400 else ""
+    except Exception:
+        return ""
 
 
 def _formula(cell) -> str:
@@ -676,8 +733,10 @@ def _formula(cell) -> str:
             formula = (cell.get_attributes() or {}).get("Formula", "")
         except Exception:
             return ""
-        if formula.endswith("\\"):  # (cut at the escaped ":")
-            formula = formula[:-1] + "…"
+    if formula.endswith("\\") and not formula.endswith("\\\\"):
+        # Cut at an escaped ":" (LibreOffice's accessibility loses the rest: "=SUM(B3\"): say it is cut. The
+        # input line, which `see` reads off the screen, shows the whole formula of the cell you are on.
+        formula = formula[:-1] + "…"
     formula = re.sub(r"\\(.)", r"\1", formula)  # LibreOffice escapes ":", "," and ";": "=SUM(B2\:B6)"
     return "=" + formula if formula and not formula.startswith("=") else formula
 
@@ -822,6 +881,7 @@ def snapshot(
     sw, sh = screen or (100000, 100000)
     elements: list[Element] = []
     frames: list[tuple[int, int, int, int]] = []  # boxes of the frames that hold web pages
+    named: dict[int, tuple[str, str, object]] = {}  # id(node) -> (role, name, node): fields that have neither
 
     def walk(node, depth: int, shown_depth: int, in_doc: bool = False, view=None, modal: bool = False) -> None:
         if snap.truncated:
@@ -836,6 +896,9 @@ def snapshot(
         role = _role(node)
         if role in SKIP_ROLES:
             return
+        given = named.get(id(node))
+        if given is not None and given[2] is node:
+            role = given[0]
         if modal and role == "panel" and depth > 0:
             role = "dialog"  # Firefox's alert/confirm/prompt: "The page at example.com says:"
         ext = _extents(node)
@@ -870,6 +933,10 @@ def snapshot(
         name = _clip(_name(node), text_limit)
         if not name.strip():
             name = ""  # "    ": a CSS drawing (star ratings), not text
+        if given is not None and given[2] is node:
+            name = given[1]
+        elif role == "tool bar" and name in FORMULA_BARS:
+            named.update(_formula_bar_fields(node))
         ifaces = _interfaces(node)
         lines = None
         if role in TEXT_INPUT and role != "terminal" and boxed and (not name or name.strip().isdigit()):
@@ -969,6 +1036,10 @@ def snapshot(
             )
         elif role in TEXTUAL:
             emit = bool(name or text)
+            if not emit and role == "paragraph" and not in_doc and boxed:
+                # An empty paragraph of a document (Writer, Impress): part of its structure ("the first two
+                # paragraphs", a blank line between them), and where the cursor is on an empty line.
+                emit, flags = True, [*flags, "empty"]
         elif own:
             emit = True
         elif role in CONTAINERS_WITH_TITLE:
@@ -999,8 +1070,9 @@ def snapshot(
                 )
             )
             child_shown_depth = shown_depth + 1
-            # Leaves: their children only repeat the name.
-            if role in LEAVES and (name or text):
+            # Leaves: their children only repeat the name. An expanded expander isn't one: LibreOffice's "Other
+            # options" (Find & Replace) is a toggle button that holds the options it shows.
+            if role in LEAVES and (name or text) and "expanded" not in flags:
                 return
         try:
             n = node.get_child_count()
@@ -1009,7 +1081,7 @@ def snapshot(
         if n > max_children * 10:
             cells = _visible_cells(node, x, y, w, h, deadline) if "Table" in ifaces and boxed else None
             if cells is not None:
-                (r0, c0, r1, c1), found = cells
+                (r0, c0, r1, c1), found, below = cells
                 if elements and elements[-1].node is node:  # replace the table's own line
                     child_shown_depth = elements.pop().depth
                 elements.append(
@@ -1022,7 +1094,13 @@ def snapshot(
                         y=y,
                         w=w,
                         h=h,
-                        text=f"visible {_col(c0)}{r0 + 1}:{_col(c1)}{r1 + 1}, {len(found)} non-empty cells",
+                        text=f"visible {_col(c0)}{r0 + 1}:{_col(c1)}{r1 + 1}, {len(found)} non-empty cells"
+                        + (f"; the data goes on below, to row {below + 1}" if below is not None else "")
+                        + (
+                            "; dates are listed as typed (MM/DD/YYYY): the sheet may show them another way"
+                            if any(_TYPED_DATE.match(f[1]) for f in found)
+                            else ""
+                        ),
                         node=node,
                         in_doc=in_doc,
                     )
@@ -1162,7 +1240,96 @@ def popup_menus(window: dict, screen: tuple[int, int] | None = None) -> list[Ele
         snap = snapshot(tw, max_elements=80, budget=1.0, screen=screen)
         if any(e.role in MENU_ITEM_ROLES for e in snap.elements):
             out.extend(snap.elements)
+        elif not tw["name"] and any(e.role in LIST_ITEM_ROLES for e in snap.elements):
+            # An open dropdown's list (LibreOffice's and GTK's dialogs): a table or list in a window of its own.
+            # Its rows are the options, so they read as options, not as a spreadsheet's cells.
+            for e in snap.elements:
+                if e.role == "table cell":
+                    e.role = "list item"
+            out.extend(e for e in snap.elements if e.role not in ("table", "scroll pane", "panel"))
     return out
+
+
+LIST_ITEM_ROLES = {"table cell", "list item", "option"}
+PICKABLE = {
+    "list item",
+    "option",
+    "menu item",
+    "check menu item",
+    "radio menu item",
+}  # (a list's cells become list items)
+
+
+# LibreOffice Calc's formula bar holds the Name Box (the cell or range you are on: type B8 or C2:C29 there to go to
+# it) and the input line (the current cell's content or formula). Accessibility shows both as empty, nameless
+# panels, so they are given the roles and names they look like; `see` reads what they show.
+FORMULA_BARS = {"Formula Tool Bar"}
+OPAQUE_FIELDS = {"Name Box", "Input line"}
+
+
+def _formula_bar_fields(bar) -> dict[int, tuple[str, str, object]]:
+    try:
+        kids = [bar.get_child_at_index(i) for i in range(min(bar.get_child_count(), 20))]
+    except Exception:
+        return {}
+    panels = [k for k in kids if k is not None and _role(k) == "panel" and not _name(k).strip()]
+    if len(panels) < 2:
+        return {}
+    first, last = panels[0], panels[-1]
+    return {id(first): ("combo box", "Name Box", first), id(last): ("text", "Input line", last)}
+
+
+def status_bar_texts(window: dict) -> list[str] | None:
+    """The texts of a window's status bar (LibreOffice's: "Shape 'TextBox 9' selected", "Slide 1 of 19",
+    "TextEdit: Paragraph 1, Row 1, Column 7", a selected object's position and size), or None without one."""
+    if not _init():
+        return None
+    with LOCK:
+        queue = [(window["node"], 0)]
+        bar = None
+        while queue and bar is None:
+            node, depth = queue.pop(0)
+            try:
+                kids = [node.get_child_at_index(i) for i in range(min(node.get_child_count(), 40))]
+            except Exception:
+                continue
+            for kid in kids:
+                if kid is None:
+                    continue
+                if _role(kid) == "status bar":
+                    bar = kid
+                    break
+                if depth < 3:
+                    queue.append((kid, depth + 1))
+        if bar is None:
+            return None
+        out = []
+        try:
+            for i in range(min(bar.get_child_count(), 30)):
+                kid = bar.get_child_at_index(i)
+                text = " ".join((_name(kid) if kid is not None else "").split()) if kid is not None else ""
+                if not text and kid is not None and "Text" in _interfaces(kid):
+                    text = " ".join(_text(kid, 120).split())
+                if text:
+                    out.append(text)
+        except Exception:
+            pass
+        return out
+
+
+def best_option(items: list[Element], wanted: str) -> Element | None:
+    """The item that reads `wanted` exactly, else the one that starts with it, else the only one containing it."""
+    low = " ".join(wanted.split()).casefold()
+
+    def text(e: Element) -> str:
+        return " ".join(e.label().split()).casefold()
+
+    for match in (lambda t: t == low, lambda t: t.startswith(low)):
+        hits = [e for e in items if match(text(e))]
+        if hits:
+            return hits[0]
+    hits = [e for e in items if low in text(e)]
+    return hits[0] if len(hits) == 1 else None
 
 
 def _same(a: str, b: str) -> bool:
@@ -1407,6 +1574,25 @@ def is_editable(el: Element) -> bool:
         return node.get_state_set().contains(Atspi.StateType.EDITABLE)
     except Exception:
         return True
+
+
+def has_entry(el: Element) -> bool:
+    """Whether a dropdown takes typing (a font-name box) rather than only offering its list: it is EDITABLE, or
+    holds an editable text field. (is_editable counts every combo box, so `fill` can try them all.)"""
+    node = el.node
+    if node is None or not _load():
+        return True  # can't tell: type, as before
+    try:
+        with LOCK:
+            if Atspi.StateType.EDITABLE in _states(node):
+                return True
+            for i in range(min(node.get_child_count(), 6)):
+                kid = node.get_child_at_index(i)
+                if kid is not None and _role(kid) in ("text", "entry") and Atspi.StateType.EDITABLE in _states(kid):
+                    return True
+    except Exception:
+        return True
+    return False
 
 
 OPTION_ROLES = ("list item", "menu item", "option", "check menu item", "radio menu item", "table cell")
@@ -2080,6 +2266,50 @@ def refresh(el: Element) -> tuple[int, int, int, int] | None:
         return ext
 
 
+SCROLLERS = {"scroll pane", "viewport", "list", "list box", "tree table", "table"}
+CLIPPERS = SCROLLERS | {"panel", "tool bar", "filler"}
+
+
+def clip_box(el: Element, levels: int = 5) -> tuple[int, int, int, int] | None:
+    """(x0, y0, x1, y1): the part of the screen the control's containers let it show in (the smallest box of a
+    scroll pane, list or panel around it), or None if nothing around it is smaller than the screen. A panel
+    counts only where it overlaps the control (some report boxes nowhere near what they hold)."""
+    if not _init() or el.node is None:
+        return None
+    with LOCK:
+        own = _extents(el.node)
+        if not own or own[2] <= 0 or own[3] <= 0:
+            return None
+        ex, ey, ew, eh = own
+        box = None
+        try:
+            node = el.node.get_parent()
+        except Exception:
+            return None
+        for _ in range(levels):
+            if node is None:
+                break
+            role = _role(node)
+            if role in TOP_LEVEL or role.startswith("document"):
+                break
+            ext = _extents(node) if role in CLIPPERS else None
+            if ext and ext[2] >= 4 and ext[3] >= 4 and ext[0] > -10000 and ext[1] > -10000:
+                x, y, w, h = ext
+                overlaps = not (x >= ex + ew or y >= ey + eh or x + w <= ex or y + h <= ey)
+                if overlaps or role in SCROLLERS:
+                    edge = (x, y, x + w, y + h)
+                    box = (
+                        edge
+                        if box is None
+                        else (max(box[0], x), max(box[1], y), min(box[2], x + w), min(box[3], y + h))
+                    )
+            try:
+                node = node.get_parent()
+            except Exception:
+                break
+        return box
+
+
 def scroll_into_view(el: Element) -> bool:
     if not _init() or el.node is None:
         return False
@@ -2275,10 +2505,12 @@ def format_elements(elements: list[Element], max_depth: int = 6) -> list[str]:
             rows: dict[str, list[str]] = {}
             for c in elements[i:j]:
                 row = re.sub(r"^[A-Z]+", "", c.name)
-                text = _clip(" ".join((c.text or "").split()), 60)
+                raw = c.text or ""
+                spaced = raw != " ".join(raw.split()) and "\n" not in raw  # (spaces that are part of the content)
+                text = (raw if len(raw) <= 60 else raw[:59] + "…") if spaced else _clip(raw, 60)
                 formula = f" ({c.value})" if c.value.startswith("=") else ""
                 rows.setdefault(row, []).append(
-                    f"@{c.id} {c.name} {_q(text) if ' ' in text else text}{formula}".rstrip()
+                    f"@{c.id} {c.name} {_q(text) if ' ' in text or spaced else text}{formula}".rstrip()
                 )
             for row, cells in rows.items():
                 lines.append(f"{indent}row {row}: " + " · ".join(cells))
@@ -2310,7 +2542,7 @@ def format_elements(elements: list[Element], max_depth: int = 6) -> list[str]:
         if el.value and el.role == "cell" and el.value.startswith("="):
             s += f"  ({el.value})"  # its formula
         elif el.value:
-            s += f" value={_q(el.value)}" if el.role in ("combo box", "list box") else f" value={el.value}"
+            s += f" value={_q(el.value)}" if el.role in ("combo box", "list box", "text") else f" value={el.value}"
         if el.states:
             s += " [" + ", ".join(el.states) + "]"
         if el.w and el.h:

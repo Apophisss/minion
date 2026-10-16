@@ -8,6 +8,7 @@ A target can be:
 
 from __future__ import annotations
 
+import os
 import re
 import time
 import unicodedata
@@ -240,6 +241,57 @@ def match_score(query: str, label: str) -> int:
     return 0
 
 
+_DOC_PATHS: dict[str, str] = {}
+
+
+def _doc_path(win) -> str:
+    """Where the document a LibreOffice window has open lives ("~/Desktop/31_2.pptx"): LibreOffice keeps a lock
+    file, .~lock.NAME#, next to every document it edits. "" if it isn't found."""
+    if not re.search(r"libreoffice|soffice", getattr(win, "app", "") or "", re.I):
+        return ""
+    name = re.split(r"\s+[—-]\s+LibreOffice", win.title or "")[0].removesuffix(" (read-only)").strip()
+    if not name or "/" in name or name.startswith("Untitled"):
+        return ""
+    home = os.path.expanduser("~")
+    known = _DOC_PATHS.get(name)
+    if known and os.path.exists(os.path.join(os.path.dirname(known), f".~lock.{name}#")):
+        return "~" + known[len(home) :] if known.startswith(home) else known
+    lock = f".~lock.{name}#"
+    for top in (home, "/tmp"):
+        for folder, dirs, files in os.walk(top):
+            if lock in files:
+                path = os.path.join(folder, name)
+                _DOC_PATHS[name] = path
+                return "~" + path[len(home) :] if path.startswith(home) else path
+            depth = folder[len(top) :].count(os.sep)
+            dirs[:] = [] if depth >= 3 else [d for d in dirs if not d.startswith(".") or d == ".local"][:40]
+    return ""
+
+
+def _title_echo(ln, win) -> bool:
+    """An OCR line that is the window's own title bar ("H20_Factsheet.docx — LibreOffice Writer" read as
+    "H20_Factsheet..."): the window list already gives the title, exactly."""
+    if win is None or not getattr(win, "title", "") or not win.y - 4 <= ln.center[1] <= win.y + 30:
+        return False
+    import difflib
+
+    a, b = (re.sub(r"\W+", "", v.casefold()) for v in (ln.text, win.title))
+    return bool(a) and (a in b or difflib.SequenceMatcher(None, a, b[: len(a) + 4]).ratio() >= 0.6)
+
+
+def _cell_ref(text: str) -> str:
+    """A cell reference read by OCR, with the usual misreadings fixed: "Al" is A1, "BlO" is B10."""
+    m = re.fullmatch(r"\$?([A-Za-z]{1,3}?)\$?([0-9lI|O]+)((?::\$?[A-Za-z]{1,3}\$?[0-9lI|O]+)?)", text.strip())
+    if not m:
+        return text
+    fix = str.maketrans({"l": "1", "I": "1", "|": "1", "O": "0"})
+    tail = m.group(3)
+    if tail:
+        tm = re.fullmatch(r":\$?([A-Za-z]{1,3}?)\$?([0-9lI|O]+)", tail)
+        tail = f":{tm.group(1).upper()}{tm.group(2).translate(fix)}" if tm else tail
+    return f"{m.group(1).upper()}{m.group(2).translate(fix)}{tail}"
+
+
 class Perception:
     def __init__(self, screen, windows, display_size):
         self.screen = screen
@@ -347,6 +399,25 @@ class Perception:
             self._next_id = 1
 
     # -- see ----------------------------------------------------------
+    def shown_text(self, el, img=None, origin: tuple[int, int] = (0, 0), limit: int = 80) -> str:
+        """The text a control shows on screen, read by OCR: for a dropdown that tells accessibility nothing of
+        its value (LibreOffice's dialogs). Its arrow button is left out. `img` (with its screen `origin`) saves a
+        new grab when the caller has one."""
+        if not ocr_mod.available() or el.w < 24 or not 8 <= el.h <= 80:
+            return ""
+        w = max(16, el.w - min(32, el.w // 4))
+        try:
+            if img is None:
+                part = self.screen.grab((el.x, el.y, w, el.h))
+            else:
+                x, y = el.x - origin[0], el.y - origin[1]
+                part = img.crop((x, y, x + w, y + el.h))
+            langs, _ = ocr_mod.ensure(ocr_mod.langs_for(el.name or ""))
+            lines = ocr_mod.read(part, langs, offset=(el.x, el.y), timeout=10.0, ui=True)
+        except Exception:  # OCR is best-effort
+            return ""
+        return " ".join(" ".join(ln.text for ln in lines).split())[:limit]
+
     def see(
         self,
         ocr="auto",
@@ -372,6 +443,17 @@ class Perception:
             aw = a11y.window_for(target)
             if aw is not None:
                 snap = a11y.snapshot(aw, max_elements=max_elements, screen=(sw, sh), text_limit=text_limit)
+                # Right after a dialog closes, LibreOffice repaints its window and its tree is empty for a
+                # moment: look again instead of settling for OCR fragments of a half-drawn window.
+                for _ in range(4):
+                    if (
+                        snap.error
+                        or len(snap.elements) >= 3
+                        or not re.search(r"libreoffice|soffice", target.app or "", re.I)
+                    ):
+                        break
+                    time.sleep(0.4)
+                    snap = a11y.snapshot(aw, max_elements=max_elements, screen=(sw, sh), text_limit=text_limit)
                 if snap.error:
                     a11y_note = snap.error
             else:
@@ -436,7 +518,11 @@ class Perception:
                             x, y, w, h = box[0] - region[0], box[1] - region[1], box[2], box[3]
                             part = ocr_mod.mask(img.crop((x, y, x + w, y + h)), covered, box[:2])
                             part, (tx, ty) = ocr_mod.trim(part)
-                            lines = ocr_mod.read(part, langs, offset=(box[0] + tx, box[1] + ty), ui=whole)
+                            try:  # (one part that can't be read doesn't lose the others)
+                                lines = ocr_mod.read(part, langs, offset=(box[0] + tx, box[1] + ty), ui=whole)
+                            except Exception as e:
+                                ocr_note = f"OCR failed on part of the window: {e}"
+                                continue
                             # Text accessibility already gives (a button over a slide) isn't repeated. In an app
                             # that describes itself well (GIMP's docks, a page with photos), a picture's stray
                             # marks are noise: only clear words are kept, unless OCR was asked for.
@@ -444,9 +530,23 @@ class Perception:
                             fresh = [
                                 ln
                                 for ln in lines
-                                if _worth_reading(ln) and not _inside(ln.center, covered) and (not strict or _clear(ln))
+                                if _worth_reading(ln)
+                                and not _inside(ln.center, covered)
+                                and (not strict or _clear(ln))
+                                and not _title_echo(ln, target)
                             ]
                             pictures.append((box, fresh, whole))
+                    # A dialog's dropdown that tells accessibility nothing of its value (and nothing of its options
+                    # until it opens: LibreOffice's) still shows the value: read it off the screen.
+                    # So do Calc's Name Box (the cell you are on) and input line (that cell's formula, uncut).
+                    for e in elements:
+                        opaque = e.name in a11y.OPAQUE_FIELDS and not e.value
+                        if opaque or (e.role == "combo box" and not (e.value or e.text or e.in_doc)):
+                            shown = self.shown_text(e, img, region[:2], limit=200 if e.role == "text" else 80)
+                            if shown and e.name == "Name Box":
+                                shown = _cell_ref(shown)
+                            if shown:
+                                e.value, e.states = shown, [*e.states, "OCR"]
                 except Exception as e:  # OCR is best-effort
                     ocr_note = f"OCR failed: {e}"
         ocr_refs = []
@@ -540,7 +640,10 @@ class Perception:
             if w.minimized:
                 flags.append("minimized")
             tag = f" ({', '.join(flags)})" if flags else ""
-            out.append(f'  [{i}] "{w.title}" — {w.app}{tag} at {w.x},{w.y} {w.w}x{w.h}')
+            path = _doc_path(w)
+            out.append(
+                f'  [{i}] "{w.title}" — {w.app}{tag} at {w.x},{w.y} {w.w}x{w.h}' + (f" · {path}" if path else "")
+            )
         if not wins:
             out.append("  (no windows open — use `open` to launch an app)")
         if elements:
@@ -719,6 +822,8 @@ class Perception:
 
     def _ref(self, rid: int) -> Target:
         el = self.registry.get(rid)
+        if el is None and rid in self._labels:
+            el = self._revive(rid)
         if el is None:
             if rid in self._labels:
                 raise TargetError(
@@ -762,6 +867,25 @@ class Perception:
             sw, sh = min(sw, vx + vw), min(sh, vy + vh)
             x0, y0 = max(x, vx), max(y, vy)
             x, y, w, h = x0, y0, min(x + w, sw) - x0, min(y + h, sh) - y0
+        if w > 0 and h > 0 and not getattr(el, "in_doc", False) and isinstance(el, a11y.Element):
+            # An app's control can be clipped by what holds it: a sidebar field cut off at the sidebar's edge, a
+            # list row scrolled out of its list (its box is still there, over the scroll bar or the next control).
+            clip = a11y.clip_box(el)
+            if clip is not None:
+                cx0, cy0, cx1, cy1 = clip
+                if x >= cx1 or y >= cy1 or x + w <= cx0 or y + h <= cy0:
+                    if a11y.scroll_into_view(el):
+                        time.sleep(0.25)
+                        x, y, w, h = a11y.refresh(el) or (x, y, w, h)
+                        clip = a11y.clip_box(el) or clip
+                        cx0, cy0, cx1, cy1 = clip
+                    if x >= cx1 or y >= cy1 or x + w <= cx0 or y + h <= cy0:
+                        raise TargetError(
+                            f'@{rid} ({el.role} "{el.label()}") is scrolled out of view in its list or panel: '
+                            "scroll it (scroll down 3 @<the list's id>), then look again"
+                        )
+                x0, y0 = max(x, cx0), max(y, cy0)
+                x, y, w, h = x0, y0, min(x + w, cx1) - x0, min(y + h, cy1) - y0
         if w > 0 and h > 0:  # aim at the visible part of a partly scrolled element
             x0, y0, x1, y1 = max(x, 0), max(y, 0), min(x + w, sw), min(y + h, sh)
             if x1 > x0 and y1 > y0:
@@ -887,6 +1011,31 @@ class Perception:
         if ties:
             t.desc += f" (first of {len(ties) + 1} matches; use @id to pick another)"
         return t
+
+    def _revive(self, rid: int, wait: float = 2.0):
+        """A control from an earlier look that the latest look's ids no longer cover: the main window's button
+        after a dialog was in front for a few looks, or a dialog's field while it opens or closes in the same
+        batch. Find it again in the focused window by its stable id, giving the window a moment."""
+        if not a11y.AVAILABLE:
+            return None
+        end = time.monotonic() + wait
+        while True:
+            try:
+                focused = self.windows.focused()
+                aw = a11y.window_for(focused) if focused is not None else None
+            except Exception:
+                aw = None
+            if aw is not None:
+                sw, sh = self.size
+                snap = a11y.snapshot(aw, max_elements=600, budget=1.5, screen=(sw, sh))
+                for e in [*a11y.popup_menus(aw, screen=(sw, sh)), *snap.elements]:
+                    if self._ids.get(self._key(e)) == rid:
+                        e.id = rid
+                        self.registry[rid] = e
+                        return e
+            if time.monotonic() >= end:
+                return None
+            time.sleep(0.3)
 
     def _refind(self, old):
         """The control that took the place of `old` after a redraw: same role and label, the only one near."""

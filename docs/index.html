@@ -555,7 +555,7 @@ html:not(.js) .tablist{display:none}
 <li><p>Or install the plugin: the same tools, plus a skill that teaches efficient use.</p>
 <div class="code" data-label="the plugin commands"><pre><code><span class="cmd">claude plugin marketplace add apophisss/minion &amp;&amp; claude plugin install minion@minion</span></code></pre></div></li>
 </ol>
-<p class="note">Add <code>--scope&nbsp;user</code> to use it in every project. For the smallest context, add <code>--compact</code>: one <code>computer</code> tool, about 230 tokens of definitions instead of 2,100. <a href="https://github.com/apophisss/minion/blob/main/docs/agents.md">Agents &amp; MCP guide</a></p>
+<p class="note">Add <code>--scope&nbsp;user</code> to use it in every project. For the smallest context, add <code>--compact</code>: one <code>computer</code> tool, about 450 tokens of definitions instead of 3,300. <a href="https://github.com/apophisss/minion/blob/main/docs/agents.md">Agents &amp; MCP guide</a></p>
 </div>
 
 <div class="panel" role="tabpanel" id="p-cursor" aria-labelledby="t-cursor" tabindex="0">
@@ -634,7 +634,7 @@ desk.remove()</code></pre></div></li>
 </div>
 </div>
 <aside class="tabs-a" aria-label="Before you start">
-<div><h3>What you need</h3><p>Docker or Podman, running: Docker Desktop, OrbStack and Colima work too. The installers bring everything else. Each profile’s image is 187–707 MB, with shared layers, and downloads the first time you use it.</p></div>
+<div><h3>What you need</h3><p>Docker or Podman, running: Docker Desktop, OrbStack and Colima work too. The installers bring everything else. Each profile’s image is 199–717 MB, with shared layers, and downloads the first time you use it.</p></div>
 <div><h3>Then just ask</h3><q>Create an office desktop, write a one-page brief about our Q3 numbers in Writer and save it as brief.docx.</q></div>
 </aside>
 </div>
@@ -660,7 +660,7 @@ desk.remove()</code></pre></div></li>
 </div>
 <div>
 <div class="term">
-<div class="term-h"><span>After typing a sentence</span><code>see(changes=true)</code><span class="badge hot">~60 tokens</span></div>
+<div class="term-h"><span>After typing a sentence</span><code>see(changes=true)</code><span class="badge hot">~80 tokens</span></div>
 <pre class="out"><span class="l"><span class="ok">✓</span> typed 30 chars</span><span class="l"><span class="r">→</span> screen changed &lt;1% <span class="c">(region 404,226 236x20)</span></span><span class="l">Changes since your last look 1.0s ago <span class="c">(81 elements unchanged; their @ids still work):</span></span><span class="l i">  <span class="ok">+</span> <span class="id">@84</span> <span class="r">paragraph</span> <span class="s">"Quarterly numbers look strong."</span> <span class="st">[focused]</span> <span class="c">(603,234)</span></span><span class="l i">  <span class="st">~</span> <span class="id">@80</span> <span class="r">label</span> <span class="s">"4 words, 30 characters"</span> <span class="c">(281,730)</span></span></pre>
 </div>
 <ul class="facts">
@@ -695,16 +695,16 @@ desk.remove()</code></pre></div></li>
 <thead><tr><th scope="col"><span class="sr">What the model receives</span></th><th scope="col"><span class="sr">Tokens</span></th></tr></thead>
 <tbody>
 <tr class="grp"><th colspan="2" scope="rowgroup">One look at the screen</th></tr>
-<tr class="base"><th scope="row">Screenshot, 1280×800<small>the baseline</small></th><td><div class="bt"><span class="bf" style="--p:.65"></span><span class="bv">~1,365</span></div></td></tr>
-<tr><th scope="row"><code>see</code> of a LibreOffice window<small>exact text plus clickable ids</small></th><td><div class="bt"><span class="bf" style="--p:.438"></span><span class="bv">~920</span></div></td></tr>
-<tr><th scope="row"><code>screenshot(detail="low")</code><small>half size</small></th><td><div class="bt"><span class="bf" style="--p:.162"></span><span class="bv">~341</span></div></td></tr>
-<tr><th scope="row"><code>act(observe="crop")</code><small>only the changed region</small></th><td><div class="bt"><span class="bf" style="--p:.095"></span><span class="bv">~200</span></div></td></tr>
-<tr><th scope="row"><code>see(changes=true)</code><small>after typing a sentence: the diff only</small></th><td><div class="bt"><span class="bf" style="--p:.029"></span><span class="bv">~60</span></div></td></tr>
+<tr class="base"><th scope="row">Screenshot, 1280×800<small>the baseline</small></th><td><div class="bt"><span class="bf" style="--p:.414"></span><span class="bv">~1,365</span></div></td></tr>
+<tr><th scope="row"><code>see</code> of a LibreOffice window<small>exact text plus clickable ids</small></th><td><div class="bt"><span class="bf" style="--p:.279"></span><span class="bv">~920</span></div></td></tr>
+<tr><th scope="row"><code>screenshot(detail="low")</code><small>half size</small></th><td><div class="bt"><span class="bf" style="--p:.103"></span><span class="bv">~341</span></div></td></tr>
+<tr><th scope="row"><code>act(observe="crop")</code><small>only the changed region</small></th><td><div class="bt"><span class="bf" style="--p:.061"></span><span class="bv">~200</span></div></td></tr>
+<tr><th scope="row"><code>see(changes=true)</code><small>after typing a sentence: the diff only</small></th><td><div class="bt"><span class="bf" style="--p:.024"></span><span class="bv">~80</span></div></td></tr>
 </tbody>
 <tbody>
 <tr class="grp"><th colspan="2" scope="rowgroup">Tool definitions, sent with every request</th></tr>
-<tr class="base"><th scope="row">9 tools</th><td><div class="bt"><span class="bf" style="--p:1"></span><span class="bv">~2,100</span></div></td></tr>
-<tr><th scope="row">Compact mode<small>one <code>computer</code> tool with CLI syntax</small></th><td><div class="bt"><span class="bf" style="--p:.11"></span><span class="bv">~230</span></div></td></tr>
+<tr class="base"><th scope="row">9 tools</th><td><div class="bt"><span class="bf" style="--p:1"></span><span class="bv">~3,300</span></div></td></tr>
+<tr><th scope="row">Compact mode<small>one <code>computer</code> tool with CLI syntax</small></th><td><div class="bt"><span class="bf" style="--p:.136"></span><span class="bv">~450</span></div></td></tr>
 </tbody>
 </table>
 </figure>
@@ -824,13 +824,13 @@ print(cells()[<span class="s">"B4"</span>])  <span class="cm"># only this comes 
 <p class="lead">Profiles pre-install and tune the common jobs. Each one extends another, so images share layers. Start one with <code>minion&nbsp;up&nbsp;office</code>.</p>
 </div>
 <ul class="profiles">
-<li class="card pc"><h3><span><svg class="ic" aria-hidden="true"><use href="#i-globe"/></svg></span>browser</h3><p>Firefox with uBlock Origin against ads, trackers, cookie banners and newsletter pop-ups. Downloads go straight to <code>~/Downloads</code>.</p><dl><div><dt>Download</dt><dd>352 MB</dd></div><div><dt>Idle RAM</dt><dd>~55–100 MB</dd></div></dl></li>
-<li class="card pc"><h3><span><svg class="ic" aria-hidden="true"><use href="#i-doc"/></svg></span>office</h3><p>LibreOffice Writer, Calc and Impress, a text editor, a file manager and Firefox. Saves Microsoft formats by default.</p><dl><div><dt>Download</dt><dd>511 MB</dd></div><div><dt>Idle RAM</dt><dd>~85 MB</dd></div></dl></li>
-<li class="card pc"><h3><span><svg class="ic" aria-hidden="true"><use href="#i-term"/></svg></span>dev</h3><p>git, Python, Node.js, build tools, the Geany IDE, a real terminal that <code>see</code> can read, Firefox and Chromium.</p><dl><div><dt>Download</dt><dd>703 MB</dd></div><div><dt>Idle RAM</dt><dd>~55 MB</dd></div></dl></li>
-<li class="card pc"><h3><span><svg class="ic" aria-hidden="true"><use href="#i-search"/></svg></span>research</h3><p>Firefox with <code>pdftotext</code>, pandoc, a notes editor, and Python with requests and BeautifulSoup.</p><dl><div><dt>Download</dt><dd>410 MB</dd></div><div><dt>Idle RAM</dt><dd>~55 MB</dd></div></dl></li>
-<li class="card pc"><h3><span><svg class="ic" aria-hidden="true"><use href="#i-chart"/></svg></span>data</h3><p>Everything in <code>office</code>, plus pandas, NumPy, SciPy, matplotlib, seaborn, openpyxl and SQLite.</p><dl><div><dt>Download</dt><dd>663 MB</dd></div><div><dt>Idle RAM</dt><dd>~105 MB</dd></div></dl></li>
-<li class="card pc"><h3><span><svg class="ic" aria-hidden="true"><use href="#i-wine"/></svg></span>windows</h3><p>Wine 10 for 64- and 32-bit Windows <code>.exe</code> and <code>.msi</code> programs, plus Firefox to download them. Needs an x86&#8209;64 host.</p><dl><div><dt>Download</dt><dd>707 MB</dd></div><div><dt>Idle RAM</dt><dd>~56 MB</dd></div></dl></li>
-<li class="card pc"><h3><span><svg class="ic" aria-hidden="true"><use href="#i-layers"/></svg></span>base</h3><p>An X server, a window manager, a terminal and the agent. The foundation every other profile builds on.</p><dl><div><dt>Download</dt><dd>187 MB</dd></div><div><dt>Idle RAM</dt><dd>~65 MB</dd></div></dl></li>
+<li class="card pc"><h3><span><svg class="ic" aria-hidden="true"><use href="#i-globe"/></svg></span>browser</h3><p>Firefox with uBlock Origin against ads, trackers, cookie banners and newsletter pop-ups. Downloads go straight to <code>~/Downloads</code>.</p><dl><div><dt>Download</dt><dd>363 MB</dd></div><div><dt>Idle RAM</dt><dd>~55–100 MB</dd></div></dl></li>
+<li class="card pc"><h3><span><svg class="ic" aria-hidden="true"><use href="#i-doc"/></svg></span>office</h3><p>LibreOffice Writer, Calc and Impress, a text editor, a file manager and Firefox. Saves Microsoft formats by default.</p><dl><div><dt>Download</dt><dd>526 MB</dd></div><div><dt>Idle RAM</dt><dd>~85 MB</dd></div></dl></li>
+<li class="card pc"><h3><span><svg class="ic" aria-hidden="true"><use href="#i-term"/></svg></span>dev</h3><p>git, Python, Node.js, build tools, the Geany IDE, a real terminal that <code>see</code> can read, Firefox and Chromium.</p><dl><div><dt>Download</dt><dd>714 MB</dd></div><div><dt>Idle RAM</dt><dd>~55 MB</dd></div></dl></li>
+<li class="card pc"><h3><span><svg class="ic" aria-hidden="true"><use href="#i-search"/></svg></span>research</h3><p>Firefox with <code>pdftotext</code>, pandoc, a notes editor, and Python with requests and BeautifulSoup.</p><dl><div><dt>Download</dt><dd>422 MB</dd></div><div><dt>Idle RAM</dt><dd>~55 MB</dd></div></dl></li>
+<li class="card pc"><h3><span><svg class="ic" aria-hidden="true"><use href="#i-chart"/></svg></span>data</h3><p>Everything in <code>office</code>, plus pandas, NumPy, SciPy, matplotlib, seaborn, openpyxl and SQLite.</p><dl><div><dt>Download</dt><dd>674 MB</dd></div><div><dt>Idle RAM</dt><dd>~105 MB</dd></div></dl></li>
+<li class="card pc"><h3><span><svg class="ic" aria-hidden="true"><use href="#i-wine"/></svg></span>windows</h3><p>Wine 10 for 64- and 32-bit Windows <code>.exe</code> and <code>.msi</code> programs, plus Firefox to download them. Needs an x86&#8209;64 host.</p><dl><div><dt>Download</dt><dd>717 MB</dd></div><div><dt>Idle RAM</dt><dd>~56 MB</dd></div></dl></li>
+<li class="card pc"><h3><span><svg class="ic" aria-hidden="true"><use href="#i-layers"/></svg></span>base</h3><p>An X server, a window manager, a terminal and the agent. The foundation every other profile builds on.</p><dl><div><dt>Download</dt><dd>199 MB</dd></div><div><dt>Idle RAM</dt><dd>~65 MB</dd></div></dl></li>
 <li class="card pc own"><h3><span><svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg></span>your own</h3><p>A short TOML file in <code>~/.config/minion/profiles/</code>, built the first time you use it.</p>
 <div class="code x" data-label="the profile example" data-title="designer.toml"><pre><code>extends = <span class="s">"browser"</span>
 packages = [<span class="s">"gimp"</span>]</code></pre></div></li>

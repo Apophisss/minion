@@ -18,6 +18,15 @@ packages = [
   # Python can write documents directly too (a script is often the fastest way to a spreadsheet or a report).
   "python3-openpyxl",
   "python3-docx",
+  # python-pptx's own needs (it isn't packaged in Debian: its wheel is installed below)
+  "python3-lxml",
+  "python3-pil",
+  "python3-xlsxwriter",
+  "python3-typing-extensions",
+]
+# python-pptx 1.0.2, pure Python, checked against its SHA-256: presentations, like documents and spreadsheets.
+setup = [
+  "python3 -c \"import hashlib, io, urllib.request, zipfile; url = 'https://files.pythonhosted.org/packages/d9/4f/00be2196329ebbff56ce564aa94efb0fbc828d00de250b1980de1a34ab49/python_pptx-1.0.2-py3-none-any.whl'; data = urllib.request.urlopen(url).read(); assert hashlib.sha256(data).hexdigest() == '160838e0b8565a8b1f67947675886e9fea18aa5e795db7ae531606d68e785cba', 'python-pptx wheel checksum'; zipfile.ZipFile(io.BytesIO(data)).extractall('/usr/lib/python3/dist-packages')\" && python3 -c 'import pptx'",
 ]
 env = { SAL_USE_VCLPLUGIN = "gtk3" }
 apps = [
@@ -74,7 +83,14 @@ show_hidden=0
       <prop oor:name="ReplaceDoubleQuote" oor:op="fuse"><value>false</value></prop>
     </node>
   </oor:component-data>
+  <!-- Centimeters in every dialog, whatever the locale: "20 cm" typed into an inch field is stored rounded
+       (7.87" is 19.99 cm), while inches typed into a centimeter field ("1 in") come out exact (2.54 cm). -->
   <oor:component-data oor:name="Writer" oor:package="org.openoffice.Office">
+    <node oor:name="Layout">
+      <node oor:name="Other">
+        <prop oor:name="MeasureUnit" oor:op="fuse"><value>2</value></prop>
+      </node>
+    </node>
     <node oor:name="AutoFunction">
       <node oor:name="Format">
         <node oor:name="ByInput">
@@ -84,12 +100,28 @@ show_hidden=0
     </node>
   </oor:component-data>
   <oor:component-data oor:name="Calc" oor:package="org.openoffice.Office">
+    <node oor:name="Layout">
+      <node oor:name="Other">
+        <node oor:name="MeasureUnit">
+          <prop oor:name="Metric" oor:op="fuse"><value>2</value></prop>
+          <prop oor:name="NonMetric" oor:op="fuse"><value>2</value></prop>
+        </node>
+      </node>
+    </node>
     <node oor:name="Input">
       <!-- No AutoInput: typing "Co" in a column that has "Coffee" must not become "Coffee". -->
       <prop oor:name="AutoInput" oor:op="fuse"><value>false</value></prop>
     </node>
   </oor:component-data>
   <oor:component-data oor:name="Impress" oor:package="org.openoffice.Office">
+    <node oor:name="Layout">
+      <node oor:name="Other">
+        <node oor:name="MeasureUnit">
+          <prop oor:name="Metric" oor:op="fuse"><value>2</value></prop>
+          <prop oor:name="NonMetric" oor:op="fuse"><value>2</value></prop>
+        </node>
+      </node>
+    </node>
     <node oor:name="Misc">
       <node oor:name="NewDoc">
         <prop oor:name="AutoPilot" oor:op="fuse"><value>false</value></prop>

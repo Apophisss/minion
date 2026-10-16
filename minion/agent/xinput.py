@@ -266,7 +266,12 @@ class XInput:
             args += self._move_args(x, y)
         for m in modifiers or []:
             args += ["keydown", m]
-        args += ["click", "--repeat", str(max(1, int(count))), "--delay", "70", str(b)]
+        for i in range(max(1, int(count))):
+            if i:
+                args += ["sleep", "0.07"]
+            # A press held for a moment, like a person's: some controls ignore a press and a release in the same
+            # instant (LibreOffice Calc's add-sheet button did nothing for every agent).
+            args += ["mousedown", str(b), "sleep", "0.03", "mouseup", str(b)]
         for m in reversed(modifiers or []):
             args += ["keyup", m]
         self._xdo(*args)

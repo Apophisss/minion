@@ -21,10 +21,10 @@ Minion は、AI エージェントにあなたのコンピューターではな�
 - **🖥️ どんなプログラムも、どんなサイトも。** ブラウザー、LibreOffice、IDE、ターミナル、ファイルダイアログ、インストーラーが使え、Wine で Windows プログラムも動きます。アプリは名前で開くだけで、初回に自動でインストールされます（`open gimp`）。Web アプリはブラウザーで開きます（`open gmail`）。`menu`、`path`、`read` でメニュー、ファイルダイアログ、ドキュメントの中身を直接扱えます。
 - **🧠 画面をテキストで。** `see` はウィンドウ内のコントロールを一覧にし、それぞれに安定した `@id` を付けます（アクセシビリティツリーから取得し、取れない場合は OCR で補います）：`@12 button "Save" (210,62)`。ウェブページ、エディター、ターミナル、スプレッドシート（`A1: value`）も正確なテキストになります。
 - **🎯 正直な操作。** すべての操作は画面が落ち着くまで待ってから、何が変わったかを報告します。テキストで指定した対象が画面上になければ、別の場所をクリックせずに、近い候補を示して失敗します。
-- **🪙 トークンを節約する設計。** 画面を読み直す代わりに差分を返します（`see(changes=true)`：約 900 トークンではなく約 60 トークン）。コードモードなら 50 ステップの GUI ループも 1 回の呼び出しで済み、コンパクトモードはツール定義を約 2,100 トークンから 230 トークンに縮めます。
+- **🪙 トークンを節約する設計。** 画面を読み直す代わりに差分を返します（`see(changes=true)`：約 900 トークンではなく約 80 トークン）。コードモードなら 50 ステップの GUI ループも 1 回の呼び出しで済み、コンパクトモードはツール定義を約 3,300 トークンから 450 トークンに縮めます。
 - **🪶 超軽量。** デスクトップ 1 つにつき小さなコンテナが 1 つだけで、VNC もデスクトップ環境もありません。約 1.5 秒で準備が整い、アイドル時のメモリーは約 60 MB。使われていないデスクトップは自動的にフリーズされ（CPU 0%）、約 0.2 秒で復帰します。
 - **🔌 どんなエージェントでも。** MCP（ローカルまたはリモート）、OpenAI・Anthropic・Gemini やローカルモデル向けの function calling、HTTP、CLI と Agent Skill、Python と TypeScript の SDK、そして Claude、OpenAI、Gemini の computer use に対応しています。
-- **🙋 人がいつでも介入できます。** ブラウザーのライブビューからワンクリックで操作を引き継げます。エージェントはサインインのような作業を人に任せ、*Done* が押されるまで待てます。すべての操作は記録され、モデルなしで再生できる Python スクリプトとして書き出せます。
+- **🙋 人がいつでも介入できます。** ブラウザーのライブビューからワンクリックで操作を引き継げ、ファイルを双方向にやり取りし（画面へのドラッグ＆ドロップも可）、クリップボードも共有できます。エージェントはサインインのような作業を人に任せ、*Done* が押されるまで待てます。一度手でサインインして保存すれば（`minion login github https://github.com/login`）、新しいデスクトップは最初からサインイン済みで起動します。すべての操作は記録され、モデルなしで再生できる Python スクリプトとして書き出せます。
 - **📦 依存ゼロ。** ホスト側は Python 標準ライブラリだけで動きます。デスクトップは Docker か Podman（macOS、Windows、Linux）で動きます。
 
 ## はじめる
@@ -109,13 +109,13 @@ minion cp :~/Documents/notes.md .        # ファイルを取り出す（入れ�
 
 | プロファイル | 中身 | ダウンロード | アイドル時のメモリー |
 |---|---|---|---|
-| 🌐 `browser` | uBlock Origin 入りの Firefox（広告、トラッカー、Cookie バナー、ニュースレターのポップアップをブロック）。ダウンロードは `~/Downloads` に直接保存 | 352 MB | ~55–100 MB |
-| 📄 `office` | LibreOffice の Writer、Calc、Impress + テキストエディター + ファイルマネージャー + Firefox + PDF ツール。デフォルトで Microsoft 形式で保存 | 511 MB | ~85 MB |
-| 🛠️ `dev` | git、Python、Node.js、ビルドツール、Geany IDE、`see` で読めるターミナル、Firefox + Chromium | 703 MB | ~55 MB |
-| 🔎 `research` | Firefox + `pdftotext`、`pandoc`、メモ用のエディター、requests と BeautifulSoup 入りの Python | 410 MB | ~55 MB |
-| 📊 `data` | `office` + pandas、NumPy、SciPy、matplotlib、seaborn、openpyxl、SQLite | 663 MB | ~105 MB |
-| 🪟 `windows` | 64 ビット・32 ビットの Windows `.exe`/`.msi` プログラム用の Wine 10。x86-64 ホストのみ（[ドキュメント](docs/windows-apps.md)） | 707 MB | ~56 MB（プログラムを開くと約 270 MB） |
-| 🧩 `base` | X サーバー、ウィンドウマネージャー、ターミナル、エージェント。ほかのプロファイルの土台です | 187 MB | ~65 MB |
+| 🌐 `browser` | uBlock Origin 入りの Firefox（広告、トラッカー、Cookie バナー、ニュースレターのポップアップをブロック）。ダウンロードは `~/Downloads` に直接保存 | 363 MB | ~55–100 MB |
+| 📄 `office` | LibreOffice の Writer、Calc、Impress + テキストエディター + ファイルマネージャー + Firefox + PDF ツール。デフォルトで Microsoft 形式で保存 | 526 MB | ~85 MB |
+| 🛠️ `dev` | git、Python、Node.js、ビルドツール、Geany IDE、`see` で読めるターミナル、Firefox + Chromium | 714 MB | ~55 MB |
+| 🔎 `research` | Firefox + `pdftotext`、`pandoc`、メモ用のエディター、requests と BeautifulSoup 入りの Python | 422 MB | ~55 MB |
+| 📊 `data` | `office` + pandas、NumPy、SciPy、matplotlib、seaborn、openpyxl、SQLite | 674 MB | ~105 MB |
+| 🪟 `windows` | 64 ビット・32 ビットの Windows `.exe`/`.msi` プログラム用の Wine 10。x86-64 ホストのみ（[ドキュメント](docs/windows-apps.md)） | 717 MB | ~56 MB（プログラムを開くと約 270 MB） |
+| 🧩 `base` | X サーバー、ウィンドウマネージャー、ターミナル、エージェント。ほかのプロファイルの土台です | 199 MB | ~65 MB |
 
 独自のプロファイルは、`~/.config/minion/profiles/` に置く 5 行の TOML ファイルです。初めて使うときに自動でビルドされます。詳しくは [docs/profiles.md](docs/profiles.md)（英語）をご覧ください。
 

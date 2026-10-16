@@ -23,7 +23,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from . import config, profiles
-from .backends import Backend, CreateOptions, DesktopInfo, get_backend
+from .backends import Backend, CreateOptions, DesktopInfo, Login, check_login, get_backend
 from .channel import Channel, ConnectionLost
 from .errors import AgentError, MinionError, NotFound
 
@@ -198,7 +198,7 @@ class Desktop:
     @classmethod
     def create(
         cls,
-        profile: str = config.DEFAULT_PROFILE,
+        profile: str | None = None,
         name: str | None = None,
         size: str | tuple | None = None,
         *,
@@ -211,11 +211,15 @@ class Desktop:
         ports: list | None = None,
         progress=None,
         keep: bool = True,
+        login: str | None = None,
     ) -> Desktop:
-        """Create and start a desktop. `keep=False` removes it when used as a context manager."""
+        """Create and start a desktop. `keep=False` removes it when used as a context manager.
+        `login` starts it from a saved sign-in (`minion login NAME URL`, `save_login`), signed in as the
+        desktop it was saved from, with that desktop's profile."""
         be = _backend(backend)
-        prof = profiles.get(profile)
-        name = name or cls._free_name(be, prof.name)
+        saved = cls._saved_login(be, login, profile) if login else None
+        prof = profiles.get(saved.profile if saved else profile or config.DEFAULT_PROFILE)
+        name = name or cls._free_name(be, re.sub(r"[^a-z0-9_-]", "-", saved.name)[:30] if saved else prof.name)
         opts = CreateOptions(
             size=normalize_size(size or prof.merged("size") or None),
             memory=memory,
@@ -225,7 +229,7 @@ class Desktop:
             env=dict(env or {}),
             ports=[str(p) for p in (ports or [])],
         )
-        info = be.create(name, prof, opts, progress=progress)
+        info = be.create(name, prof, opts, progress=progress, **({"login": saved} if saved else {}))
         desk = cls(name, be, _owned=not keep)
         desk._info = info
         config.update_state(current=name)
@@ -234,7 +238,7 @@ class Desktop:
     @classmethod
     def create_many(
         cls,
-        profile: str = config.DEFAULT_PROFILE,
+        profile: str | None = None,
         count: int = 2,
         *,
         names: list[str] | None = None,
@@ -246,18 +250,40 @@ class Desktop:
 
         be = kw.pop("backend", None)
         be = _backend(be)
-        prof = profiles.get(profile)
-        be.prepare(prof, progress)  # pull/build the image once, not once per desktop
+        if kw.get("login"):  # every one starts from the saved sign-in (its own image: nothing to prepare)
+            saved = cls._saved_login(be, kw["login"], profile)
+            profile, stem = saved.profile, re.sub(r"[^a-z0-9_-]", "-", saved.name)[:30]
+        else:
+            profile = profile or config.DEFAULT_PROFILE
+            be.prepare(profiles.get(profile), progress)  # pull/build the image once, not once per desktop
+            stem = profile
         if names is None:
             taken = {d.name for d in be.list()}
             names, n = [], 1
             while len(names) < count:
-                if f"{profile}-{n}" not in taken:
-                    names.append(f"{profile}-{n}")
+                if f"{stem}-{n}" not in taken:
+                    names.append(f"{stem}-{n}")
                 n += 1
         with ThreadPoolExecutor(max_workers=min(len(names), 8)) as pool:
             futures = [pool.submit(cls.create, profile, name=n, backend=be, progress=progress, **kw) for n in names]
             return [f.result() for f in futures]
+
+    @staticmethod
+    def _saved_login(be: Backend, login: str, profile: str | None) -> Login:
+        if not getattr(be, "supports_logins", False):
+            raise MinionError(f"saved sign-ins need the Docker backend (this is the {be.name} backend)")
+        check_login(login)
+        saved = be.logins()
+        found = next((x for x in saved if x.name == login), None)
+        if found is None:
+            names = ", ".join(x.name for x in saved) or "none yet"
+            raise NotFound(f"no saved sign-in {login!r} (saved: {names}); save one with `minion login {login} URL`")
+        if profile and found.profile and profile != found.profile:
+            raise MinionError(
+                f"the sign-in {login!r} was saved from a {found.profile} desktop, so it starts {found.profile} "
+                f"desktops: leave the profile out, or sign in on a {profile} desktop and save that"
+            )
+        return found
 
     @staticmethod
     def _free_name(be: Backend, profile: str) -> str:
@@ -616,6 +642,19 @@ class Desktop:
             raise
         return p / Path(src.rstrip("/")).name if into else p
 
+    def ls(self, path: str = "~", hidden: bool = False, limit: int = 1000) -> dict:
+        """A folder in the desktop, folders first: {"path": "/home/agent/Downloads", "home": "/home/agent",
+        "entries": [{"name", "dir", "size", "modified"}] (the first `limit`), "total": N}."""
+        try:
+            return self.call("ls", {"path": path, "hidden": hidden, "limit": limit}, timeout=30)
+        except MinionError as e:
+            if "unknown method" not in str(e):
+                raise
+            raise MinionError(
+                f"{self.name} runs the agent of an older Minion: restart it to list its files "
+                f"(minion stop {self.name} && minion start {self.name})"
+            ) from None
+
     def write_text(self, path: str, text: str) -> None:
         """Write a UTF-8 text file in the desktop (as the desktop's user), creating missing folders."""
         target = _desk_path(path)
@@ -623,11 +662,14 @@ class Desktop:
         if not res.ok:
             raise MinionError(f"could not write {path}: {(res.stderr or res.stdout).strip()[-300:]}")
 
-    def read(self, path: str, max_chars: int = 200_000) -> str:
+    def read(self, path: str, max_chars: int = 200_000, details: bool = False) -> str:
         """Any file's text: text files as they are, and documents converted inside the desktop: docx, xlsx
-        (values and formulas), pptx, odt/ods/odp, pdf, epub, html, images (OCR), doc/xls/ppt, ..."""
+        (values and formulas), pptx, odt/ods/odp, pdf, epub, html, images (OCR), doc/xls/ppt, ...
+        `details` adds formatting: slide backgrounds and each shape's place and size, paragraph spacing and
+        indents, run fonts and sizes (bold, subscript...), number formats and text colours."""
+        params = {"path": path, "max_chars": max_chars, **({"details": True} if details else {})}
         try:
-            return self.call("read", {"path": path, "max_chars": max_chars}, timeout=900)["text"]
+            return self.call("read", params, timeout=900)["text"]
         except MinionError as e:
             if "unknown method" not in str(e):  # (a desktop made by an older Minion reads text files only)
                 raise
@@ -695,6 +737,23 @@ class Desktop:
         tag = tag or time.strftime("%Y%m%d-%H%M%S")
         self.close()
         return self.backend.snapshot(self.name, tag).tag
+
+    # -- saved sign-ins ------------------------------------------------
+    def save_login(self, login: str, site: str = "") -> Login:
+        """Save this desktop as the sign-in `login` (replacing one of that name): desktops made with
+        `Desktop.create(login=login)` (`minion up --login NAME`) start as this one is now, signed in to the
+        same sites. It is a snapshot of the whole desktop, kept on this computer; `site` notes what it's for."""
+        self.close()
+        return self.backend.save_login(self.name, login, site)
+
+    @classmethod
+    def logins(cls, backend: Backend | str | None = None) -> list[Login]:
+        """The saved sign-ins on this computer."""
+        return _backend(backend).logins()
+
+    @classmethod
+    def remove_login(cls, login: str, backend: Backend | str | None = None) -> None:
+        _backend(backend).delete_login(login)
 
     def restore(self, tag: str) -> None:
         self.close()

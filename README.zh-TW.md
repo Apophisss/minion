@@ -21,10 +21,10 @@ Minion 讓 AI Agent 擁有一台屬於自己的電腦，而不是直接使用你
 - **🖥️ 任何程式，任何網站。** 瀏覽器、LibreOffice、IDE、終端機、檔案對話框、安裝程式都能用，還能透過 Wine 執行 Windows 程式。用名稱開啟任何應用程式，第一次會自動安裝（`open gimp`），網頁應用程式則在瀏覽器中開啟（`open gmail`）。`menu`、`path` 和 `read` 可直接操作選單、檔案對話框和文件內容。
 - **🧠 螢幕即文字。** `see` 會列出視窗中的控制項，每個控制項都有穩定的 `@id`（來自無障礙樹，並以 OCR 作為備援）：`@12 button "Save" (210,62)`。網頁、編輯器、終端機和試算表（`A1: value`）都會輸出成精確的文字。
 - **🎯 如實回報的操作。** 每個操作都會等畫面穩定後再回報變化。文字目標不在螢幕上時會直接失敗，並列出最接近的候選項目，而不是點到別的地方。
-- **🪙 為節省 token 而設計。** 用差異取代重新讀取（`see(changes=true)`：約 60 個 token，而不是約 900 個）；程式碼模式只要一次呼叫就能跑完 50 步的 GUI 迴圈；精簡模式把工具定義從約 2,100 個 token 縮減到 230 個。
+- **🪙 為節省 token 而設計。** 用差異取代重新讀取（`see(changes=true)`：約 80 個 token，而不是約 900 個）；程式碼模式只要一次呼叫就能跑完 50 步的 GUI 迴圈；精簡模式把工具定義從約 3,300 個 token 縮減到 450 個。
 - **🪶 超輕量。** 每個桌面只是一個小容器，沒有 VNC，也沒有桌面環境。約 1.5 秒就緒，閒置時約使用 60 MB 記憶體，並會自動凍結（0% CPU），約 0.2 秒就能喚醒。
 - **🔌 支援所有 Agent。** MCP（本機或遠端）、適用於 OpenAI、Anthropic、Gemini 和本機模型的 function calling、HTTP、CLI 和 Agent Skill、Python 與 TypeScript SDK，以及 Claude、OpenAI、Gemini 的 computer use。
-- **🙋 人隨時可以介入。** 在瀏覽器的即時畫面中，一鍵就能接管；Agent 可以把登入這類操作交給你，等你按下 *Done* 再繼續。每個步驟都有紀錄，還能匯出成不需要模型就能重播的 Python 腳本。
+- **🙋 人隨時可以介入。** 在瀏覽器的即時畫面中，一鍵就能接管，也能雙向傳檔（直接拖到畫面上即可），剪貼簿也互通；Agent 可以把登入這類操作交給你，等你按下 *Done* 再繼續。手動登入一次並儲存（`minion login github https://github.com/login`），之後新建的桌面一啟動就已登入。每個步驟都有紀錄，還能匯出成不需要模型就能重播的 Python 腳本。
 - **📦 零相依性。** 主機端只使用 Python 標準函式庫。桌面在 Docker 或 Podman 中執行（macOS、Windows、Linux）。
 
 ## 快速開始
@@ -109,13 +109,13 @@ minion cp :~/Documents/notes.md .        # 把檔案複製出來（也可以複�
 
 | Profile | 內容 | 下載大小 | 閒置記憶體 |
 |---|---|---|---|
-| 🌐 `browser` | Firefox + uBlock Origin（阻擋廣告、追蹤器、Cookie 橫幅、電子報彈出視窗），下載的檔案直接存到 `~/Downloads` | 352 MB | ~55–100 MB |
-| 📄 `office` | LibreOffice Writer、Calc、Impress + 文字編輯器 + 檔案管理員 + Firefox + PDF 工具，預設儲存為 Microsoft 格式 | 511 MB | ~85 MB |
-| 🛠️ `dev` | git、Python、Node.js、建置工具、Geany IDE、`see` 可讀取的終端機、Firefox + Chromium | 703 MB | ~55 MB |
-| 🔎 `research` | Firefox + `pdftotext`、`pandoc`、筆記編輯器，以及附 requests 和 BeautifulSoup 的 Python | 410 MB | ~55 MB |
-| 📊 `data` | `office` + pandas、NumPy、SciPy、matplotlib、seaborn、openpyxl、SQLite | 663 MB | ~105 MB |
-| 🪟 `windows` | Wine 10，可執行 64 位元和 32 位元的 Windows `.exe`/`.msi` 程式。需要 x86-64 主機（[文件](docs/windows-apps.md)） | 707 MB | ~56 MB（開啟程式後約 270 MB） |
-| 🧩 `base` | X server、視窗管理員、終端機和 agent，是其他 profile 的基礎 | 187 MB | ~65 MB |
+| 🌐 `browser` | Firefox + uBlock Origin（阻擋廣告、追蹤器、Cookie 橫幅、電子報彈出視窗），下載的檔案直接存到 `~/Downloads` | 363 MB | ~55–100 MB |
+| 📄 `office` | LibreOffice Writer、Calc、Impress + 文字編輯器 + 檔案管理員 + Firefox + PDF 工具，預設儲存為 Microsoft 格式 | 526 MB | ~85 MB |
+| 🛠️ `dev` | git、Python、Node.js、建置工具、Geany IDE、`see` 可讀取的終端機、Firefox + Chromium | 714 MB | ~55 MB |
+| 🔎 `research` | Firefox + `pdftotext`、`pandoc`、筆記編輯器，以及附 requests 和 BeautifulSoup 的 Python | 422 MB | ~55 MB |
+| 📊 `data` | `office` + pandas、NumPy、SciPy、matplotlib、seaborn、openpyxl、SQLite | 674 MB | ~105 MB |
+| 🪟 `windows` | Wine 10，可執行 64 位元和 32 位元的 Windows `.exe`/`.msi` 程式。需要 x86-64 主機（[文件](docs/windows-apps.md)） | 717 MB | ~56 MB（開啟程式後約 270 MB） |
+| 🧩 `base` | X server、視窗管理員、終端機和 agent，是其他 profile 的基礎 | 199 MB | ~65 MB |
 
 自訂 profile 只是 `~/.config/minion/profiles/` 裡一個 5 行的 TOML 檔，第一次使用時會自動建置，詳情請見 [docs/profiles.md](docs/profiles.md)（英文）。
 

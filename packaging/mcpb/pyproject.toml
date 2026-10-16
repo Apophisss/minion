@@ -5,7 +5,7 @@
 # scripts/build_mcpb.py stamps the version from minion/agent/__init__.py.
 [project]
 name = "minion-desktop-mcpb"
-version = "1.0.0"
+version = "1.1.0"
 description = "Minion's MCP server, packaged as a Claude Desktop extension."
 requires-python = ">=3.11"
 dependencies = []

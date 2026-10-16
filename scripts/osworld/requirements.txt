@@ -1,0 +1,30 @@
+# What OSWorld's office checkers import (desktop_env/evaluators); stubs.py stands in for the OCR, audio, browser and
+# Google Drive parts that the office tasks never call.
+openpyxl
+pandas
+python-docx
+python-pptx
+odfpy
+rapidfuzz
+pdfplumber
+pypdf
+PyPDF2
+PyMuPDF
+Pillow
+numpy
+scipy
+scikit-image
+lxml
+cssselect
+formulas
+tldextract
+xmltodict
+pyyaml
+requests
+beautifulsoup4
+pytz
+opencv-python-headless
+imagehash
+mutagen
+chardet
+tiktoken

@@ -17,7 +17,7 @@ first line that you made Minion.
 
 ## r/LocalLLaMA
 
-**Title:** Letting a local model use a whole Linux desktop as text: no vision model needed, ~230 tokens of tool
+**Title:** Letting a local model use a whole Linux desktop as text: no vision model needed, ~450 tokens of tool
 definitions (open source)
 
 ````markdown
@@ -26,8 +26,8 @@ definitions (open source)
 If you want a local model to operate a desktop, two things usually get in the way: screenshots need a vision model (and a 1280×800 one costs about 1,365 tokens), and tool definitions eat context on every request. Minion tries to fix both.
 
 - **The screen as text.** `see` turns the focused window into a short list of controls with stable `@ids`, taken from the accessibility tree, with OCR as a fallback: `@12 button "Save" (210,62)`. The model then clicks `@12`. Text-only models work; vision models can also take screenshots.
-- **Small tool definitions.** Compact mode is one `computer` tool with CLI-style commands (`see`, `click @12`, `type 'hi'`, `run ls`): about 230 tokens of definitions instead of about 2,100 for the full nine tools. The docs recommend it for small and local models.
-- **Diffs instead of re-reads.** After typing a sentence, `see(changes=true)` returns about 60 tokens instead of about 900.
+- **Small tool definitions.** Compact mode is one `computer` tool with CLI-style commands (`see`, `click @12`, `type 'hi'`, `run ls`): about 450 tokens of definitions instead of about 3,300 for the full nine tools. The docs recommend it for small and local models.
+- **Diffs instead of re-reads.** After typing a sentence, `see(changes=true)` returns about 80 tokens instead of about 900.
 - **Loops in one call.** `script` runs Python *inside* the desktop (`click`, `write`, `key`, `see`, `cells`, …), so twenty rows of data entry are one tool call, and only what the code prints comes back.
 
 Each desktop is a small Docker container (Xvfb, a minimal window manager, a small agent; no VNC). It's ready in about 1.5 s, uses 54–105 MB when idle, and idle desktops freeze to 0% CPU. Profiles: `browser`, `office` (LibreOffice), `dev`, `research`, `data`, `windows` (Wine) and `base`.
@@ -75,7 +75,7 @@ Use the subreddit's project or showcase flair, if it has one.
 ````markdown
 **Disclosure: I made this.** It's free and open source (MIT).
 
-Minion gives Claude a separate computer to work on: a disposable Linux desktop in a container on your machine, with Firefox, LibreOffice, an IDE, a terminal, or Windows programs through Wine. Claude reads the screen as text (controls with stable `@ids` from the accessibility tree) and clicks, types, or runs Python inside the desktop. Before 1.0, Claude agents used it for real office, web, development and MCP tasks, and every issue they found was fixed.
+Minion gives Claude a separate computer to work on: a disposable Linux desktop in a container on your machine, with Firefox, LibreOffice, an IDE, a terminal, or Windows programs through Wine. Claude reads the screen as text (controls with stable `@ids` from the accessibility tree) and clicks, types, or runs Python inside the desktop. Before 1.0, Claude agents did 93 everyday tasks with it (documents, spreadsheets, web pages, a webmail, a terminal, Windows programs), with every call logged. Fixing what they ran into cut the calls by 31% and the failed calls by half ([the tasks and results](https://github.com/apophisss/minion/blob/main/docs/scenarios.md)).
 
 **Setup** (Docker, OrbStack or Podman must be running)
 
@@ -87,7 +87,7 @@ Then ask something like: *"Create an office desktop, write a one-page brief abou
 
 **Details that matter with Claude**
 
-- **Tokens.** After typing a sentence, `see(changes=true)` costs about 60 tokens instead of about 900 for a full read. Compact mode cuts the tool definitions from about 2,100 tokens to about 230. The Claude Code skill costs about 100 tokens until Claude needs a desktop.
+- **Tokens.** After typing a sentence, `see(changes=true)` costs about 80 tokens instead of about 900 for a full read. Compact mode cuts the tool definitions from about 3,300 tokens to about 450. The Claude Code skill costs about 100 tokens until Claude needs a desktop.
 - **Computer use.** If you build on the API, Minion is a ready environment for `computer_toolset_20260801` (all 17 actions) and the earlier `computer_20251124`, with screenshot scaling and coordinate mapping handled for you. `MinionComputer` plugs into the Anthropic SDK's tool runner ([docs](https://github.com/apophisss/minion/blob/main/docs/computer-use.md)).
 - **You stay in the loop.** `minion view` opens a live view where you can take control. Claude can hand off ("Please sign in") and wait until you press Done. Every step is recorded: `minion replay -o run.html`.
 
@@ -111,7 +111,7 @@ Minion runs disposable Linux desktops for AI agents on your own machine or serve
 
 What I'd want to know as a self-hoster:
 
-- **Resources.** Ready in about 1.5 s; 54–105 MB of RAM per idle desktop, plus whatever its apps use (Firefox and LibreOffice need a few hundred MB each while open). Idle desktops are paused with the cgroup freezer (0% CPU) and wake in about 0.2 s. Images are 187–707 MB per profile and share layers. For an always-on server, the docs suggest Linux with Docker and 2 GB of RAM or more.
+- **Resources.** Ready in about 1.5 s; 54–105 MB of RAM per idle desktop, plus whatever its apps use (Firefox and LibreOffice need a few hundred MB each while open). Idle desktops are paused with the cgroup freezer (0% CPU) and wake in about 0.2 s. Images are 199–717 MB per profile and share layers. For an always-on server, the docs suggest Linux with Docker and 2 GB of RAM or more.
 - **Images.** Built in CI from `debian:trixie-slim` and published to GHCR for amd64 and arm64 (the Wine profile is amd64 only). You can build them yourself with `minion build --all`.
 - **Exposure.** Nothing listens inside a desktop: the host talks to it through `docker exec`. `minion serve` (HTTP API, dashboard, live view, and MCP at `/mcp`) binds to 127.0.0.1, requires a random token, and refuses cross-site and DNS-rebinding requests. Put HTTPS in front of it and set `MINION_ALLOWED_HOSTS` to your domain.
 - **Isolation.** No host mounts by default; `--offline`, `--memory` and `--cpus` per desktop. The agent has passwordless `sudo` *inside* the container, so it can install software there.
@@ -148,7 +148,7 @@ Minion gives AI agents a computer of their own: a Linux desktop in a container, 
 
 Some choices that might interest this sub:
 
-- **Zero dependencies.** The host side is pure Python standard library, and the contributing guide keeps it that way ("no dependencies, ever"). It's about 10k lines of Python.
+- **Zero dependencies.** The host side is pure Python standard library, and the contributing guide keeps it that way ("no dependencies, ever"). It's about 10k lines of Python, and the agent inside the desktop about as much again.
 - **Built on open-source parts:** Debian, Xvfb, the JWM window manager, AT-SPI for the accessibility tree, Tesseract OCR, Firefox, LibreOffice and Wine, each under its own license.
 - **Upgrades don't need new images.** The in-desktop agent is copied into each desktop when it's created, so the host and the desktops always agree.
 - **Profiles are small TOML files** that extend each other (`base → browser → office → data`), so images share layers on disk.
@@ -159,6 +159,7 @@ Where help would be most welcome:
 - **Profiles** for a job (design, video, GIS, accounting, …). Often a 15-line TOML file.
 - **Better `see` output for a specific app**, so its UI comes out clearer or in fewer tokens (`minion/agent/a11y.py`).
 - **Tested setup recipes** for more agent clients.
+- **Everyday tasks where an agent struggles**, added to the scenario suite (`scripts/scenarios`) that the 1.0 fixes were measured with.
 - **Bugs with a repro:** run `minion replay -o bug.html` and attach the timeline.
 
 Repo: https://github.com/apophisss/minion · Contributing: https://github.com/apophisss/minion/blob/main/CONTRIBUTING.md

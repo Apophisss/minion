@@ -13,7 +13,7 @@ import webbrowser
 from pathlib import Path
 
 from . import __version__, config, profiles
-from .backends import get_backend
+from .backends import check_login, get_backend
 from .desktop import ActResult, Desktop
 from .errors import MinionError, NotFound
 
@@ -120,7 +120,8 @@ def split_remote(path: str) -> tuple[str | None, str] | None:
 
 # -- commands ------------------------------------------------------------------
 def cmd_up(args) -> int:
-    profile = args.profile or config.DEFAULT_PROFILE
+    login = getattr(args, "login", None)
+    profile = args.profile or (None if login else config.DEFAULT_PROFILE)  # a sign-in brings its profile
     t0 = time.time()
     if args.count and args.count > 1:
         desks = Desktop.create_many(
@@ -131,6 +132,7 @@ def cmd_up(args) -> int:
             cpus=args.cpus or "",
             network=not args.offline,
             progress=None if args.quiet else progress_printer,
+            **({"login": login} if login else {}),
         )
         if args.json:
             emit_json([d.to_dict() for d in desks])
@@ -149,15 +151,20 @@ def cmd_up(args) -> int:
         env=dict(kv.split("=", 1) for kv in args.env or []),
         ports=args.port or [],
         progress=None if args.quiet else progress_printer,
+        login=login,
     )
     hello = d.hello()
+    profile = hello.get("profile") or profile
     if args.json:
         emit_json({**d.to_dict(), "apps": hello.get("apps", []), "ready_in": round(time.time() - t0, 2)})
         return 0
     if args.quiet:  # just the name, for scripts: NAME=$(minion up -q office)
         print(d.name)
         return 0
-    ok(f"{c(d.name, '1')} is ready  ({profile} · {'x'.join(map(str, hello['screen']))} · {time.time() - t0:.1f}s)")
+    signed = f" · signed in as {login!r} was" if login else ""
+    ok(
+        f"{c(d.name, '1')} is ready  ({profile}{signed} · {'x'.join(map(str, hello['screen']))} · {time.time() - t0:.1f}s)"
+    )
     if hello.get("apps"):
         info(f"  Apps: {', '.join(hello['apps'])}")
     info(f"  Next: minion see · minion open {(hello.get('apps') or ['<url>'])[-1].lower().split()[0]} · minion view")
@@ -277,6 +284,110 @@ def cmd_restore(args) -> int:
     return 0
 
 
+def _site(url: str) -> str:
+    from urllib.parse import urlparse
+
+    return urlparse(url if "://" in url else "https://" + url).hostname or url
+
+
+def _login_list(args) -> int:
+    saved = Desktop.logins()
+    if args.json:
+        emit_json([x.to_dict() for x in saved])
+        return 0
+    if not saved:
+        info("No saved sign-ins yet:  minion login NAME URL   (e.g. minion login github https://github.com/login)")
+        return 0
+    for x in saved:  # (no size: docker's counts the image it shares with every desktop of the profile)
+        print(f"{x.name:20} {x.profile:10} {x.site or '-':40} saved {x.created}")
+    info("  Start a desktop signed in:  minion up --login NAME")
+    return 0
+
+
+def _login_by_hand(args, name: str, url: str) -> int:
+    """A desktop opens at URL in the live view; the person signs in and presses Done; it's saved as NAME."""
+    from .server import ensure_server, handoff_wait
+
+    existing = next((x for x in Desktop.logins() if x.name == name), None)
+    taken = {x.name for x in Desktop.list()}
+    stem = "login-" + re.sub(r"[^a-z0-9_-]", "-", name)[:34]
+    desk_name, n = stem, 2
+    while desk_name in taken:
+        desk_name, n = f"{stem}-{n}", n + 1
+    if existing:
+        info(
+            f"Adding to the sign-in {name!r} ({existing.site or 'saved before'}): its desktop opens signed in as it was"
+        )
+        sys.stdout.flush()
+    d = Desktop.create(
+        args.profile or None,
+        name=desk_name,
+        login=name if existing else None,
+        progress=progress_printer,
+    )
+    try:
+        d.open(url or "about:home")
+        base, token = ensure_server()
+        link = f"{base}/view/{d.name}" + (f"?token={token}" if token else "")
+        site = _site(url) if url else ""
+        ok(f"Sign in{' to ' + site if site else ''} in the live view, then press Done there:  {link}")
+        if not args.no_open:
+            webbrowser.open(link)
+        sys.stdout.flush()
+        message = f"Sign in{' to ' + site if site else ''}, then press Done: Minion saves this desktop as the sign-in '{name}'."
+        note = handoff_wait(d.name, message, args.timeout)
+        if note is None:
+            err(f"not saved: Done wasn't pressed within {args.timeout:.0f}s")
+            return 1
+        sites = [x for x in (existing.site.split(", ") if existing and existing.site else []) if x]
+        if site and site not in sites:
+            sites.append(site)
+        saved = d.save_login(name, ", ".join(sites))
+        what = f" ({saved.site})" if saved.site else ""
+        ok(f"saved the sign-in {c(name, '1')}{what}. New desktops start signed in:  minion up --login {name}")
+        info("  It is a snapshot of that desktop, kept in this computer's Docker. Remove it: minion login rm " + name)
+        return 0
+    finally:
+        if args.keep:
+            info(f"  {d.name} is still running (minion rm {d.name} when you're done)")
+        else:
+            d.remove()
+
+
+def cmd_login(args) -> int:
+    words = list(args.words or [])
+    if getattr(args, "cmd", "") == "logins" and not words:
+        words = ["list"]
+    if not words:
+        raise MinionError(
+            "which sign-in? minion login NAME URL (sign in by hand, saved as NAME) · minion login list · "
+            "minion login save NAME (this desktop, as it is) · minion login rm NAME"
+        )
+    action = words[0].lower()
+    if action in ("list", "ls"):
+        return _login_list(args)
+    if action in ("rm", "remove", "delete"):
+        if len(words) < 2:
+            raise MinionError("which sign-in? minion login rm NAME (see minion login list)")
+        for name in words[1:]:
+            Desktop.remove_login(name)
+            ok(f"removed the sign-in {name!r}")
+        return 0
+    if action == "save":
+        if len(words) != 2:
+            raise MinionError("minion login save NAME [-d DESKTOP]: saves that desktop as it is, signed in where it is")
+        d = desktop(args)
+        saved = d.save_login(words[1], args.site or "")
+        ok(
+            f"saved {d.name} as the sign-in {c(saved.name, '1')}. New desktops start signed in:  minion up --login {saved.name}"
+        )
+        return 0
+    if len(words) > 2:
+        raise MinionError("minion login NAME [URL]: e.g. minion login github https://github.com/login")
+    check_login(words[0])
+    return _login_by_hand(args, words[0], words[1] if len(words) == 2 else "")
+
+
 def cmd_profiles(args) -> int:
     reg = profiles.load_all()
     if args.show:
@@ -343,7 +454,9 @@ def cmd_see(args) -> int:
 
 def cmd_shot(args) -> int:
     d = desktop(args)
-    region = [int(v) for v in re.split(r"[,\s]+", args.region.strip())] if args.region else None
+    region = [int(v) for v in re.split(r"[,\s]+", " ".join(args.region).strip()) if v] if args.region else None
+    if region is not None and len(region) != 4:
+        raise MinionError("--region takes x,y,w,h: 4 numbers, e.g. --region 0,0,640,400")
     fmt = (
         "jpeg"
         if (args.output or "").lower().endswith((".jpg", ".jpeg"))
@@ -475,7 +588,7 @@ def cmd_path(args) -> int:
 
 def cmd_read(args) -> int:
     d = desktop(args)
-    text = d.read(desktop_path(args.file))
+    text = d.read(desktop_path(args.file), details=args.details)
     if args.json:
         emit_json({"path": args.file, "text": text})
     else:
@@ -546,8 +659,8 @@ def cmd_copy(args) -> int:
 
 def cmd_act(args) -> int:
     steps = []
-    for s in args.steps:
-        s = s.strip()
+    for raw in args.steps:
+        s = raw.strip()
         if s == "-":
             data = json.loads(sys.stdin.read())
             steps.extend(data if isinstance(data, list) else [data])
@@ -555,7 +668,7 @@ def cmd_act(args) -> int:
             data = json.loads(s)
             steps.extend(data if isinstance(data, list) else [data])
         else:
-            steps.append(s)
+            steps.append(raw.lstrip())  # (its end as given: "type hi " types the space)
     return act_and_print(args, *steps, observe=args.observe)
 
 
@@ -923,6 +1036,7 @@ Look:      see (--menus lists every menu command) · shot · windows · read (an
 Act:       click · type · key · scroll · drag · fill · select · menu · path · open · run · act (batch) · wait-for
 Apps:      open gimp / vscode / chrome / figma ... (installed the first time) · convert (docx → pdf, ...)
 Manage:    ls · rm · stop · start · freeze · thaw · fork · snapshot · restore · use · cp · clip
+Sign in:   login NAME URL (once, by hand in the live view) · up --login NAME (start signed in) · login list
 Connect:   connect (add Minion to Claude, Cursor, VS Code, Codex...) · mcp (the MCP server itself)
            serve (HTTP API + dashboard) · view (live) · share (a URL for ChatGPT, Claude.ai, Le Chat)
            tools (definitions for any LLM API) · skill (SKILL.md for agents with a shell)
@@ -962,6 +1076,7 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--view", action="store_true", help="open the live view when ready")
     sp.add_argument("--count", "-c", type=int, default=1, help="create N desktops in parallel")
     sp.add_argument("--quiet", "-q", action="store_true", help="print only the new desktop's name")
+    sp.add_argument("--login", "-l", metavar="NAME", help="start signed in, from a sign-in saved with `minion login`")
 
     sp = add("ls", cmd_ls, "list desktops", aliases=["list", "ps"])
     sp.add_argument("--fast", action="store_true", help="skip live memory/CPU stats")
@@ -997,6 +1112,20 @@ def build_parser() -> argparse.ArgumentParser:
     sp = add("restore", cmd_restore, "restore a snapshot (replaces the desktop's state)")
     sp.add_argument("tag")
 
+    sp = add(
+        "login",
+        cmd_login,
+        "sign in to a site by hand once, and start desktops signed in: minion login github https://github.com/login "
+        "· minion up --login github · login list · login save NAME · login rm NAME",
+        aliases=["logins"],
+    )
+    sp.add_argument("words", nargs="*", metavar="NAME [URL] | list | save NAME | rm NAME")
+    sp.add_argument("--profile", "-p", help="profile of the desktop to sign in on (default: browser)")
+    sp.add_argument("--site", help="save: a note on what it is signed in to")
+    sp.add_argument("--timeout", "-t", type=float, default=1800.0, help="seconds to wait for Done (default 1800)")
+    sp.add_argument("--keep", action="store_true", help="keep the desktop you signed in on (it is removed after)")
+    sp.add_argument("--no-open", action="store_true", help="print the live view's link instead of opening it")
+
     sp = add("profiles", cmd_profiles, "list desktop profiles")
     sp.add_argument("show", nargs="?", help="show one profile in detail")
 
@@ -1020,7 +1149,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     sp = add("shot", cmd_shot, "take a screenshot", aliases=["screenshot"])
     sp.add_argument("-o", "--output", help="file (.png/.jpg/.webp) or - for stdout")
-    sp.add_argument("--region", help="only this part of the screen: x,y,w,h")
+    sp.add_argument("--region", nargs="+", help="only this part of the screen: x,y,w,h (or x y w h)")
     sp.add_argument("--zoom", action="store_true", help="magnify --region to 1024 px wide (small text, icons)")
     sp.add_argument("--max-width", type=int, help="scale down to at most this width (fewer image tokens)")
     sp.add_argument("--marks", action="store_true", help="label clickable elements with their @ids")
@@ -1088,6 +1217,13 @@ def build_parser() -> argparse.ArgumentParser:
 
     sp = add("read", cmd_read, "print any file in the desktop as text (docx, xlsx, pptx, pdf, odt, epub, html, images)")
     sp.add_argument("file")
+    sp.add_argument(
+        "--details",
+        action="store_true",
+        help="formatting too: slide backgrounds and shapes' place and size (cm), bullets, paragraph spacing and "
+        "indents, fonts and sizes (bold, subscript...), number formats",
+    )
+    sp.add_argument("--full", action="store_true", help=argparse.SUPPRESS)  # (`see --full`'s habit: read is whole)
 
     sp = add(
         "convert",
@@ -1244,7 +1380,8 @@ def build_parser() -> argparse.ArgumentParser:
         "--files",
         action=argparse.BooleanOptionalAction,
         default=False,
-        help="let `files` upload/download use this computer's disk, inside MINION_FILES_ROOT (default: no)",
+        help="let `files` upload/download use this computer's disk, inside MINION_FILES_ROOT, and desktops start "
+        "from your saved sign-ins (default: no)",
     )
     sp.add_argument("--docker", action="store_true", help="run cloudflared in Docker even if it is installed")
     sp.add_argument("--tailscale", action="store_true", help="publish with `tailscale funnel` instead of Cloudflare")

@@ -16,9 +16,11 @@ import os
 import queue
 import re
 import secrets
+import shutil
 import socket
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 import urllib.error
@@ -26,7 +28,7 @@ import urllib.request
 from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, quote, urlparse
 
 from . import __version__, config, profiles
 from .backends import get_backend
@@ -44,6 +46,11 @@ WEB_CLIENT_ORIGINS = frozenset(
 MCP_SESSIONS_MAX = 100  # least recently used sessions beyond this are ended (clients then initialize again)
 MCP_SESSION_IDLE = 24 * 3600.0  # seconds; idle sessions are ended
 SSE_KEEPALIVE = 10.0  # seconds between SSE comments while a tool works (proxies and tunnels drop quiet streams)
+UPLOAD_MAX = int(config.env_float("MINION_UPLOAD_MAX_MB", 2048) * 1024 * 1024)  # a file dropped on the live view
+LOGINS_OFF = (
+    "saved sign-ins are off on this server: a shared link can't start desktops signed in to your accounts "
+    "(run `minion share --files` to allow it)"
+)
 
 _desktops: dict[str, Desktop] = {}
 _desk_lock = threading.Lock()
@@ -58,6 +65,37 @@ def _desk(name: str) -> Desktop:
             d = Desktop(name, get_backend())
             _desktops[name] = d
         return d
+
+
+def _safe_name(name: str) -> str:
+    """A file name from a browser: no folders, no control characters, not too long."""
+    name = re.sub(r"[\x00-\x1f\x7f/\\]", "_", str(name or "")).strip().strip(".")
+    return name[:200]
+
+
+def _free_name(name: str, taken: set) -> str:
+    """name, or "name (1).ext" like a browser's downloads, if the folder has one already."""
+    if name not in taken:
+        return name
+    stem, dot, ext = name.rpartition(".")
+    if not stem:  # no extension (or a dotfile)
+        stem, dot, ext = name, "", ""
+    n = 1
+    while f"{stem} ({n}){dot}{ext}" in taken:
+        n += 1
+    return f"{stem} ({n}){dot}{ext}"
+
+
+def _attachment(name: str) -> str:
+    plain = re.sub(r"[^A-Za-z0-9._ ()-]", "_", name) or "download"
+    return f"attachment; filename=\"{plain}\"; filename*=UTF-8''{quote(name)}"
+
+
+def _shown(path: str, home: str) -> str:
+    """/home/agent/Downloads -> ~/Downloads"""
+    if home and (path == home or path.startswith(home.rstrip("/") + "/")):
+        return "~" + path[len(home.rstrip("/")) :]
+    return path
 
 
 FILES_IN_DESKTOP = (
@@ -87,11 +125,15 @@ class ServedToolkit(Toolkit):
         if not self.host_files:
             for d in defs:
                 fn = d.get("function", d)  # Chat Completions nests the definition
+                schema = fn.get("inputSchema") or fn.get("input_schema") or fn.get("parameters") or {}
+                props = schema.get("properties", {})
+                if fn.get("name") == "desktop":  # no saved sign-ins over a shared link
+                    props.pop("login", None)
+                    if "action" in props:
+                        props["action"]["enum"] = [a for a in props["action"]["enum"] if a != "logins"]
                 if fn.get("name") != "files":
                     continue
                 fn["description"] = FILES_IN_DESKTOP
-                schema = fn.get("inputSchema") or fn.get("input_schema") or fn.get("parameters") or {}
-                props = schema.get("properties", {})
                 props.pop("local_path", None)
                 if "action" in props:
                     props["action"]["enum"] = ["read", "write"]
@@ -101,6 +143,11 @@ class ServedToolkit(Toolkit):
         if not self.base_url:
             return super().view_url(name)
         return f"{self.base_url}/view/{name}" + (f"?token={self.token}" if self.token else "")
+
+    def t_desktop(self, args: dict, progress) -> list:
+        if not self.host_files and (args.get("login") or str(args.get("action") or "").lower() == "logins"):
+            raise ToolError(LOGINS_OFF)
+        return super().t_desktop(args, progress)
 
     def t_files(self, args: dict, progress) -> list:
         if not self.host_files and args.get("action") in ("upload", "download"):
@@ -386,6 +433,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._json([reg[n].summary() for n in profiles.names(reg)])
         if parts and parts[0] == "tools":
             return self._tools(method, parts[1:], query)
+        if parts and parts[0] == "logins":
+            return self._logins(method, parts[1:])
         if not parts or parts[0] != "desktops":
             return self._error(404, "unknown endpoint")
         be = get_backend()
@@ -394,11 +443,14 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json([d.to_dict() for d in be.list(stats=q("stats") == "1")])
             if method == "POST":
                 body = self._body()
+                if body.get("login") and not self.host_files:
+                    return self._error(403, LOGINS_OFF)
                 d = Desktop.create(
-                    body.get("profile") or config.DEFAULT_PROFILE,
+                    body.get("profile") or None,
                     name=body.get("name"),
                     size=body.get("size"),
                     backend=be,
+                    login=body.get("login") or None,
                 )
                 with _desk_lock:
                     _desktops[d.name] = d
@@ -452,6 +504,11 @@ class Handler(BaseHTTPRequestHandler):
             ocr = q("lang") or (True if q("ocr") == "1" else "auto")
             obs = d.see(ocr=ocr, window=q("window"), menus=q("menus") == "1")
             return self._json(obs.__dict__)
+        if method == "GET" and op == "files":  # the live view's Files panel
+            res = d.ls(q("path") or "~", hidden=q("hidden") == "1")
+            return self._json({**res, "shown": _shown(res["path"], res.get("home", "")), "upload_max": UPLOAD_MAX})
+        if method == "GET" and op == "download":
+            return self._download(d, q("path") or "")
         if method == "GET" and op == "info":  # no wake-up: safe to poll on frozen desktops
             return self._json(d.info().to_dict())
         if method == "GET" and op == "windows":
@@ -464,7 +521,14 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, d.recording("html").encode(), "text/html; charset=utf-8")
         if method != "POST":
             return self._error(405, "method not allowed")
+        if op == "upload":  # the body is the file itself
+            return self._upload(d, q("path") or "~/Downloads", q("name") or "")
         body = self._body()
+        if op == "login":  # save this desktop as a sign-in new desktops start from
+            if not self.host_files:
+                return self._error(403, LOGINS_OFF)
+            saved = d.save_login(str(body.get("name") or ""), str(body.get("site") or ""))
+            return self._json(saved.to_dict(), 201)
         if op == "act":
             res = d.act(
                 body.get("actions") or [],
@@ -498,7 +562,7 @@ class Handler(BaseHTTPRequestHandler):
             if "text" in body:
                 d.clipboard = body["text"]
                 return self._json({"ok": True})
-            return self._json({"text": d.clipboard})
+            return self._json({"text": d.call("clipboard", {"limit": 20_000_000})["text"]})  # whole, for the view
         if op in ("freeze", "thaw", "stop", "start"):
             getattr(d, op)()
             return self._json({"ok": True, "state": d.info().state})
@@ -511,6 +575,76 @@ class Handler(BaseHTTPRequestHandler):
             new = d.fork(body.get("name"))
             return self._json(new.to_dict(), 201)
         return self._error(404, f"unknown operation {op!r}")
+
+    def _logins(self, method: str, parts: list[str]) -> None:
+        if not self.host_files:
+            return self._error(403, LOGINS_OFF)
+        if method == "GET" and not parts:
+            return self._json([x.to_dict() for x in Desktop.logins(get_backend())])
+        if method == "DELETE" and len(parts) == 1:
+            Desktop.remove_login(parts[0], get_backend())
+            return self._json({"ok": True})
+        return self._error(405, "method not allowed")
+
+    def _send_file(self, path: Path, ctype: str, headers: dict | None = None) -> None:
+        self.send_response(200)
+        self.send_header("Content-Type", ctype)
+        self.send_header("Content-Length", str(path.stat().st_size))
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        for k, v in (headers or {}).items():
+            self.send_header(k, v)
+        self.end_headers()
+        if self.command != "HEAD":
+            with open(path, "rb") as f:
+                shutil.copyfileobj(f, self.wfile, 1024 * 1024)
+
+    def _download(self, d: Desktop, path: str) -> None:
+        """A file from the desktop as a download; a folder comes zipped."""
+        if not path:
+            return self._error(400, "download needs ?path=FILE")
+        with tempfile.TemporaryDirectory(prefix="minion-get-") as tmp:
+            d.download(path, tmp)
+            items = list(Path(tmp).iterdir())
+            if len(items) != 1:
+                return self._error(404, f"no such file in the desktop: {path}")
+            local, name = items[0], items[0].name
+            if local.is_dir():
+                local = Path(shutil.make_archive(str(local), "zip", root_dir=tmp, base_dir=name))
+                name += ".zip"
+            ctype = mimetypes.guess_type(name)[0] or "application/octet-stream"
+            self._send_file(local, ctype, {"Content-Disposition": _attachment(name)})
+
+    def _upload(self, d: Desktop, folder: str, name: str) -> None:
+        """A file from the person's computer (the request's body) into a desktop folder, under a free name."""
+        size = int(self.headers.get("Content-Length") or -1)
+        name = _safe_name(name)
+        if size < 0:
+            return self._error(411, "upload needs a Content-Length")
+        if size > UPLOAD_MAX:
+            return self._error(413, f"the file is over {UPLOAD_MAX >> 20} MB (MINION_UPLOAD_MAX_MB raises the limit)")
+        if not name:
+            return self._error(400, "upload needs ?name=FILE")
+        listing = d.ls(folder, hidden=True, limit=10_000)
+        folder_path = listing["path"]
+        name = _free_name(name, {e["name"] for e in listing["entries"]})
+        with tempfile.TemporaryDirectory(prefix="minion-put-") as tmp:
+            local = Path(tmp) / name
+            with open(local, "wb") as f:
+                left = size
+                while left > 0:
+                    chunk = self.rfile.read(min(left, 1024 * 1024))
+                    if not chunk:
+                        raise MinionError("the upload was cut off")
+                    f.write(chunk)
+                    left -= len(chunk)
+            d.upload(str(local), folder_path.rstrip("/") + "/")
+        shown = _shown(f"{folder_path.rstrip('/')}/{name}", listing.get("home", ""))
+        with _handoff_lock:  # tell the agent waiting on a hand-off where the person put it
+            h = _handoffs.get(d.name)
+            if h is not None and not h["done"]:
+                h.setdefault("uploads", []).append(shown)
+        return self._json({"path": shown, "name": name, "size": size}, 201)
 
     def _tools(self, method: str, parts: list[str], query: dict) -> None:
         """The universal toolkit over HTTP: definitions in every format, and calls.
@@ -556,7 +690,10 @@ class Handler(BaseHTTPRequestHandler):
             if method == "POST" and h is not None:  # human finished
                 h["done"] = True
                 h["done_at"] = time.time()
-                h["note"] = (body.get("note") or "").strip()
+                note = (body.get("note") or "").strip()
+                if h.get("uploads"):  # files they put in the desktop meanwhile
+                    note = (note + " " if note else "") + "(uploaded " + ", ".join(h["uploads"]) + ")"
+                h["note"] = note
                 h["event"].set()
                 return self._json({"ok": True})
             if method == "DELETE":

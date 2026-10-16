@@ -1,0 +1,797 @@
+{
+ "benchmark": "OSWorld (xlang-ai/OSWorld at b138d34), 30 LibreOffice tasks: 10 Calc, 10 Writer, 10 Impress",
+ "conditions": {
+  "S": "screenshots and coordinates only",
+  "M": "Minion 1.0.0",
+  "N": "Minion 1.1.0"
+ },
+ "counted": "steps: commands the agent ran on its desktop (50 allowed); shots: screenshots it took; tokens: what the computer returned, tiktoken o200k_base for text, 1,365 per 1280x800 screenshot; seconds: from the task's start to its end",
+ "summary": {
+  "S": {
+   "tasks": 30,
+   "success": 0.932,
+   "solved": 27.975,
+   "steps": 13.2,
+   "shots": 12.8,
+   "text_tokens": 502.5,
+   "image_tokens": 17472.0,
+   "tokens": 17974.5,
+   "seconds": 194.853
+  },
+  "M": {
+   "tasks": 30,
+   "success": 0.899,
+   "solved": 26.975,
+   "steps": 12.433,
+   "shots": 1.8,
+   "text_tokens": 7005.9,
+   "image_tokens": 2457.0,
+   "tokens": 9462.9,
+   "seconds": 196.013
+  },
+  "N": {
+   "tasks": 30,
+   "success": 0.966,
+   "solved": 28.975,
+   "steps": 10.2,
+   "shots": 0.933,
+   "text_tokens": 8098.367,
+   "image_tokens": 1274.0,
+   "tokens": 9372.367,
+   "seconds": 165.15
+  }
+ },
+ "tasks": [
+  {
+   "id": "0810415c-bde4-4443-9047-d5f70165a697",
+   "app": "writer",
+   "S": {
+    "score": 1.0,
+    "steps": 11,
+    "shots": 10,
+    "tokens": 14012,
+    "seconds": 145
+   },
+   "M": {
+    "score": 1.0,
+    "steps": 13,
+    "shots": 3,
+    "tokens": 7832,
+    "seconds": 224
+   },
+   "N": {
+    "score": 1.0,
+    "steps": 9,
+    "shots": 1,
+    "tokens": 11441,
+    "seconds": 98
+   }
+  },
+  {
+   "id": "0b17a146-2934-46c7-8727-73ff6b6483e8",
+   "app": "writer",
+   "S": {
+    "score": 1.0,
+    "steps": 9,
+    "shots": 9,
+    "tokens": 12645,
+    "seconds": 145
+   },
+   "M": {
+    "score": 1.0,
+    "steps": 13,
+    "shots": 1,
+    "tokens": 5934,
+    "seconds": 103
+   },
+   "N": {
+    "score": 1.0,
+    "steps": 6,
+    "shots": 0,
+    "tokens": 3698,
+    "seconds": 72
+   }
+  },
+  {
+   "id": "0e763496-b6bb-4508-a427-fad0b6c3e195",
+   "app": "writer",
+   "S": {
+    "score": 1.0,
+    "steps": 9,
+    "shots": 8,
+    "tokens": 11218,
+    "seconds": 106
+   },
+   "M": {
+    "score": 1.0,
+    "steps": 6,
+    "shots": 1,
+    "tokens": 3259,
+    "seconds": 79
+   },
+   "N": {
+    "score": 1.0,
+    "steps": 7,
+    "shots": 1,
+    "tokens": 6708,
+    "seconds": 80
+   }
+  },
+  {
+   "id": "0f84bef9-9790-432e-92b7-eece357603fb",
+   "app": "impress",
+   "S": {
+    "score": 1.0,
+    "steps": 13,
+    "shots": 13,
+    "tokens": 18213,
+    "seconds": 171
+   },
+   "M": {
+    "score": 1.0,
+    "steps": 10,
+    "shots": 2,
+    "tokens": 7803,
+    "seconds": 125
+   },
+   "N": {
+    "score": 1.0,
+    "steps": 12,
+    "shots": 1,
+    "tokens": 7664,
+    "seconds": 140
+   }
+  },
+  {
+   "id": "12382c62-0cd1-4bf2-bdc8-1d20bf9b2371",
+   "app": "calc",
+   "S": {
+    "score": 1.0,
+    "steps": 19,
+    "shots": 19,
+    "tokens": 26695,
+    "seconds": 190
+   },
+   "M": {
+    "score": 1.0,
+    "steps": 13,
+    "shots": 0,
+    "tokens": 6588,
+    "seconds": 132
+   },
+   "N": {
+    "score": 1.0,
+    "steps": 11,
+    "shots": 0,
+    "tokens": 6891,
+    "seconds": 106
+   }
+  },
+  {
+   "id": "1273e544-688f-496b-8d89-3e0f40aa0606",
+   "app": "calc",
+   "S": {
+    "score": 1.0,
+    "steps": 11,
+    "shots": 11,
+    "tokens": 15444,
+    "seconds": 112
+   },
+   "M": {
+    "score": 1.0,
+    "steps": 8,
+    "shots": 0,
+    "tokens": 3403,
+    "seconds": 75
+   },
+   "N": {
+    "score": 1.0,
+    "steps": 7,
+    "shots": 0,
+    "tokens": 2803,
+    "seconds": 75
+   }
+  },
+  {
+   "id": "1334ca3e-f9e3-4db8-9ca7-b4c653be7d17",
+   "app": "calc",
+   "S": {
+    "score": 1.0,
+    "steps": 8,
+    "shots": 8,
+    "tokens": 11248,
+    "seconds": 133
+   },
+   "M": {
+    "score": 1.0,
+    "steps": 5,
+    "shots": 0,
+    "tokens": 2852,
+    "seconds": 63
+   },
+   "N": {
+    "score": 1.0,
+    "steps": 6,
+    "shots": 0,
+    "tokens": 3547,
+    "seconds": 80
+   }
+  },
+  {
+   "id": "2cd43775-7085-45d8-89fa-9e35c0a915cf",
+   "app": "impress",
+   "S": {
+    "score": 0.0,
+    "steps": 14,
+    "shots": 12,
+    "tokens": 16985,
+    "seconds": 162
+   },
+   "M": {
+    "score": 0.0,
+    "steps": 11,
+    "shots": 2,
+    "tokens": 7931,
+    "seconds": 142
+   },
+   "N": {
+    "score": 1.0,
+    "steps": 21,
+    "shots": 2,
+    "tokens": 11218,
+    "seconds": 277
+   }
+  },
+  {
+   "id": "39be0d19-634d-4475-8768-09c130f5425d",
+   "app": "impress",
+   "S": {
+    "score": 1.0,
+    "steps": 10,
+    "shots": 9,
+    "tokens": 12629,
+    "seconds": 120
+   },
+   "M": {
+    "score": 1.0,
+    "steps": 10,
+    "shots": 1,
+    "tokens": 6731,
+    "seconds": 72
+   },
+   "N": {
+    "score": 1.0,
+    "steps": 8,
+    "shots": 1,
+    "tokens": 6575,
+    "seconds": 67
+   }
+  },
+  {
+   "id": "3b27600c-3668-4abd-8f84-7bcdebbccbdb",
+   "app": "impress",
+   "S": {
+    "score": 1.0,
+    "steps": 24,
+    "shots": 24,
+    "tokens": 33672,
+    "seconds": 608
+   },
+   "M": {
+    "score": 1.0,
+    "steps": 25,
+    "shots": 4,
+    "tokens": 19892,
+    "seconds": 672
+   },
+   "N": {
+    "score": 1.0,
+    "steps": 26,
+    "shots": 3,
+    "tokens": 36993,
+    "seconds": 1047
+   }
+  },
+  {
+   "id": "455d3c66-7dc6-4537-a39a-36d3e9119df7",
+   "app": "impress",
+   "S": {
+    "score": 0.9749,
+    "steps": 15,
+    "shots": 15,
+    "tokens": 21075,
+    "seconds": 124
+   },
+   "M": {
+    "score": 0.9749,
+    "steps": 7,
+    "shots": 0,
+    "tokens": 4601,
+    "seconds": 53
+   },
+   "N": {
+    "score": 0.9749,
+    "steps": 9,
+    "shots": 0,
+    "tokens": 4212,
+    "seconds": 65
+   }
+  },
+  {
+   "id": "4bcb1253-a636-4df4-8cb0-a35c04dfef31",
+   "app": "writer",
+   "S": {
+    "score": 1.0,
+    "steps": 5,
+    "shots": 5,
+    "tokens": 7015,
+    "seconds": 95
+   },
+   "M": {
+    "score": 1.0,
+    "steps": 5,
+    "shots": 0,
+    "tokens": 2899,
+    "seconds": 54
+   },
+   "N": {
+    "score": 1.0,
+    "steps": 5,
+    "shots": 0,
+    "tokens": 3077,
+    "seconds": 44
+   }
+  },
+  {
+   "id": "4de54231-e4b5-49e3-b2ba-61a0bec721c0",
+   "app": "calc",
+   "S": {
+    "score": 1.0,
+    "steps": 18,
+    "shots": 18,
+    "tokens": 25272,
+    "seconds": 216
+   },
+   "M": {
+    "score": 1.0,
+    "steps": 9,
+    "shots": 1,
+    "tokens": 10854,
+    "seconds": 170
+   },
+   "N": {
+    "score": 1.0,
+    "steps": 7,
+    "shots": 0,
+    "tokens": 9909,
+    "seconds": 200
+   }
+  },
+  {
+   "id": "4e6fcf72-daf3-439f-a232-c434ce416af6",
+   "app": "calc",
+   "S": {
+    "score": 1.0,
+    "steps": 8,
+    "shots": 8,
+    "tokens": 11208,
+    "seconds": 110
+   },
+   "M": {
+    "score": 1.0,
+    "steps": 5,
+    "shots": 0,
+    "tokens": 3978,
+    "seconds": 150
+   },
+   "N": {
+    "score": 1.0,
+    "steps": 6,
+    "shots": 0,
+    "tokens": 4473,
+    "seconds": 92
+   }
+  },
+  {
+   "id": "6054afcb-5bab-4702-90a0-b259b5d3217c",
+   "app": "calc",
+   "S": {
+    "score": 1.0,
+    "steps": 13,
+    "shots": 13,
+    "tokens": 18239,
+    "seconds": 237
+   },
+   "M": {
+    "score": 0.0,
+    "steps": 34,
+    "shots": 9,
+    "tokens": 25441,
+    "seconds": 899
+   },
+   "N": {
+    "score": 1.0,
+    "steps": 6,
+    "shots": 1,
+    "tokens": 8080,
+    "seconds": 113
+   }
+  },
+  {
+   "id": "66399b0d-8fda-4618-95c4-bfc6191617e9",
+   "app": "writer",
+   "S": {
+    "score": 1.0,
+    "steps": 7,
+    "shots": 7,
+    "tokens": 9828,
+    "seconds": 75
+   },
+   "M": {
+    "score": 1.0,
+    "steps": 7,
+    "shots": 1,
+    "tokens": 4105,
+    "seconds": 69
+   },
+   "N": {
+    "score": 1.0,
+    "steps": 9,
+    "shots": 2,
+    "tokens": 6234,
+    "seconds": 92
+   }
+  },
+  {
+   "id": "7efeb4b1-3d19-4762-b163-63328d66303b",
+   "app": "calc",
+   "S": {
+    "score": 1.0,
+    "steps": 7,
+    "shots": 7,
+    "tokens": 9821,
+    "seconds": 110
+   },
+   "M": {
+    "score": 1.0,
+    "steps": 5,
+    "shots": 0,
+    "tokens": 4329,
+    "seconds": 81
+   },
+   "N": {
+    "score": 1.0,
+    "steps": 6,
+    "shots": 0,
+    "tokens": 5633,
+    "seconds": 80
+   }
+  },
+  {
+   "id": "8979838c-54a5-4454-a2b8-3d135a1a5c8f",
+   "app": "impress",
+   "S": {
+    "score": 1.0,
+    "steps": 16,
+    "shots": 16,
+    "tokens": 22512,
+    "seconds": 262
+   },
+   "M": {
+    "score": 1.0,
+    "steps": 15,
+    "shots": 1,
+    "tokens": 14114,
+    "seconds": 138
+   },
+   "N": {
+    "score": 1.0,
+    "steps": 13,
+    "shots": 1,
+    "tokens": 11445,
+    "seconds": 158
+   }
+  },
+  {
+   "id": "8b1ce5f2-59d2-4dcc-b0b0-666a714b9a14",
+   "app": "calc",
+   "S": {
+    "score": 1.0,
+    "steps": 13,
+    "shots": 13,
+    "tokens": 18291,
+    "seconds": 246
+   },
+   "M": {
+    "score": 1.0,
+    "steps": 14,
+    "shots": 2,
+    "tokens": 12893,
+    "seconds": 235
+   },
+   "N": {
+    "score": 1.0,
+    "steps": 9,
+    "shots": 0,
+    "tokens": 11120,
+    "seconds": 194
+   }
+  },
+  {
+   "id": "936321ce-5236-426a-9a20-e0e3c5dc536f",
+   "app": "writer",
+   "S": {
+    "score": 1.0,
+    "steps": 16,
+    "shots": 15,
+    "tokens": 21047,
+    "seconds": 180
+   },
+   "M": {
+    "score": 1.0,
+    "steps": 11,
+    "shots": 3,
+    "tokens": 9164,
+    "seconds": 112
+   },
+   "N": {
+    "score": 1.0,
+    "steps": 8,
+    "shots": 1,
+    "tokens": 6429,
+    "seconds": 84
+   }
+  },
+  {
+   "id": "a434992a-89df-4577-925c-0c58b747f0f4",
+   "app": "impress",
+   "S": {
+    "score": 1.0,
+    "steps": 14,
+    "shots": 14,
+    "tokens": 19642,
+    "seconds": 205
+   },
+   "M": {
+    "score": 1.0,
+    "steps": 22,
+    "shots": 5,
+    "tokens": 22471,
+    "seconds": 251
+   },
+   "N": {
+    "score": 1.0,
+    "steps": 22,
+    "shots": 3,
+    "tokens": 16486,
+    "seconds": 232
+   }
+  },
+  {
+   "id": "a669ef01-ded5-4099-9ea9-25e99b569840",
+   "app": "impress",
+   "S": {
+    "score": 1.0,
+    "steps": 11,
+    "shots": 10,
+    "tokens": 14012,
+    "seconds": 236
+   },
+   "M": {
+    "score": 1.0,
+    "steps": 14,
+    "shots": 3,
+    "tokens": 13097,
+    "seconds": 220
+   },
+   "N": {
+    "score": 1.0,
+    "steps": 17,
+    "shots": 3,
+    "tokens": 21402,
+    "seconds": 200
+   }
+  },
+  {
+   "id": "a9f325aa-8c05-4e4f-8341-9e4358565f4f",
+   "app": "calc",
+   "S": {
+    "score": 1.0,
+    "steps": 11,
+    "shots": 11,
+    "tokens": 15466,
+    "seconds": 135
+   },
+   "M": {
+    "score": 1.0,
+    "steps": 8,
+    "shots": 1,
+    "tokens": 7181,
+    "seconds": 134
+   },
+   "N": {
+    "score": 1.0,
+    "steps": 6,
+    "shots": 0,
+    "tokens": 3857,
+    "seconds": 78
+   }
+  },
+  {
+   "id": "adf5e2c3-64c7-4644-b7b6-d2f0167927e7",
+   "app": "writer",
+   "S": {
+    "score": 1.0,
+    "steps": 28,
+    "shots": 28,
+    "tokens": 39368,
+    "seconds": 512
+   },
+   "M": {
+    "score": 1.0,
+    "steps": 28,
+    "shots": 5,
+    "tokens": 22131,
+    "seconds": 741
+   },
+   "N": {
+    "score": 1.0,
+    "steps": 21,
+    "shots": 3,
+    "tokens": 22983,
+    "seconds": 429
+   }
+  },
+  {
+   "id": "bb8ccc78-479f-4a2f-a71e-d565e439436b",
+   "app": "writer",
+   "S": {
+    "score": 1.0,
+    "steps": 3,
+    "shots": 3,
+    "tokens": 4206,
+    "seconds": 32
+   },
+   "M": {
+    "score": 1.0,
+    "steps": 2,
+    "shots": 0,
+    "tokens": 4706,
+    "seconds": 24
+   },
+   "N": {
+    "score": 1.0,
+    "steps": 2,
+    "shots": 0,
+    "tokens": 4640,
+    "seconds": 24
+   }
+  },
+  {
+   "id": "c59742c0-4323-4b9d-8a02-723c251deaa0",
+   "app": "impress",
+   "S": {
+    "score": 1.0,
+    "steps": 17,
+    "shots": 13,
+    "tokens": 18260,
+    "seconds": 372
+   },
+   "M": {
+    "score": 1.0,
+    "steps": 11,
+    "shots": 2,
+    "tokens": 7642,
+    "seconds": 155
+   },
+   "N": {
+    "score": 1.0,
+    "steps": 11,
+    "shots": 2,
+    "tokens": 8136,
+    "seconds": 201
+   }
+  },
+  {
+   "id": "d53ff5ee-3b1a-431e-b2be-30ed2673079b",
+   "app": "writer",
+   "S": {
+    "score": 1.0,
+    "steps": 8,
+    "shots": 8,
+    "tokens": 11224,
+    "seconds": 96
+   },
+   "M": {
+    "score": 1.0,
+    "steps": 9,
+    "shots": 0,
+    "tokens": 3610,
+    "seconds": 65
+   },
+   "N": {
+    "score": 1.0,
+    "steps": 6,
+    "shots": 1,
+    "tokens": 4682,
+    "seconds": 94
+   }
+  },
+  {
+   "id": "e246f6d8-78d7-44ac-b668-fcf47946cb50",
+   "app": "writer",
+   "S": {
+    "score": 1.0,
+    "steps": 14,
+    "shots": 14,
+    "tokens": 19614,
+    "seconds": 194
+   },
+   "M": {
+    "score": 1.0,
+    "steps": 14,
+    "shots": 2,
+    "tokens": 6648,
+    "seconds": 126
+   },
+   "N": {
+    "score": 1.0,
+    "steps": 9,
+    "shots": 0,
+    "tokens": 3816,
+    "seconds": 80
+   }
+  },
+  {
+   "id": "e4ef0baf-4b52-4590-a47e-d4d464cca2d7",
+   "app": "impress",
+   "S": {
+    "score": 0.0,
+    "steps": 33,
+    "shots": 33,
+    "tokens": 46332,
+    "seconds": 422
+   },
+   "M": {
+    "score": 0.0,
+    "steps": 34,
+    "shots": 5,
+    "tokens": 29103,
+    "seconds": 454
+   },
+   "N": {
+    "score": 0.0,
+    "steps": 16,
+    "shots": 2,
+    "tokens": 24258,
+    "seconds": 408
+   }
+  },
+  {
+   "id": "eb03d19a-b88d-4de4-8a64-ca0ac66f426b",
+   "app": "calc",
+   "S": {
+    "score": 1.0,
+    "steps": 11,
+    "shots": 10,
+    "tokens": 14042,
+    "seconds": 94
+   },
+   "M": {
+    "score": 1.0,
+    "steps": 5,
+    "shots": 0,
+    "tokens": 2695,
+    "seconds": 62
+   },
+   "N": {
+    "score": 1.0,
+    "steps": 5,
+    "shots": 0,
+    "tokens": 2761,
+    "seconds": 45
+   }
+  }
+ ],
+ "note": "e4ef0baf can't be passed in this environment (found after the runs: see docs/osworld.md); it is counted, as a failure in every condition"
+}

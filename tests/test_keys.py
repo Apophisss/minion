@@ -59,14 +59,24 @@ class FakeXdo(XInput):
         return ""
 
 
+def test_a_click_is_a_short_press_and_a_double_click_two_of_them():
+    # (LibreOffice Calc's add-sheet button ignores a press and a release in the same instant)
+    xi = FakeXdo()
+    xi.click(None, None, count=2)
+    assert xi.calls == [
+        ("mousedown", "1", "sleep", "0.03", "mouseup", "1", "sleep", "0.07")
+        + ("mousedown", "1", "sleep", "0.03", "mouseup", "1")
+    ]
+
+
 def test_pointer_moves_never_wait_for_a_move_that_cannot_happen():
     # xdotool's `mousemove --sync` to where the pointer already is waits ~15 s for motion
     xi = FakeXdo()
     xi.click(100, 100)
-    assert xi.calls == [("click", "--repeat", "1", "--delay", "70", "1")]
+    assert xi.calls == [("mousedown", "1", "sleep", "0.03", "mouseup", "1")]
     xi.calls.clear()
     xi.click(140, 100)
-    assert xi.calls[0][:6] == ("mousemove", "--sync", "140", "100", "click", "--repeat")
+    assert xi.calls[0][:6] == ("mousemove", "--sync", "140", "100", "mousedown", "1")
     xi.calls.clear()
     xi.move(140, 100)
     xi.scroll("down", 2, 140, 100)

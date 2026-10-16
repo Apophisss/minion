@@ -7,7 +7,7 @@ import shutil
 import sys
 
 from ..errors import MinionError
-from .base import Backend, CreateOptions, DesktopInfo, Snapshot, check_name
+from .base import Backend, CreateOptions, DesktopInfo, Login, Snapshot, check_login, check_name
 
 _cache: dict[str, Backend] = {}
 
@@ -39,4 +39,13 @@ def get_backend(name: str | None = None) -> Backend:
     return backend
 
 
-__all__ = ["Backend", "CreateOptions", "DesktopInfo", "Snapshot", "check_name", "get_backend"]
+__all__ = [
+    "Backend",
+    "CreateOptions",
+    "DesktopInfo",
+    "Login",
+    "Snapshot",
+    "check_login",
+    "check_name",
+    "get_backend",
+]
