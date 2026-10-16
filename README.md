@@ -85,9 +85,9 @@ brief.docx."* Every way to install is in [docs/install.md](docs/install.md).
   "Loading…") and reports what happened: windows, a page's alert or prompt, files saved or downloaded, a pop-up that
   took the click. Text targets must really be on screen: a miss fails with the closest candidates instead of
   clicking something else. Tested on [93 everyday tasks](docs/scenarios.md) done by AI agents.
-- **🪙 Built to save tokens.** You get diffs instead of re-reads (`see(changes=true)`: about 60 tokens instead of
+- **🪙 Built to save tokens.** You get diffs instead of re-reads (`see(changes=true)`: about 80 tokens instead of
   about 900). **Code mode** runs a 50-step GUI loop in one call, crops and half-size screenshots cut image cost,
-  a **compact mode** shrinks the tool definitions from about 2,100 tokens to 230, and the Agent Skill costs about
+  a **compact mode** shrinks the tool definitions from about 3,300 tokens to 450, and the Agent Skill costs about
   100 tokens until it is used.
 - **🪶 Featherweight.** One small container per desktop (Xvfb, a 2-process window manager and taskbar, a small agent),
   with no VNC and no desktop environment. Desktops are ready in about 1.5 s and use about 60 MB when idle. Idle
@@ -219,13 +219,13 @@ Claude's `computer_toolset_20260801` (all 17 actions) and the earlier `computer_
 
 | Profile | What's inside | Download | Idle RAM |
 |---|---|---|---|
-| 🌐 `browser` | Firefox with uBlock Origin (ads, trackers, cookie banners, newsletter pop-ups), downloads straight to `~/Downloads`, a terminal `see` can read | 352 MB | ~55–100 MB |
-| 📄 `office` | LibreOffice Writer, Calc, Impress + text editor + file manager + Firefox + PDF tools. Saves Microsoft formats by default, and types exactly what the agent sends (no AutoCorrect) | 511 MB | ~85 MB |
-| 🛠️ `dev` | git, Python, Node.js, build tools, Geany IDE, a real terminal (readable by `see`), Firefox + Chromium | 703 MB | ~55 MB |
-| 🔎 `research` | Firefox + `pdftotext`, `pandoc`, a notes editor, Python with requests and BeautifulSoup | 410 MB | ~55 MB |
-| 📊 `data` | `office` + pandas, NumPy, SciPy, matplotlib, seaborn, openpyxl, SQLite | 663 MB | ~105 MB |
-| 🪟 `windows` | Wine 10 for 64- and 32-bit Windows `.exe`/`.msi` programs, plus Firefox to download them. x86-64 hosts ([docs](docs/windows-apps.md)) | 707 MB | ~56 MB (~270 MB with a program open) |
-| 🧩 `base` | X server, window manager, terminal and the agent. The foundation to build on | 187 MB | ~65 MB |
+| 🌐 `browser` | Firefox with uBlock Origin (ads, trackers, cookie banners, newsletter pop-ups), downloads straight to `~/Downloads`, a terminal `see` can read | 363 MB | ~55–100 MB |
+| 📄 `office` | LibreOffice Writer, Calc, Impress + text editor + file manager + Firefox + PDF tools. Saves Microsoft formats by default, and types exactly what the agent sends (no AutoCorrect) | 526 MB | ~85 MB |
+| 🛠️ `dev` | git, Python, Node.js, build tools, Geany IDE, a real terminal (readable by `see`), Firefox + Chromium | 714 MB | ~55 MB |
+| 🔎 `research` | Firefox + `pdftotext`, `pandoc`, a notes editor, Python with requests and BeautifulSoup | 422 MB | ~55 MB |
+| 📊 `data` | `office` + pandas, NumPy, SciPy, matplotlib, seaborn, openpyxl, SQLite | 674 MB | ~105 MB |
+| 🪟 `windows` | Wine 10 for 64- and 32-bit Windows `.exe`/`.msi` programs, plus Firefox to download them. x86-64 hosts ([docs](docs/windows-apps.md)) | 717 MB | ~56 MB (~270 MB with a program open) |
+| 🧩 `base` | X server, window manager, terminal and the agent. The foundation to build on | 199 MB | ~65 MB |
 
 **Your own profile** is a 5-line TOML file in `~/.config/minion/profiles/`. It is built automatically the first time you use it:
 
@@ -293,7 +293,7 @@ When pixels matter, `screenshot --marks` labels every control with its `@id`:
 ## Efficiency, measured
 
 **Five real tasks (a PDF report, a spreadsheet, a Wikipedia lookup, a web form, reading a document) cost an agent
-4,356 tokens with Minion and 50,505 with screenshots: 11.6× fewer.** The full table and method are in
+8,668 tokens with Minion and 50,505 with screenshots: 5.8× fewer.** The full table and method are in
 [docs/benchmarks.md](docs/benchmarks.md); reproduce it with `python scripts/bench_tasks.py`.
 
 | | Tokens | |
@@ -302,9 +302,9 @@ When pixels matter, `screenshot --marks` labels every control with its `@id`:
 | `screenshot(detail="low")` | ~341 | half size |
 | `act(observe="crop")`, only the changed region | ~200 | |
 | `see` of a LibreOffice window | ~920 | exact text plus clickable ids |
-| `see(changes=true)` after typing a sentence | **~60** | stable ids, diff only |
+| `see(changes=true)` after typing a sentence | **~80** | stable ids, diff only |
 | `see` of a terminal | ~50–90 | |
-| Tool definitions: 9 tools / compact `computer` | ~2,100 / **~230** | sent with every request |
+| Tool definitions: 9 tools / compact `computer` | ~3,300 / **~450** | sent with every request |
 | 5 rows of spreadsheet entry: `act` ×5 / `script` ×1 | 5 calls / **1 call** | no model round trip per step |
 
 | Resources | |

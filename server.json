@@ -30,7 +30,7 @@
         {
           "type": "positional",
           "value": "mcp",
-          "description": "Runs the MCP server on stdio. Optional flags after it: --compact (one `computer` tool, about 230 tokens of tool definitions instead of 2,100) and --no-images (text only, for clients that pass images to the model as base64 text). Desktops need Docker, OrbStack or Podman."
+          "description": "Runs the MCP server on stdio. Optional flags after it: --compact (one `computer` tool, about 450 tokens of tool definitions instead of 3,300) and --no-images (text only, for clients that pass images to the model as base64 text). Desktops need Docker, OrbStack or Podman."
         }
       ]
     },

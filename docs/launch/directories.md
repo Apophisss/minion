@@ -6,9 +6,9 @@ submit.
 
 **First:**
 
-1. Release 1.0.0 (tag `v1.0.0`). The release workflow publishes PyPI, npm, the GitHub release with `minion.mcpb`,
-   and the official MCP Registry. Most directories show `uvx minion-desktop mcp`, so wait until that works.
-2. Check that the registry has Minion:
+1. 1.0.0 is out (2026-10-16): the release workflow published PyPI, npm, the GitHub release with `minion.mcpb`, and
+   the official MCP Registry. `uvx minion-desktop mcp` and `npx -y minion-desktop mcp` work on a clean machine.
+2. The registry has Minion (status active, with the PyPI, npm and MCPB packages):
    `curl "https://registry.modelcontextprotocol.io/v0.1/servers?search=io.github.Apophisss/minion"`.
 3. Some lists accept only what a person writes and files (said below). There, use the texts as notes and write
    your own.
@@ -48,7 +48,7 @@ Minion gives any AI agent its own computer: featherweight Linux desktops in loca
 
 | Where | How | When | Fit |
 |---|---|---|---|
-| [Official MCP Registry](#official-mcp-registry) | Automatic: `release.yml` | At the release | Done by CI |
+| [Official MCP Registry](#official-mcp-registry) | Automatic: `release.yml` | At the release | Done (1.0.0) |
 | [GitHub MCP Registry](#github-mcp-registry) | Ask GitHub to onboard it | After the registry has it | Curated by GitHub |
 | [Glama](#glama) | Add and claim the server; `glama.json` | After the release | Good, and awesome-mcp-servers needs it |
 | [awesome-mcp-servers](#awesome-mcp-servers-punkpeye) | Pull request | When Glama's checks pass | The main MCP list |

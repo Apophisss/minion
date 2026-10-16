@@ -55,9 +55,11 @@ What makes it work for agents:
 
 • The screen as text. Minion reads the accessibility tree (with OCR as a fallback) and gives the agent a short list of controls with stable @ids, so it clicks @12 instead of guessing coordinates.
 
-• Cheap to run. A desktop is ready in about 1.5 s and uses about 60 MB when idle. After typing a sentence, the agent gets a ~60-token diff instead of re-reading the screen (~900 tokens as text, ~1,365 as a screenshot).
+• Cheap to run. A desktop is ready in about 1.5 s and uses about 60 MB when idle. After typing a sentence, the agent gets a ~80-token diff instead of re-reading the screen (~900 tokens as text, ~1,365 as a screenshot).
 
 • Honest actions. Every action waits for the screen to settle and reports what changed. A miss fails with the closest candidates instead of clicking the wrong thing.
+
+• Tested on everyday work. AI agents did 93 ordinary computer tasks with it before the release. Fixing what they ran into cut their tool calls by 31% and the failed ones by half.
 
 • You stay in control. Watch live, take over with one click, or let the agent hand off for a sign-in and wait for you.
 

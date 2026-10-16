@@ -58,7 +58,7 @@ The default target of every tool is the desktop the agent created or used last. 
 
 **Compact mode** (`minion mcp --compact`) exposes a single `computer` tool that takes CLI-style commands
 (`see`, `click @12`, `type 'hi'`, `run ls`, `create office -n 2`). It cuts the tool definitions sent with every
-request from about 2,100 tokens to about 230, and works well for small and local models.
+request from about 3,300 tokens to about 450, and works well for small and local models.
 
 ## Shell agents and Agent Skills
 
@@ -72,7 +72,7 @@ minion skill >> AGENTS.md                    # or append it to an AGENTS.md / sy
 ```
 
 A skill costs about 100 tokens (its description) until the agent decides it needs a desktop. Only then does
-it read the rest, about 1,100 tokens. MCP tool definitions, by contrast, are sent with every request. For
+it read the rest, about 2,100 tokens. MCP tool definitions, by contrast, are sent with every request. For
 Claude Code there is also a plugin that bundles the MCP server and the skill:
 
 ```bash

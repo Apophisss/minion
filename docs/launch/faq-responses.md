@@ -74,8 +74,8 @@ Minion makes sense when you want local control, a text-first view of the screen 
 
 Minion is free and open source (MIT). You pay for your model's tokens and your own machine. Much of the design is
 about the token bill: `see` instead of screenshots (a terminal is about 50–90 tokens, a 1280×800 screenshot about
-1,365), diffs after the first look (about 60 tokens after typing a sentence), compact tool definitions (about 230
-tokens per request instead of 2,100), code mode for loops, and macros that replay a finished task with no model at
+1,365), diffs after the first look (about 80 tokens after typing a sentence), compact tool definitions (about 450
+tokens per request instead of 3,300), code mode for loops, and macros that replay a finished task with no model at
 all.
 
 *Sources: README.md (Efficiency, measured), docs/faq.md.*
@@ -94,7 +94,7 @@ pure Python. Images are published for `amd64` and `arm64`, so Apple Silicon runs
 An idle desktop uses 54–105 MB of RAM. Apps add their usual footprint: Firefox and LibreOffice need a few hundred MB
 each while open. Every profile is ready in 1.2–1.8 s, and three desktops start in parallel in 3.0 s, measured on a
 2-vCPU VM (`python scripts/bench.py` reproduces it). Idle desktops are frozen (0% CPU) and wake in about 0.2 s.
-Images are 187–707 MB per profile and share layers. Cap each desktop with `--memory` and `--cpus`.
+Images are 199–717 MB per profile and share layers. Cap each desktop with `--memory` and `--cpus`.
 
 *Sources: README.md (Efficiency, measured), docs/faq.md, docs/install.md.*
 
@@ -129,7 +129,7 @@ stays small.
 Yes. `see` and `act` are text, so text-only models work, and vision models can also take screenshots. Use any
 OpenAI-compatible API (Ollama, vLLM, LM Studio and others) with `Toolkit().definitions("openai")`, or connect
 LM Studio over MCP. Small and local models do best with the compact `computer` tool (`minion mcp --compact` or
-`definitions(..., compact=True)`), which cuts the tool definitions to about 230 tokens. There are no published
+`definitions(..., compact=True)`), which cuts the tool definitions to about 450 tokens. There are no published
 results for specific local models yet.
 
 *Sources: docs/faq.md, docs/agents.md, docs/install.md.*
@@ -167,17 +167,32 @@ with no model.
 ## Is it production-ready? Who uses it?
 
 It's new: 1.0.0 is the first release. Before it, Claude agents used Minion for real office, web, development and
-MCP tasks, and every issue they found was fixed. The agent framework recipes were verified up to loading the tools,
+MCP tasks, and every issue they found was fixed. Then AI agents did 93 everyday tasks with it, every call logged,
+and the fixes their notes led to were measured on the same tasks: 31% fewer calls, half the failed calls, 36% fewer
+tokens of output. The agent framework recipes were verified up to loading the tools,
 not with a model. There are no user numbers or case studies to point to, so don't imply any.
 
-*Sources: CHANGELOG.md, docs/design.md, docs/integrations.md.*
+*Sources: CHANGELOG.md, docs/design.md, docs/integrations.md, docs/scenarios.md.*
 
 ## Was it written with AI?
 
 [Maker: answer in your own words, and be specific about how you reviewed and tested the code.]
 
 Facts you can point to: the git history shows most commits authored by Claude, with co-author lines. CI runs lint,
-unit tests on Python 3.11–3.14, local-backend integration tests and an image build. Claude agents dogfooded Minion
-before 1.0, and the framework recipes are verified up to loading the tools.
+unit tests on Python 3.11–3.14 on Linux, macOS and Windows, integration tests on local and Docker desktops, and an
+image build, and the Install workflow installs Minion on clean macOS, Windows and Linux machines. AI agents did 93
+everyday tasks with it before 1.0, and the tasks, the method and the results are in the repository. The framework
+recipes are verified up to loading the tools.
 
-*Sources: the git log, CONTRIBUTING.md, docs/design.md, docs/integrations.md.*
+A draft to start from (keep only what is true for you):
+
+```text
+Yes, most of the code was written with Claude, and the git history says so. [What you did yourself: the idea, the
+design decisions, reviewing, testing.] Rather than ask you to trust that, I tried to make it checkable: CI on
+Linux, macOS and Windows, installs tested on clean machines, and 93 everyday tasks done by AI agents with every
+call logged, before and after the fixes, all in the repo. Bug reports with a replay (minion replay -o bug.html)
+are the most useful thing you can send.
+```
+
+*Sources: the git log, CONTRIBUTING.md, docs/design.md, docs/integrations.md, docs/scenarios.md,
+.github/workflows/.*

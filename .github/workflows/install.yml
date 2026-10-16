@@ -1,0 +1,97 @@
+name: Install
+
+# What a new user runs, on clean macOS, Windows and Linux machines: the one-line installers from this commit, then
+# `minion mcp`, `uvx minion-desktop mcp`, `npx -y minion-desktop mcp` and the Claude Desktop extension (from this
+# commit and from the latest release), each started the way an agent app starts it and checked with an MCP
+# handshake. The packages come from PyPI, npm and the GitHub release, so this checks what is published. Weekly too,
+# because uv, Node.js, the registries and the runners change underneath.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - install.sh
+      - install.ps1
+      - clients/typescript/bin/**
+      - packaging/mcpb/**
+      - scripts/build_mcpb.py
+      - scripts/check_mcp.py
+      - .github/workflows/install.yml
+  pull_request:
+    paths:
+      - install.sh
+      - install.ps1
+      - clients/typescript/bin/**
+      - packaging/mcpb/**
+      - scripts/build_mcpb.py
+      - scripts/check_mcp.py
+      - .github/workflows/install.yml
+  schedule:
+    - cron: "23 5 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  install:
+    name: ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - name: One-line installer, piped like curl | sh (Linux has Docker, so setup runs too)
+        if: runner.os == 'Linux'
+        run: |
+          cat install.sh | sh -s -- --yes --profiles base
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - name: One-line installer, piped like curl | sh (no Docker on macOS runners)
+        if: runner.os == 'macOS'
+        run: |
+          cat install.sh | MINION_NO_SETUP=1 sh
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - name: One-line installer in Windows PowerShell 5.1, like irm | iex
+        if: runner.os == 'Windows'
+        shell: powershell
+        env:
+          MINION_NO_SETUP: "1"
+        run: |
+          Get-Content -Raw install.ps1 | Invoke-Expression
+          Add-Content -Path $env:GITHUB_PATH -Value (Join-Path $HOME '.local\bin')
+      - name: Again in PowerShell 7 (it is safe to run again)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          MINION_NO_SETUP: "1"
+        run: Get-Content -Raw install.ps1 | Invoke-Expression
+      - uses: actions/setup-python@v5 # for the checks below, after the installers ran on the runner as it comes
+        with:
+          python-version: "3.12"
+      - run: minion --version
+      - run: minion doctor || true # reports the missing Docker on macOS and Windows runners
+      - name: A desktop, end to end
+        if: runner.os == 'Linux'
+        run: |
+          minion new base --name smoke
+          minion run -d smoke "echo ready"
+          minion see -d smoke
+          minion rm smoke
+      - name: minion mcp
+        run: python scripts/check_mcp.py minion mcp
+      - name: uvx minion-desktop mcp
+        run: python scripts/check_mcp.py uvx minion-desktop mcp
+      - name: npx -y minion-desktop mcp
+        run: python scripts/check_mcp.py npx -y minion-desktop mcp
+      - name: The Claude Desktop extension from this commit
+        run: python scripts/build_mcpb.py --smoke --stage "$RUNNER_TEMP/mcpb-here"
+      - name: The Claude Desktop extension from the latest release
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/minion.mcpb" "https://github.com/$GITHUB_REPOSITORY/releases/latest/download/minion.mcpb"
+          python -c "import sys, zipfile; zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])" "$RUNNER_TEMP/minion.mcpb" "$RUNNER_TEMP/mcpb"
+          python scripts/check_mcp.py uv run --directory "$RUNNER_TEMP/mcpb" server/main.py mcp

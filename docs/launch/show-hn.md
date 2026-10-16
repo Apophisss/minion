@@ -32,7 +32,7 @@ How it works:
 
 - "see" reads the screen the way a screen reader does. The accessibility tree (GTK, Qt, Firefox, Chromium, LibreOffice) becomes a compact list of controls with stable ids, like @12 button "Save" (210,62). Tesseract OCR covers canvases and apps without an accessibility tree, such as Wine. Spreadsheets come out as A1: value.
 
-- After an action you can ask for a diff instead of a re-read: about 60 tokens after typing a sentence, versus about 900 for a full look at a LibreOffice window.
+- After an action you can ask for a diff instead of a re-read: about 80 tokens after typing a sentence, versus about 900 for a full look at a LibreOffice window.
 
 - Every action waits for the screen to settle (and for pages to load) and reports what changed. Text targets are strict: clicking "Delete" never clicks "Delete all", and a miss fails with the closest candidates instead of clicking something else.
 
@@ -42,15 +42,17 @@ How it works:
 
 - A person can watch any desktop live in the browser (JPEG frames over HTTP long-polling, no VNC) and take control, and the agent can hand off ("please sign in") and wait until they press Done.
 
-On a 2-vCPU VM, every profile is ready in 1.2-1.8 s, an idle desktop uses 54-105 MB, and 3 desktops start in parallel in 3.0 s (python scripts/bench.py reproduces this). The 9 tool definitions cost about 2,100 tokens per request, or about 230 in compact mode (one "computer" tool with CLI-style commands), which suits small local models.
+On a 2-vCPU VM, every profile is ready in 1.2-1.8 s, an idle desktop uses 54-105 MB, and 3 desktops start in parallel in 3.0 s (python scripts/bench.py reproduces this). The 9 tool definitions cost about 3,300 tokens per request, or about 450 in compact mode (one "computer" tool with CLI-style commands), which suits small local models.
 
-It's MCP-first, over stdio or Streamable HTTP, and "minion share" gives web apps like ChatGPT and Claude.ai an HTTPS URL through a Cloudflare quick tunnel. The same tools are also function-calling definitions for OpenAI, Anthropic and Gemini, an HTTP API with OpenAPI, a CLI with an Agent Skill, Python and TypeScript SDKs, and adapters for Claude, OpenAI and Gemini computer use. It's about 10k lines of Python, and the host side is pure standard library with zero dependencies. Claude agents used it for real office, web, development and MCP tasks before 1.0, and the issues they hit were fixed.
+It's MCP-first, over stdio or Streamable HTTP, and "minion share" gives web apps like ChatGPT and Claude.ai an HTTPS URL through a Cloudflare quick tunnel. The same tools are also function-calling definitions for OpenAI, Anthropic and Gemini, an HTTP API with OpenAPI, a CLI with an Agent Skill, Python and TypeScript SDKs, and adapters for Claude, OpenAI and Gemini computer use. The host side is about 10k lines of pure standard-library Python, with zero dependencies.
+
+Before 1.0, I had AI agents do 93 everyday computer tasks with it, from "zip this folder" to "find the email with the Q3 figures, total its attachment and reply with the total". Every call was logged, and each agent wrote down what got in its way. After fixing those, the same 93 tasks took 31% fewer calls, half as many failed calls and 36% fewer tokens of output. The tasks, a test website and the scripts are in the repo (docs/scenarios.md).
 
 To try it, with Docker, OrbStack or Podman running:
 
   curl -fsSL https://raw.githubusercontent.com/apophisss/minion/main/install.sh | sh
 
-That installs the minion command and runs "minion setup", which checks Docker, downloads a desktop image and adds Minion to the agent apps it finds (Claude Code, Codex, Cursor, VS Code, Gemini CLI and others). With uv you can also run the MCP server straight from PyPI: uvx minion-desktop mcp
+That installs the minion command and runs "minion setup", which checks Docker, downloads a desktop image and adds Minion to the agent apps it finds (Claude Code, Codex, Cursor, VS Code, Gemini CLI, opencode, OpenClaw and others). With uv you can also run the MCP server straight from PyPI: uvx minion-desktop mcp (or npx -y minion-desktop mcp)
 
 Limitations:
 

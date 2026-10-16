@@ -21,7 +21,7 @@ Minion은 AI 에이전트에게 여러분의 컴퓨터 대신 에이전트 전�
 - **🖥️ 어떤 프로그램이든, 어떤 웹사이트든.** 브라우저, LibreOffice, IDE, 터미널, 파일 대화상자, 설치 프로그램을 모두 쓸 수 있고, Wine으로 Windows 프로그램도 실행합니다. 앱은 이름으로 열면 처음 한 번 자동으로 설치되고(`open gimp`), 웹 앱은 브라우저에서 열립니다(`open gmail`). `menu`, `path`, `read`로 메뉴, 파일 대화상자, 문서 내용에 바로 접근합니다.
 - **🧠 화면을 텍스트로.** `see`는 창 안의 컨트롤을 목록으로 보여 주고, 컨트롤마다 안정적인 `@id`가 붙습니다(접근성 트리에서 가져오고, 없으면 OCR로 대신합니다): `@12 button "Save" (210,62)`. 웹 페이지, 편집기, 터미널, 스프레드시트(`A1: value`)도 정확한 텍스트로 나옵니다.
 - **🎯 정직한 동작.** 모든 동작은 화면이 안정될 때까지 기다린 뒤 무엇이 바뀌었는지 알려 줍니다. 텍스트로 지정한 대상이 화면에 없으면 엉뚱한 곳을 클릭하지 않고, 가장 가까운 후보를 알려 주며 실패합니다.
-- **🪙 토큰 절약을 위한 설계.** 화면을 다시 읽는 대신 바뀐 부분만 받습니다(`see(changes=true)`: 약 900 토큰 대신 약 60 토큰). 코드 모드는 50단계짜리 GUI 루프도 호출 한 번으로 끝내고, 컴팩트 모드는 도구 정의를 약 2,100 토큰에서 230 토큰으로 줄입니다.
+- **🪙 토큰 절약을 위한 설계.** 화면을 다시 읽는 대신 바뀐 부분만 받습니다(`see(changes=true)`: 약 900 토큰 대신 약 80 토큰). 코드 모드는 50단계짜리 GUI 루프도 호출 한 번으로 끝내고, 컴팩트 모드는 도구 정의를 약 3,300 토큰에서 450 토큰으로 줄입니다.
 - **🪶 초경량.** 데스크톱마다 작은 컨테이너 하나뿐이고, VNC도 데스크톱 환경도 없습니다. 약 1.5초 만에 준비되고, 유휴 상태에서는 약 60MB를 쓰며, 쓰지 않으면 자동으로 동결되었다가(CPU 0%) 약 0.2초 만에 깨어납니다.
 - **🔌 모든 에이전트와 함께.** MCP(로컬 또는 원격), OpenAI·Anthropic·Gemini와 로컬 모델을 위한 function calling, HTTP, CLI와 Agent Skill, Python·TypeScript SDK, 그리고 Claude, OpenAI, Gemini의 computer use까지 지원합니다.
 - **🙋 언제든 사람이 개입.** 브라우저의 라이브 뷰에서 클릭 한 번으로 제어권을 가져올 수 있고, 에이전트는 로그인 같은 일을 사람에게 넘긴 뒤 *Done*을 누를 때까지 기다립니다. 모든 동작이 기록되어, 모델 없이 그대로 재생하는 Python 스크립트로 내보낼 수도 있습니다.
@@ -109,13 +109,13 @@ minion cp :~/Documents/notes.md .        # 파일을 밖으로(또는 안으로)
 
 | 프로필 | 들어 있는 것 | 다운로드 | 유휴 RAM |
 |---|---|---|---|
-| 🌐 `browser` | Firefox와 uBlock Origin(광고, 추적기, 쿠키 배너, 뉴스레터 팝업 차단), `~/Downloads`로 바로 저장되는 다운로드 | 352 MB | ~55–100 MB |
-| 📄 `office` | LibreOffice Writer, Calc, Impress + 텍스트 편집기 + 파일 관리자 + Firefox + PDF 도구. 기본적으로 Microsoft 형식으로 저장 | 511 MB | ~85 MB |
-| 🛠️ `dev` | git, Python, Node.js, 빌드 도구, Geany IDE, `see`로 읽을 수 있는 터미널, Firefox + Chromium | 703 MB | ~55 MB |
-| 🔎 `research` | Firefox + `pdftotext`, `pandoc`, 메모용 편집기, requests와 BeautifulSoup이 들어 있는 Python | 410 MB | ~55 MB |
-| 📊 `data` | `office` + pandas, NumPy, SciPy, matplotlib, seaborn, openpyxl, SQLite | 663 MB | ~105 MB |
-| 🪟 `windows` | 64비트·32비트 Windows `.exe`/`.msi` 프로그램을 위한 Wine 10. x86-64 호스트 전용([문서](docs/windows-apps.md)) | 707 MB | ~56 MB(프로그램을 열면 약 270 MB) |
-| 🧩 `base` | X 서버, 창 관리자, 터미널, 에이전트. 다른 프로필의 기반 | 187 MB | ~65 MB |
+| 🌐 `browser` | Firefox와 uBlock Origin(광고, 추적기, 쿠키 배너, 뉴스레터 팝업 차단), `~/Downloads`로 바로 저장되는 다운로드 | 363 MB | ~55–100 MB |
+| 📄 `office` | LibreOffice Writer, Calc, Impress + 텍스트 편집기 + 파일 관리자 + Firefox + PDF 도구. 기본적으로 Microsoft 형식으로 저장 | 526 MB | ~85 MB |
+| 🛠️ `dev` | git, Python, Node.js, 빌드 도구, Geany IDE, `see`로 읽을 수 있는 터미널, Firefox + Chromium | 714 MB | ~55 MB |
+| 🔎 `research` | Firefox + `pdftotext`, `pandoc`, 메모용 편집기, requests와 BeautifulSoup이 들어 있는 Python | 422 MB | ~55 MB |
+| 📊 `data` | `office` + pandas, NumPy, SciPy, matplotlib, seaborn, openpyxl, SQLite | 674 MB | ~105 MB |
+| 🪟 `windows` | 64비트·32비트 Windows `.exe`/`.msi` 프로그램을 위한 Wine 10. x86-64 호스트 전용([문서](docs/windows-apps.md)) | 717 MB | ~56 MB(프로그램을 열면 약 270 MB) |
+| 🧩 `base` | X 서버, 창 관리자, 터미널, 에이전트. 다른 프로필의 기반 | 199 MB | ~65 MB |
 
 나만의 프로필은 `~/.config/minion/profiles/`에 두는 5줄짜리 TOML 파일이며, 처음 사용할 때 자동으로 빌드됩니다. 자세한 내용은 [docs/profiles.md](docs/profiles.md)(영어)를 참고하세요.
 

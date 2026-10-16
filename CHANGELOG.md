@@ -82,7 +82,7 @@ attachment of Dana's email and reply with it"; see [docs/scenarios.md](docs/scen
 **Measured**
 - 93 everyday tasks done by AI agents, before and after the everyday-work fixes: 31% fewer calls, half the calls
   that failed, a third fewer screenshots and 36% fewer output tokens ([docs/scenarios.md](docs/scenarios.md)).
-- Five real tasks cost an agent 4,356 tokens with Minion and 50,505 with a screenshot agent: 11.6× fewer
+- Five real tasks cost an agent 8,668 tokens with Minion and 50,505 with a screenshot agent: 5.8× fewer
   ([docs/benchmarks.md](docs/benchmarks.md), `python scripts/bench_tasks.py`).
 - A one-minute demo video: one job in a browser, a spreadsheet and a word processor in 12 tool calls and 2,372 tokens
   ([docs/assets/demo.mp4](docs/assets/demo.mp4), `python scripts/demo_video.py`).

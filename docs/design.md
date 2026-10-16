@@ -25,14 +25,14 @@ and the model still has to guess coordinates. Minion reads the screen the way a 
 |---|---|
 | **`see`**: the accessibility tree (GTK, Qt, Firefox, Chromium, LibreOffice) as a compact list of controls with `@ids`, collapsing wrappers, twins and browser chrome; spreadsheet cells row by row (`row 2: @14 A2 North · @15 B2 120`) | Exact text. Often fewer tokens than a screenshot (a terminal is about 50 tokens instead of 1,365) |
 | **Stable `@ids`**: the same control keeps its id across looks | The agent doesn't have to re-read the screen to act |
-| **`see(changes=true)` / `act(observe="changes")`**: only what changed since the last look | After typing a sentence, about 60 tokens instead of about 900 |
+| **`see(changes=true)` / `act(observe="changes")`**: only what changed since the last look | After typing a sentence, about 80 tokens instead of about 900 |
 | **Act-and-report**: every action waits for the UI to settle, then says what changed (windows opened or closed, focus, changed region) | A separate "did it work?" look is usually unnecessary |
 | **`screenshot(detail="low")`** | 341 instead of 1,365 tokens |
 | **`act(observe="crop")`**: an image of just the changed region | About 200 tokens |
 | **`marks=true`**: `@ids` drawn on the screenshot | Pixel-precise clicking without coordinate guessing |
 | **OCR fallback** when an app has no accessibility tree | Text even from canvases and Wine apps |
 | **Code mode (`script`)**: Python runs *inside* the desktop with `click/write/key/see/cells/...` | 50 GUI steps in one tool call. Only what the program prints comes back |
-| **Compact mode**: one `computer` tool with CLI syntax | Tool definitions shrink from about 2,100 to about 230 tokens per request |
+| **Compact mode**: one `computer` tool with CLI syntax | Tool definitions shrink from about 3,300 to about 450 tokens per request |
 
 ## 3. Honest actions (reliability)
 
